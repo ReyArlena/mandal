@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+case "$*" in
+  "status verbose")
+    cat <<'OUT'
+Status: active
+Logging: on (low)
+Default: deny (incoming), allow (outgoing), disabled (routed)
+New profiles: skip
+
+To                         Action      From
+--                         ------      ----
+22/tcp                     ALLOW IN    Anywhere
+80/tcp                     ALLOW IN    Anywhere
+443/tcp                    ALLOW IN    Anywhere
+3306                       ALLOW IN    10.0.0.0/8
+OUT
+    ;;
+  "show added")
+    cat <<'OUT'
+Added user rules (see 'ufw status' for running firewall):
+ufw allow 22/tcp
+ufw allow 80/tcp
+ufw allow 443/tcp
+ufw allow from 10.0.0.0/8 to any port 3306
+OUT
+    ;;
+esac

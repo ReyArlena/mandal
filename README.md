@@ -41,6 +41,21 @@ Mandal holds credentials for every server it manages, so treat it as the most se
 - Add `* * * * * php artisan schedule:run` to the crontab of the user that owns the application.
 - Back up `database/database.sqlite` together with the `APP_KEY` from `.env`. Encrypted values in the database cannot be read without the key.
 
+## Server CLI
+
+Every managed server runs `mandal`, a Bash tool found in `server/` of this repository and installed to `/opt/mandal` on the server. It is the only way the panel reads or changes a server, and it can be used by hand over SSH:
+
+```bash
+sudo mandal inventory           # everything on the server, as JSON
+sudo mandal app:list            # apps and their manifests
+sudo mandal provision --check   # what provisioning would add, and any conflicts
+mandal version
+```
+
+Read commands print JSON. Server-side state lives in standard locations (`/etc/nginx`, `/etc/php`, `/etc/supervisor` and so on), with Mandal's own metadata in `/etc/mandal`. Nothing is cached in the panel.
+
+Components are split into roles (`database`, `cache`, `js`), each implemented by a driver in `server/lib/roles/`. The driver for each role is recorded in `/etc/mandal/server.conf`.
+
 ## Development
 
 ```bash
@@ -53,5 +68,8 @@ This starts the development server, queue worker, log viewer and Vite together.
 
 ```bash
 bunx playwright install chromium   # once, for the browser tests
-composer run test
+composer run test                  # panel
+bash server/tests/run.sh           # server CLI (needs bash and jq)
 ```
+
+The CLI tests run against fixture directories and stand-in commands, so they work on any machine without touching the system.

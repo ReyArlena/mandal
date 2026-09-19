@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+case "$*" in
+  "status")
+    printf 'Status\n|- Number of jail:\t2\n`- Jail list:\tsshd, nginx-http-auth\n'
+    ;;
+  "status sshd")
+    printf 'Status for the jail: sshd\n|- Filter\n|  |- Currently failed:\t1\n`- Actions\n   |- Currently banned:\t3\n   `- Banned IP list:\t1.2.3.4 5.6.7.8 9.9.9.9\n'
+    ;;
+  "status nginx-http-auth")
+    printf 'Status for the jail: nginx-http-auth\n`- Actions\n   |- Currently banned:\t0\n'
+    ;;
+esac

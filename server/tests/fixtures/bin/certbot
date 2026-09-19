@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+cat <<'OUT'
+Saving debug log to /var/log/letsencrypt/letsencrypt.log
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Found the following certs:
+  Certificate Name: shop.example.com
+    Serial Number: 4a1b2c3d
+    Key Type: ECDSA
+    Domains: shop.example.com www.shop.example.com
+    Expiry Date: 2027-01-15 10:22:31+00:00 (VALID: 80 days)
+    Certificate Path: /etc/letsencrypt/live/shop.example.com/fullchain.pem
+    Private Key Path: /etc/letsencrypt/live/shop.example.com/privkey.pem
+  Certificate Name: old.example.com
+    Serial Number: 5e6f7a8b
+    Key Type: RSA
+    Domains: old.example.com
+    Expiry Date: 2026-09-01 00:00:00+00:00 (INVALID: EXPIRED)
+    Certificate Path: /etc/letsencrypt/live/old.example.com/fullchain.pem
+    Private Key Path: /etc/letsencrypt/live/old.example.com/privkey.pem
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+OUT

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+if [[ "$1" == "-T" ]]; then
+  printf 'port 2222\npasswordauthentication yes\npermitrootlogin prohibit-password\npubkeyauthentication yes\n'
+fi

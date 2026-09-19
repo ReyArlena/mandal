@@ -13,3 +13,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Required app-based multi-factor authentication with recovery codes for every account.
 - Seeded initial administrator account for first login.
 - Pest test suite, including browser tests for the login flow.
+- `mandal` server CLI with `inventory`, `app:list`, `provision --check` and `version`, plus role drivers for MariaDB, Dragonfly and Bun.
+- CLI test suite running against fixtures and stand-in commands.

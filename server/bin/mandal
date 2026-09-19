@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+#
+# mandal - server-side command line tool for the Mandal panel.
+#
+# Installed at /opt/mandal/bin/mandal. The panel runs it over SSH and reads
+# its JSON output; it can also be run by hand. Read commands print JSON on
+# stdout. Write commands print plain progress on stdout and return a non-zero
+# exit code on failure.
+
+set -euo pipefail
+
+MANDAL_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+export MANDAL_ROOT
+
+# shellcheck source-path=SCRIPTDIR/../lib
+# shellcheck source=core.sh
+source "${MANDAL_ROOT}/lib/core.sh"
+
+mandal_load_commands
+mandal_dispatch "$@"
