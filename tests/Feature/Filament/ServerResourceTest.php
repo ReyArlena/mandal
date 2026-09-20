@@ -66,6 +66,35 @@ it('shows the public key and the unconfirmed host key state', function () {
         ->assertSee('Not confirmed yet');
 });
 
+it('shows a one-line setup command backed by a fresh token', function () {
+    $server = Server::factory()->create();
+
+    livewire(ViewServer::class, ['record' => $server->getRouteKey()])
+        ->mountAction('setupCommand')
+        ->assertActionMounted('setupCommand');
+
+    $server->refresh();
+
+    expect($server->setup_token)->not->toBeNull()
+        ->and($server->setup_token_expires_at)->not->toBeNull();
+
+    $html = view('filament.servers.setup-command', [
+        'server' => $server,
+        'scriptUrl' => $url = route('setup.script', ['server' => $server, 'token' => 'token']),
+        'command' => "curl -fsSL {$url} | bash",
+    ])->render();
+
+    expect($html)->toContain("curl -fsSL {$url} | bash")
+        ->toContain($server->ssh_user);
+});
+
+it('hides the setup command once the server has connected', function () {
+    $server = Server::factory()->withPinnedHostKey()->create();
+
+    livewire(ViewServer::class, ['record' => $server->getRouteKey()])
+        ->assertActionHidden('setupCommand');
+});
+
 it('pins the host key and records the connection when the test succeeds', function () {
     $server = Server::factory()->create();
     $this->ssh->respondTo('echo mandal-ok', 'mandal-ok');

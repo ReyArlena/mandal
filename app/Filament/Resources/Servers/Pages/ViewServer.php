@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Servers\Pages;
 
+use App\Enums\ServerSetupMode;
 use App\Filament\Resources\Servers\ServerResource;
 use App\Mandal\MandalClient;
 use App\Models\Server;
@@ -14,6 +15,7 @@ use Filament\Actions\EditAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Contracts\View\View;
 
 class ViewServer extends ViewRecord
 {
@@ -22,10 +24,37 @@ class ViewServer extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            $this->setupCommandAction(),
             $this->testConnectionAction(),
             EditAction::make(),
             DeleteAction::make(),
         ];
+    }
+
+    /**
+     * Issues a fresh setup token and shows the one-line command to run on
+     * the server as root.
+     */
+    private function setupCommandAction(): Action
+    {
+        return Action::make('setupCommand')
+            ->label('Setup command')
+            ->icon(Heroicon::OutlinedCommandLine)
+            ->color('gray')
+            ->visible(fn (Server $record): bool => $record->connected_at === null && $record->setup_mode !== ServerSetupMode::Existing)
+            ->modalHeading('Set up the server')
+            ->modalContent(function (Server $record): View {
+                $token = $record->issueSetupToken();
+                $scriptUrl = route('setup.script', ['server' => $record, 'token' => $token]);
+
+                return view('filament.servers.setup-command', [
+                    'server' => $record,
+                    'scriptUrl' => $scriptUrl,
+                    'command' => "curl -fsSL {$scriptUrl} | bash",
+                ]);
+            })
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Close');
     }
 
     /**
@@ -78,6 +107,7 @@ class ViewServer extends ViewRecord
                 }
 
                 $record->forceFill(['connected_at' => now()])->save();
+                $record->clearSetupToken();
                 $mandal->forgetInventory($record);
 
                 Notification::make()
