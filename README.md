@@ -41,6 +41,10 @@ Mandal holds credentials for every server it manages, so treat it as the most se
 - Add `* * * * * php artisan schedule:run` to the crontab of the user that owns the application.
 - Back up `database/database.sqlite` together with the `APP_KEY` from `.env`. Encrypted values in the database cannot be read without the key.
 
+## Servers
+
+Each server gets its own SSH key pair when it is added; the private key is stored encrypted with your `APP_KEY`. The first time Mandal connects, it shows the server's host key fingerprint for you to confirm, then pins it. If that key ever changes, Mandal refuses to connect until you accept the new one.
+
 ## Server CLI
 
 Every managed server runs `mandal`, a Bash tool found in `server/` of this repository and installed to `/opt/mandal` on the server. It is the only way the panel reads or changes a server, and it can be used by hand over SSH:
