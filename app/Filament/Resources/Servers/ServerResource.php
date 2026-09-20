@@ -5,12 +5,15 @@ namespace App\Filament\Resources\Servers;
 use App\Filament\Resources\Servers\Pages\CreateServer;
 use App\Filament\Resources\Servers\Pages\EditServer;
 use App\Filament\Resources\Servers\Pages\ListServers;
+use App\Filament\Resources\Servers\Pages\ServerInventory;
 use App\Filament\Resources\Servers\Pages\ViewServer;
 use App\Filament\Resources\Servers\Schemas\ServerForm;
 use App\Filament\Resources\Servers\Schemas\ServerInfolist;
 use App\Filament\Resources\Servers\Tables\ServersTable;
 use App\Models\Server;
 use BackedEnum;
+use Filament\Pages\Enums\SubNavigationPosition;
+use Filament\Resources\Pages\Page;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -23,6 +26,8 @@ class ServerResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedServerStack;
 
     protected static ?string $recordTitleAttribute = 'name';
+
+    protected static ?SubNavigationPosition $subNavigationPosition = SubNavigationPosition::Top;
 
     public static function form(Schema $schema): Schema
     {
@@ -39,12 +44,22 @@ class ServerResource extends Resource
         return ServersTable::configure($table);
     }
 
+    public static function getRecordSubNavigation(Page $page): array
+    {
+        return $page->generateNavigationItems([
+            ViewServer::class,
+            ServerInventory::class,
+            EditServer::class,
+        ]);
+    }
+
     public static function getPages(): array
     {
         return [
             'index' => ListServers::route('/'),
             'create' => CreateServer::route('/create'),
             'view' => ViewServer::route('/{record}'),
+            'inventory' => ServerInventory::route('/{record}/inventory'),
             'edit' => EditServer::route('/{record}/edit'),
         ];
     }

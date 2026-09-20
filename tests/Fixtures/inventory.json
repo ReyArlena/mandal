@@ -1,0 +1,331 @@
+{
+  "mandal": {
+    "version": "0.1.0",
+    "provisioned": true,
+    "provisioned_at": "2026-10-27T10:00:00Z",
+    "drivers": {
+      "database": "mariadb",
+      "cache": "dragonfly",
+      "js": "bun"
+    }
+  },
+  "system": {
+    "hostname": "web-1",
+    "os": {
+      "id": "ubuntu",
+      "version": "24.04",
+      "name": "Ubuntu 24.04.3 LTS"
+    },
+    "kernel": "7.3.0-5-cachyos",
+    "arch": "x86_64",
+    "cpus": 12,
+    "uptime_seconds": 1810,
+    "memory": {
+      "total_bytes": 32911278080,
+      "available_bytes": 23725363200
+    },
+    "disk": {
+      "total_bytes": 507796312064,
+      "used_bytes": 422449963008
+    },
+    "reboot_required": true,
+    "reboot_packages": [
+      "linux-image-generic",
+      "libc6"
+    ]
+  },
+  "services": [
+    {
+      "unit": "nginx",
+      "installed": false,
+      "state": "absent"
+    },
+    {
+      "unit": "mariadb",
+      "installed": false,
+      "state": "absent"
+    },
+    {
+      "unit": "dragonfly",
+      "installed": false,
+      "state": "absent"
+    },
+    {
+      "unit": "supervisor",
+      "installed": false,
+      "state": "absent"
+    },
+    {
+      "unit": "docker",
+      "installed": false,
+      "state": "absent"
+    },
+    {
+      "unit": "fail2ban",
+      "installed": false,
+      "state": "absent"
+    },
+    {
+      "unit": "ufw",
+      "installed": false,
+      "state": "absent"
+    },
+    {
+      "unit": "cron",
+      "installed": false,
+      "state": "absent"
+    },
+    {
+      "unit": "ssh",
+      "installed": false,
+      "state": "absent"
+    },
+    {
+      "unit": "unattended-upgrades",
+      "installed": false,
+      "state": "absent"
+    },
+    {
+      "unit": "php8.3-fpm",
+      "installed": false,
+      "state": "absent"
+    },
+    {
+      "unit": "php8.5-fpm",
+      "installed": false,
+      "state": "absent"
+    }
+  ],
+  "php": {
+    "versions": [
+      "8.3",
+      "8.5"
+    ],
+    "default": null,
+    "pools": [
+      {
+        "name": "www",
+        "user": "www-data",
+        "listen": "/run/php/php8.3-fpm.sock",
+        "pm": "dynamic",
+        "managed_app": null,
+        "file": "/etc/php/8.3/fpm/pool.d/www.conf",
+        "php": "8.3"
+      },
+      {
+        "name": "shop",
+        "user": "shop",
+        "listen": "/run/php/php8.5-fpm-shop.sock",
+        "pm": "ondemand",
+        "managed_app": "shop",
+        "file": "/etc/php/8.5/fpm/pool.d/shop.conf",
+        "php": "8.5"
+      },
+      {
+        "name": "www",
+        "user": "www-data",
+        "listen": "/run/php/php8.5-fpm.sock",
+        "pm": "dynamic",
+        "managed_app": null,
+        "file": "/etc/php/8.5/fpm/pool.d/www.conf",
+        "php": "8.5"
+      }
+    ]
+  },
+  "nginx": {
+    "installed": false,
+    "version": "",
+    "config_ok": null,
+    "sites": [
+      {
+        "managed_app": null,
+        "server_names": [],
+        "ports": [
+          80
+        ],
+        "root": "",
+        "redirects": 0,
+        "ssl": false,
+        "name": "default",
+        "file": "/etc/nginx/sites-available/default",
+        "enabled": true
+      },
+      {
+        "managed_app": null,
+        "server_names": [
+          "legacy.example.com"
+        ],
+        "ports": [
+          8080
+        ],
+        "root": "/var/www/legacy",
+        "redirects": 0,
+        "ssl": false,
+        "name": "legacy",
+        "file": "/etc/nginx/sites-available/legacy",
+        "enabled": false
+      },
+      {
+        "managed_app": "shop",
+        "server_names": [
+          "shop.example.com",
+          "www.shop.example.com"
+        ],
+        "ports": [
+          80,
+          443
+        ],
+        "root": "/home/shop/current/public",
+        "redirects": 2,
+        "ssl": true,
+        "name": "shop.conf",
+        "file": "/etc/nginx/sites-available/shop.conf",
+        "enabled": true
+      }
+    ]
+  },
+  "database": {
+    "driver": "mariadb",
+    "installed": false,
+    "active": "unknown",
+    "version": "",
+    "databases": [],
+    "users": []
+  },
+  "cache": {
+    "driver": "dragonfly",
+    "installed": false,
+    "active": "unknown",
+    "version": "",
+    "port": 6379
+  },
+  "js": {
+    "driver": "bun",
+    "installed": false,
+    "version": "",
+    "path": ""
+  },
+  "supervisor": {
+    "installed": true,
+    "active": "unknown",
+    "programs": [
+      {
+        "name": "legacy",
+        "command": "/usr/bin/python3 /opt/legacy/run.py",
+        "user": "legacy",
+        "numprocs": 1,
+        "managed_app": null,
+        "file": "/etc/supervisor/conf.d/legacy.conf"
+      },
+      {
+        "name": "shop-worker",
+        "command": "/usr/bin/php8.5 /home/shop/current/artisan queue:work --sleep=3 --tries=3",
+        "user": "shop",
+        "numprocs": 2,
+        "managed_app": "shop",
+        "file": "/etc/supervisor/conf.d/shop-worker.conf"
+      }
+    ],
+    "processes": [
+      {
+        "process": "shop-worker:shop-worker_00",
+        "state": "RUNNING"
+      },
+      {
+        "process": "shop-worker:shop-worker_01",
+        "state": "RUNNING"
+      },
+      {
+        "process": "legacy",
+        "state": "STOPPED"
+      }
+    ]
+  },
+  "certificates": {
+    "installed": true,
+    "certificates": [
+      {
+        "name": "shop.example.com",
+        "domains": [
+          "shop.example.com",
+          "www.shop.example.com"
+        ],
+        "expiry": "2027-01-15 10:22:31+00:00",
+        "status": "VALID: 80 days",
+        "path": "/etc/letsencrypt/live/shop.example.com/fullchain.pem"
+      },
+      {
+        "name": "old.example.com",
+        "domains": [
+          "old.example.com"
+        ],
+        "expiry": "2026-09-01 00:00:00+00:00",
+        "status": "INVALID: EXPIRED",
+        "path": "/etc/letsencrypt/live/old.example.com/fullchain.pem"
+      }
+    ]
+  },
+  "firewall": {
+    "installed": true,
+    "status": "active",
+    "default_incoming": "deny",
+    "default_outgoing": "allow",
+    "rules": [
+      "allow 22/tcp",
+      "allow 80/tcp",
+      "allow 443/tcp",
+      "allow from 10.0.0.0/8 to any port 3306"
+    ]
+  },
+  "fail2ban": {
+    "installed": true,
+    "active": "unknown",
+    "jails": [
+      {
+        "name": "sshd",
+        "banned": 3
+      },
+      {
+        "name": "nginx-http-auth",
+        "banned": 0
+      }
+    ]
+  },
+  "docker": {
+    "installed": false,
+    "active": "unknown",
+    "version": "",
+    "projects": [],
+    "containers": []
+  },
+  "apps": [
+    {
+      "name": "api",
+      "home": "/home/api",
+      "user_exists": false,
+      "type": "laravel",
+      "domain": "api.example.com",
+      "www": "naked-only",
+      "php": "8.5",
+      "current_release": null,
+      "releases": 0,
+      "deploy_key": null
+    },
+    {
+      "name": "shop",
+      "home": "/home/shop",
+      "user_exists": false,
+      "type": "laravel",
+      "domain": "shop.example.com",
+      "www": "redirect-to-naked",
+      "php": "8.5",
+      "source": "github",
+      "repo": "acme/shop",
+      "branch": "main",
+      "keep_releases": "5",
+      "current_release": "20261027120000",
+      "releases": 2,
+      "deploy_key": "ssh-ed25519 AAAATESTKEY shop@server"
+    }
+  ]
+}

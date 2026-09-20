@@ -19,3 +19,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SSH connections pin the server's host key after the fingerprint is confirmed and refuse to connect if it changes.
 - "Test connection" action on a server, and a server list showing connection status.
 - One-line setup command for new servers: a token-protected script that creates the SSH user, installs the panel's key and the CLI, and limits sudo to the CLI.
+- Inventory page per server showing system, services, PHP, sites, databases, workers, certificates, firewall, Docker and apps, read live from the server.
