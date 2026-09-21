@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+case "$1" in
+  --print-architecture) echo amd64 ;;
+  -V) exit 0 ;;
+esac

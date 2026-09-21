@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+[[ "$*" == *Timezone* ]] && echo "Etc/UTC"
+exit 0

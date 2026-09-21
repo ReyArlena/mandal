@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 case "$*" in
+  "status")
+    echo "Status: active"
+    ;;
   "status verbose")
     cat <<'OUT'
 Status: active

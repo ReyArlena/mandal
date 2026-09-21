@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Fake apt-cache: the PPA offers 8.3, 8.4 and 8.5 fully, and 8.6 without redis yet.
+case "$1" in
+  search)
+    printf 'php8.3-fpm - server-side, HTML-embedded scripting language (FPM-CGI binary)\nphp8.4-fpm - ...\nphp8.5-fpm - ...\nphp8.6-fpm - ...\n'
+    ;;
+  show)
+    case "$2" in
+      php8.6-redis) exit 100 ;;
+      php8.5-opcache|php8.6-opcache) exit 100 ;;
+      php*) exit 0 ;;
+      *) exit 100 ;;
+    esac
+    ;;
+esac

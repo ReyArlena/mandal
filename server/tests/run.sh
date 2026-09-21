@@ -26,11 +26,16 @@ export MANDAL_SUPERVISOR_DIR="${FIXTURES}/supervisor"
 export MANDAL_OS_RELEASE="${FIXTURES}/os-release"
 export MANDAL_REBOOT_REQUIRED="${FIXTURES}/reboot-required"
 export MANDAL_SSHD_DROPIN_DIR="${FIXTURES}/sshd_config.d"
+export MANDAL_PROC_SWAPS="${FIXTURES}/swaps-none"
+export MANDAL_APT_SOURCES_DIR="${TMP}/apt-sources"
+export MANDAL_CONFIG_BACKUP_DIR="${TMP}/config-backups"
+export MANDAL_DRAGONFLY_CONF="${TMP}/dragonfly.conf"
+mkdir -p "${MANDAL_APT_SOURCES_DIR}"
 
 # Only the fakes and a fixed set of real tools are on PATH, so whatever the
 # host has installed (bun, docker, nginx...) cannot leak into the results.
 mkdir -p "${TMP}/bin"
-for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod cat date sort head tail flock printf mkdir cp rm ln env; do
+for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch flock printf mkdir cp rm ln env; do
     if path="$(command -v "$tool" 2> /dev/null)"; then
         ln -s "$path" "${TMP}/bin/${tool}"
     fi
@@ -227,14 +232,69 @@ assert_json "check plans to install missing components" "$check" '.components[] 
 assert_json "check reads sshd settings" "$check" '.ssh.password_authentication' "yes"
 assert_json "check reads the ssh port" "$check" '.ssh.port' "2222"
 assert_json "check counts existing sites" "$check" '.existing.sites' "3"
-assert_json "check notes the cloud-init drop-in only when present" "$check" '.notes | length' "0"
+assert_json "check notes the enabled stock nginx site" "$check" '.notes | length' "1"
+assert_json "check does not mention cloud-init when absent" "$check" '.notes | map(select(test("cloud-init"))) | length' "0"
 
-MANDAL_OS_RELEASE="${FIXTURES}/os-release-debian" check="$(provision_check)"
+check="$(MANDAL_OS_RELEASE="${FIXTURES}/os-release-debian" provision_check)"
 assert_json "check rejects other distributions" "$check" '.os.supported' "false"
 assert_json "check is not ok on an unsupported OS" "$check" '.ok' "false"
 
-(cmd_provision) > /dev/null 2>&1
-assert_eq "provision without --check is refused" "64" "$?"
+(cmd_provision --bogus) > /dev/null 2>&1
+assert_eq "provision rejects unknown options" "64" "$?"
+
+# ---------------------------------------------------------------------------
+# system helpers
+# ---------------------------------------------------------------------------
+
+f="${TMP}/files/test.conf"
+write_file "$f" 0644 <<< "one" > /dev/null
+assert_eq "write_file creates the file" "one" "$(cat "$f")"
+assert_eq "write_file reports unchanged content" "+ ${f} unchanged" "$(write_file "$f" 0644 <<< "one")"
+write_file "$f" 0644 <<< "two" > /dev/null
+assert_eq "write_file replaces content" "two" "$(cat "$f")"
+assert_eq "write_file backs up the previous version" "1" "$(find "$MANDAL_CONFIG_BACKUP_DIR" -type f -name 'test.conf' | wc -l)"
+ensure_line "$f" "three" > /dev/null
+ensure_line "$f" "three" > /dev/null
+assert_eq "ensure_line appends once" "1" "$(grep -c '^three$' "$f")"
+assert_eq "swap_present reads the swaps fixture" "1" "$(swap_present; echo $?)"
+MANDAL_PROC_SWAPS="${FIXTURES}/swaps-present" swap_present && pass || fail "swap_present detects an existing swap"
+assert_eq "dry run skips commands but echoes them" "+ rm -rf /nothing" "$(MANDAL_DRY_RUN=1 run_cmd rm -rf /nothing)"
+
+# ---------------------------------------------------------------------------
+# php version discovery (fake apt-cache: 8.6 lacks redis)
+# ---------------------------------------------------------------------------
+
+assert_eq "php_available_versions lists the PPA" "8.3 8.4 8.5 8.6" "$(php_available_versions | tr '\n' ' ' | sed 's/ $//')"
+assert_eq "php_newest_supported_version skips a version missing an extension" "8.5" "$(php_newest_supported_version)"
+assert_eq "php_packages_for includes opcache only when it exists" "php8.4-opcache" "$(php_packages_for 8.4 | grep opcache)"
+assert_eq "php_packages_for omits opcache for 8.5" "" "$(php_packages_for 8.5 | grep opcache || true)"
+
+# ---------------------------------------------------------------------------
+# provision --dry-run
+# ---------------------------------------------------------------------------
+
+dry="$(MANDAL_DRY_RUN=1 provision_apply 2>&1)"
+dry_status=$?
+assert_eq "dry run completes" "0" "$dry_status"
+[[ "$dry_status" -eq 0 ]] || printf '%s\n' "$dry" | tail -n 8 | sed 's/^/      | /'
+for marker in "==> Base packages" "==> Swap" "fallocate -l 2048M /swapfile" "==> nginx" "sites-available/mandal-default" "==> PHP" "+ PHP version: 8.5" "apt-get install" "php8.5-fpm" "update-alternatives --set php /usr/bin/php8.5" "==> Composer" "==> Database (mariadb)" "mariadb-server" "unix_socket" "==> Cache (dragonfly)" "dragonfly_amd64.deb" "--requirepass=" "==> JavaScript tooling (bun)" "bun-linux-x64.zip" "==> Docker" "docker.sources" "docker-compose-plugin" "==> fail2ban" "jail.d/mandal.local" "==> Automatic security updates" "apt.conf.d/52-mandal" "==> Firewall (ufw)" "ufw allow 2222/tcp" "ufw allow 443/tcp" "==> SSH hardening" "10-mandal.conf" "Provisioning finished."; do
+    if [[ "$dry" == *"$marker"* ]]; then pass; else fail "dry run mentions: $marker"; fi
+done
+[[ "$dry" == *"ufw --force enable"* ]] && fail "dry run does not re-enable an active ufw" || pass
+assert_eq "dry run leaves the system untouched" "" "$(ls "$MANDAL_APT_SOURCES_DIR")"
+assert_eq "dry run writes no provision log" "0" "$(find "$MANDAL_LOG_DIR" -name 'provision-*.log' 2> /dev/null | wc -l)"
+ssh_pos="${dry%%==> SSH hardening*}"
+[[ "$ssh_pos" == *"==> Firewall"* && "$ssh_pos" == *"==> PHP"* ]] && pass || fail "SSH hardening runs after everything else"
+
+skip="$(MANDAL_DRY_RUN=1 MANDAL_SKIP_SSH_HARDENING=1 provision_apply 2>&1)"
+[[ "$skip" == *"skipped (--skip-ssh-hardening)"* ]] && pass || fail "ssh hardening can be skipped"
+
+(provision_set_driver database=nope) > /dev/null 2>&1 && fail "unknown drivers are rejected" || pass
+provision_set_driver database=mariadb > /dev/null
+assert_eq "chosen drivers are recorded in server.conf" "mariadb" "$(conf_get "$MANDAL_SERVER_CONF" DATABASE)"
+
+MANDAL_OS_RELEASE="${FIXTURES}/os-release-debian" bash -c 'source "'"${MANDAL_ROOT}"'/lib/core.sh"; mandal_load_commands; load_all_drivers; is_root(){ return 0; }; MANDAL_DRY_RUN=1 provision_apply' > /dev/null 2>&1
+assert_eq "provisioning refuses an unsupported OS" "1" "$?"
 
 # ---------------------------------------------------------------------------
 

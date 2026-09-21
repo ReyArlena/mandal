@@ -3,6 +3,7 @@
 # Database role: MariaDB.
 
 MANDAL_DB_SYSTEM_SCHEMAS='information_schema|performance_schema|mysql|sys'
+MANDAL_MARIADB_DROPIN="/etc/mysql/mariadb.conf.d/60-mandal.cnf"
 
 db_driver() {
     echo mariadb
@@ -53,4 +54,35 @@ db_list() {
     databases="$("$client" -N -B -e 'SHOW DATABASES' 2> /dev/null | grep -vE "^(${MANDAL_DB_SYSTEM_SCHEMAS})\$" | json_lines || echo '[]')"
     users="$("$client" -N -B -e "SELECT user, host FROM mysql.user WHERE user NOT IN ('root', 'mariadb.sys', 'mysql', 'debian-sys-maint', 'healthcheck') AND user <> ''" 2> /dev/null | json_tsv user host || echo '[]')"
     jq -n --argjson databases "$databases" --argjson users "$users" '{databases: $databases, users: $users}'
+}
+
+db_sql() {
+    local client
+    printf '+ sql: %s\n' "$1"
+    dry_run && return 0
+    client="$(db_client)" || die "no MariaDB client found"
+    "$client" --batch -e "$1"
+}
+
+# Install MariaDB, bind it to localhost and apply the usual secure-installation steps.
+db_install() {
+    apt_install mariadb-server mariadb-client
+    write_file "$MANDAL_MARIADB_DROPIN" 0644 <<'EOF'
+# managed-by: mandal
+[mysqld]
+bind-address = 127.0.0.1
+EOF
+    service_enable_now mariadb
+    service_restart mariadb
+    db_secure
+}
+
+# The equivalent of mariadb-secure-installation, without the prompts.
+db_secure() {
+    db_sql "ALTER USER 'root'@'localhost' IDENTIFIED VIA unix_socket"
+    db_sql "DELETE FROM mysql.global_priv WHERE User=''"
+    db_sql "DELETE FROM mysql.global_priv WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1')"
+    db_sql "DROP DATABASE IF EXISTS test"
+    db_sql "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%'"
+    db_sql "FLUSH PRIVILEGES"
 }

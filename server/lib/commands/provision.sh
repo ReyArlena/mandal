@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 #
-# provision --check - report what is on the server, what provisioning would
-# add, and anything that would conflict. Changes nothing.
-#
-# Applying the provisioning plan is a separate step that is not available
-# yet; until it is, this command only accepts --check.
+# provision --check   report what is on the server, what provisioning would
+#                     add, and anything that would conflict. Changes nothing.
+# provision           install and configure the stack. Idempotent; existing
+#                     configuration is kept and extended through drop-ins.
 
-MANDAL_COMMANDS+=("provision|Inspect a server before provisioning it (--check)|read")
+MANDAL_COMMANDS+=("provision|Provision the server, or inspect it first with --check|write")
 
 MANDAL_SUPPORTED_OS_ID="ubuntu"
 MANDAL_SUPPORTED_OS_VERSIONS=("24.04")
@@ -16,14 +15,81 @@ cmd_provision() {
     for arg in "$@"; do
         case "$arg" in
             --check) check=true ;;
-            *) die 64 "unknown option '$arg'" ;;
+            --dry-run) export MANDAL_DRY_RUN=1 ;;
+            --skip-ssh-hardening) export MANDAL_SKIP_SSH_HARDENING=1 ;;
+            --php=*) export MANDAL_PHP_VERSION="${arg#*=}" ;;
+            --database=* | --cache=* | --js=*) provision_set_driver "${arg#--}" ;;
+            --help | -h) provision_usage; return 0 ;;
+            *) die 64 "unknown option '$arg' (see mandal provision --help)" ;;
         esac
     done
-    [[ "$check" == true ]] || die 64 "provisioning is not available yet; run 'mandal provision --check' to inspect the server"
     require_root
     load_all_drivers
-    provision_check
+    if [[ "$check" == true ]]; then
+        provision_check
+        return 0
+    fi
+    provision_apply
 }
+
+provision_usage() {
+    cat <<'EOF'
+Usage: mandal provision [--check] [options]
+
+  --check                 Inspect the server and print a JSON report; change nothing
+  --dry-run               Print what provisioning would do without doing it
+  --database=<driver>     Database driver (default: mariadb)
+  --cache=<driver>        Cache driver (default: dragonfly)
+  --js=<driver>           JavaScript tooling driver (default: bun)
+  --php=<version>         PHP version to install (default: newest with all extensions)
+  --skip-ssh-hardening    Leave sshd configuration untouched
+EOF
+}
+
+# Record the chosen driver for a role before it is loaded, e.g. database=mariadb.
+provision_set_driver() {
+    local role="${1%%=*}" driver="${1#*=}"
+    [[ "$driver" =~ ^[a-z0-9]+$ ]] || die 64 "invalid ${role} driver '${driver}'"
+    [[ -r "${MANDAL_ROOT}/lib/roles/${role}/${driver}.sh" ]] || die 64 "unknown ${role} driver '${driver}'"
+    mkdir -p "$MANDAL_ETC"
+    conf_set "$MANDAL_SERVER_CONF" "$(printf '%s' "$role" | tr '[:lower:]' '[:upper:]')" "$driver"
+}
+
+provision_apply() {
+    local report conflicts os_supported log step_name
+    report="$(provision_check)"
+    os_supported="$(jq -r '.os.supported' <<< "$report")"
+    conflicts="$(jq -r '.conflicts | map(.message) | join("\n")' <<< "$report")"
+    [[ "$os_supported" == true ]] || die "unsupported operating system: $(jq -r '.os.name' <<< "$report") (Ubuntu ${MANDAL_SUPPORTED_OS_VERSIONS[*]} is supported)"
+    if [[ -n "$conflicts" ]]; then
+        printf 'error: provisioning cannot continue:\n%s\n' "$conflicts" >&2
+        exit 1
+    fi
+
+    mkdir -p "$MANDAL_LOG_DIR"
+    log="${MANDAL_LOG_DIR}/provision-$(date -u +%Y%m%dT%H%M%SZ).log"
+    if dry_run; then
+        log=/dev/null
+    else
+        with_lock
+        audit "provision"
+    fi
+
+    {
+        printf 'mandal %s provisioning %s (%s)\n' "$(mandal_version)" "$(hostname)" "$(jq -r '.os.name' <<< "$report")"
+        printf 'drivers: database=%s cache=%s js=%s\n' "$(db_driver)" "$(cache_driver)" "$(js_driver)"
+        for step_name in "${MANDAL_PROVISION_STEPS[@]}"; do
+            "prov_${step_name}"
+        done
+        printf '\nProvisioning finished.\n'
+    } 2>&1 | tee -a "$log"
+
+    return "${PIPESTATUS[0]}"
+}
+
+# ---------------------------------------------------------------------------
+# --check
+# ---------------------------------------------------------------------------
 
 # component name installed version action note
 component_row() {
@@ -94,7 +160,7 @@ provision_components() {
         component_row php false "" install "newest version with all required extensions"
     fi
 
-    if [[ -r /proc/swaps ]] && [[ "$(wc -l < /proc/swaps)" -gt 1 ]]; then
+    if swap_present; then
         component_row swap true "" keep "existing swap is left alone"
     else
         component_row swap false "" install "/swapfile"
@@ -143,6 +209,9 @@ provision_notes() {
     fi
     if [[ -f "${MANDAL_SSHD_DROPIN_DIR}/50-cloud-init.conf" ]]; then
         printf 'A cloud-init SSH drop-in exists. mandal adds its own drop-in that takes precedence over it.\n'
+    fi
+    if [[ -L "${MANDAL_NGINX_DIR}/sites-enabled/default" ]]; then
+        printf 'The stock nginx default site is enabled. It is disabled only if unmodified; otherwise it is kept.\n'
     fi
 }
 

@@ -63,10 +63,12 @@ Every managed server runs `mandal`, a Bash tool found in `server/` of this repos
 sudo mandal inventory           # everything on the server, as JSON
 sudo mandal app:list            # apps and their manifests
 sudo mandal provision --check   # what provisioning would add, and any conflicts
+sudo mandal provision --dry-run # print every step without changing anything
+sudo mandal provision           # install and harden the stack
 mandal version
 ```
 
-Read commands print JSON. Server-side state lives in standard locations (`/etc/nginx`, `/etc/php`, `/etc/supervisor` and so on), with Mandal's own metadata in `/etc/mandal`. Nothing is cached in the panel.
+Read commands print JSON. Provisioning is idempotent and additive: it installs what is missing, puts its own settings in drop-in files (`sshd_config.d`, `jail.d`, `mariadb.conf.d`, `conf.d` and so on), backs up any file it has to change under `/var/backups/mandal/config`, validates nginx and sshd configuration before reloading, and never removes rules, sites, databases or users it did not create. SSH hardening (key-only logins, no root login) runs last, after the panel has already signed in with its key. Server-side state lives in standard locations (`/etc/nginx`, `/etc/php`, `/etc/supervisor` and so on), with Mandal's own metadata in `/etc/mandal`. Nothing is cached in the panel.
 
 Components are split into roles (`database`, `cache`, `js`), each implemented by a driver in `server/lib/roles/`. The driver for each role is recorded in `/etc/mandal/server.conf`.
 
