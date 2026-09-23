@@ -9,7 +9,8 @@ use Symfony\Component\Finder\Finder;
 
 /**
  * Builds the tar.gz of the server CLI that a server downloads during setup
- * or an upgrade. Archives are cached per version.
+ * or an upgrade. Archives are cached by version and content hash, so a
+ * change to any CLI file produces a new archive.
  */
 class CliArchive
 {
@@ -30,12 +31,28 @@ class CliArchive
     }
 
     /**
-     * The path of the archive for the current version, building it if needed.
+     * A short hash of every file that goes into the archive.
+     */
+    public function hash(): string
+    {
+        $context = hash_init('sha256');
+
+        foreach ($this->files() as $file) {
+            hash_update($context, $file->getRelativePathname());
+            hash_update($context, (string) file_get_contents($file->getRealPath()));
+        }
+
+        hash_update($context, $this->version());
+
+        return substr(hash_final($context), 0, 12);
+    }
+
+    /**
+     * The path of the archive for the current source, building it if needed.
      */
     public function path(): string
     {
-        $version = $this->version();
-        $archive = $this->cacheDirectory()."/mandal-cli-{$version}.tar.gz";
+        $archive = $this->cacheDirectory()."/mandal-cli-{$this->version()}-{$this->hash()}.tar.gz";
 
         if (is_file($archive)) {
             return $archive;
@@ -48,12 +65,6 @@ class CliArchive
 
     private function build(string $archive): void
     {
-        $source = $this->sourcePath ?: base_path('server');
-
-        if (! is_dir($source)) {
-            throw new RuntimeException("The server CLI source directory is missing: {$source}");
-        }
-
         if (! is_dir(dirname($archive)) && ! mkdir(dirname($archive), 0755, true) && ! is_dir(dirname($archive))) {
             throw new RuntimeException('Could not create the archive cache directory.');
         }
@@ -64,7 +75,7 @@ class CliArchive
 
         $phar = new PharData($tar);
 
-        foreach ((new Finder)->files()->in($source)->notPath('tests')->ignoreDotFiles(true) as $file) {
+        foreach ($this->files() as $file) {
             $phar->addFile($file->getRealPath(), $file->getRelativePathname());
         }
 
@@ -73,6 +84,23 @@ class CliArchive
 
         unset($phar);
         @unlink($tar);
+
+        foreach (glob($this->cacheDirectory().'/mandal-cli-*.tar.gz') ?: [] as $old) {
+            if ($old !== $archive) {
+                @unlink($old);
+            }
+        }
+    }
+
+    private function files(): Finder
+    {
+        $source = $this->sourcePath ?: base_path('server');
+
+        if (! is_dir($source)) {
+            throw new RuntimeException("The server CLI source directory is missing: {$source}");
+        }
+
+        return (new Finder)->files()->in($source)->notPath('tests')->ignoreDotFiles(true)->sortByName();
     }
 
     private function cacheDirectory(): string
