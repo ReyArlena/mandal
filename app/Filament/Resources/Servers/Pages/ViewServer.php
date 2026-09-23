@@ -2,8 +2,14 @@
 
 namespace App\Filament\Resources\Servers\Pages;
 
+use App\Enums\CacheDriver;
+use App\Enums\DatabaseDriver;
+use App\Enums\JsDriver;
 use App\Enums\ServerSetupMode;
+use App\Enums\TaskStatus;
+use App\Enums\TaskType;
 use App\Filament\Resources\Servers\ServerResource;
+use App\Jobs\ProvisionServer;
 use App\Mandal\MandalClient;
 use App\Models\Server;
 use App\Ssh\KeyPair;
@@ -12,6 +18,9 @@ use App\Ssh\SshException;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\Checkbox;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Icons\Heroicon;
@@ -26,9 +35,77 @@ class ViewServer extends ViewRecord
         return [
             $this->setupCommandAction(),
             $this->testConnectionAction(),
+            $this->provisionAction(),
             EditAction::make(),
             DeleteAction::make(),
         ];
+    }
+
+    /**
+     * Queues `mandal provision` with the chosen drivers and opens the task
+     * so its output can be followed.
+     */
+    private function provisionAction(): Action
+    {
+        return Action::make('provision')
+            ->label(fn (Server $record): string => $record->isProvisioned() ? 'Provision again' : 'Provision')
+            ->icon(Heroicon::OutlinedRocketLaunch)
+            ->color(fn (Server $record): string => $record->isProvisioned() ? 'gray' : 'primary')
+            ->visible(fn (Server $record): bool => $record->connected_at !== null)
+            ->disabled(fn (Server $record): bool => $record->tasks()->where('status', '!=', TaskStatus::Succeeded)->where('status', '!=', TaskStatus::Failed)->exists())
+            ->modalHeading('Provision the server')
+            ->modalDescription('Installs and hardens the stack. Existing configuration is kept; Mandal only adds what is missing. This runs in the background and usually takes 5 to 15 minutes.')
+            ->modalSubmitActionLabel('Start provisioning')
+            ->schema([
+                Select::make('database')
+                    ->label('Database')
+                    ->options(DatabaseDriver::class)
+                    ->default(DatabaseDriver::default())
+                    ->required()
+                    ->selectablePlaceholder(false),
+                Select::make('cache')
+                    ->label('Cache')
+                    ->options(CacheDriver::class)
+                    ->default(CacheDriver::default())
+                    ->required()
+                    ->selectablePlaceholder(false),
+                Select::make('js')
+                    ->label('JavaScript tooling')
+                    ->options(JsDriver::class)
+                    ->default(JsDriver::default())
+                    ->required()
+                    ->selectablePlaceholder(false),
+                TextInput::make('php')
+                    ->label('PHP version')
+                    ->placeholder('Newest available')
+                    ->helperText('Leave empty to install the newest version for which every required extension exists.')
+                    ->rules(['nullable', 'regex:/^\d+\.\d+$/']),
+                Checkbox::make('skip_ssh_hardening')
+                    ->label('Leave SSH configuration untouched')
+                    ->helperText('By default password logins and root logins over SSH are disabled once the panel\'s key is confirmed to work.'),
+            ])
+            ->action(function (Server $record, array $data): void {
+                $task = $record->tasks()->create([
+                    'type' => TaskType::Provision,
+                    'user_id' => auth()->id(),
+                    'options' => [
+                        'database' => $data['database'],
+                        'cache' => $data['cache'],
+                        'js' => $data['js'],
+                        'php' => $data['php'] ?: null,
+                        'skip_ssh_hardening' => (bool) ($data['skip_ssh_hardening'] ?? false),
+                    ],
+                ]);
+
+                ProvisionServer::dispatch($task);
+
+                Notification::make()
+                    ->title('Provisioning started')
+                    ->success()
+                    ->send();
+
+                $this->redirect(ServerResource::getUrl('task', ['record' => $record, 'task' => $task]));
+            });
     }
 
     /**

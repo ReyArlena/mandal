@@ -6,7 +6,9 @@ use App\Filament\Resources\Servers\Pages\CreateServer;
 use App\Filament\Resources\Servers\Pages\EditServer;
 use App\Filament\Resources\Servers\Pages\ListServers;
 use App\Filament\Resources\Servers\Pages\ServerInventory;
+use App\Filament\Resources\Servers\Pages\ServerTasks;
 use App\Filament\Resources\Servers\Pages\ViewServer;
+use App\Filament\Resources\Servers\Pages\ViewTask;
 use App\Filament\Resources\Servers\Schemas\ServerForm;
 use App\Filament\Resources\Servers\Schemas\ServerInfolist;
 use App\Filament\Resources\Servers\Tables\ServersTable;
@@ -49,6 +51,7 @@ class ServerResource extends Resource
         return $page->generateNavigationItems([
             ViewServer::class,
             ServerInventory::class,
+            ServerTasks::class,
             EditServer::class,
         ]);
     }
@@ -60,6 +63,8 @@ class ServerResource extends Resource
             'create' => CreateServer::route('/create'),
             'view' => ViewServer::route('/{record}'),
             'inventory' => ServerInventory::route('/{record}/inventory'),
+            'tasks' => ServerTasks::route('/{record}/tasks'),
+            'task' => ViewTask::route('/{record}/tasks/{task}'),
             'edit' => EditServer::route('/{record}/edit'),
         ];
     }

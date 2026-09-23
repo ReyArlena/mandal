@@ -51,6 +51,8 @@ Each server gets its own SSH key pair when it is added; the private key is store
 2. Open the server and choose **Setup command**. Run the command shown on the server as root. It creates the `mandal` user, installs the panel's public key and the `mandal` CLI, and allows that user to run only the CLI through sudo. Nothing else on the server is touched.
 3. Choose **Test connection**, check the host key fingerprint it shows against `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server, and confirm.
 
+4. Choose **Provision**. Mandal installs and hardens the stack in the background (nginx, PHP, Composer, MariaDB, Dragonfly, Bun, Supervisor, Certbot, Docker, firewall, fail2ban, automatic security updates) and shows the output live under the server's **Tasks** tab. A queue worker must be running for this (`php artisan queue:work`, or `composer run dev` locally).
+
 Once connected, the server's **Inventory** tab shows what is on it (services, PHP versions and pools, nginx sites, databases, Supervisor programs, certificates, firewall rules, Docker, and apps managed by Mandal). Nothing is stored in the panel; it is read from the server on each visit and cached for a few seconds.
 
 The setup link expires after 24 hours and stops working after the first successful connection. The server needs to reach the panel to download the script and the CLI, so a panel that only runs on your own machine cannot use the one-line command; open the script from the dialog instead.
