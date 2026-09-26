@@ -4,7 +4,10 @@ use App\Enums\TaskType;
 use App\Filament\Resources\Servers\Pages\ServerApps;
 use App\Jobs\CreateApp;
 use App\Jobs\DeleteApp;
+use App\Jobs\DeployApp;
+use App\Jobs\RollbackApp;
 use App\Models\Server;
+use App\Models\Task;
 use App\Models\User;
 use App\Ssh\SshClient;
 use Illuminate\Support\Facades\Queue;
@@ -113,4 +116,42 @@ it('ignores a malformed name passed to delete', function () {
 
     expect($this->server->tasks()->count())->toBe(0);
     Queue::assertNothingPushed();
+});
+
+it('queues a deploy for an app with a repository', function () {
+    Queue::fake();
+
+    livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
+        ->callAction('deployApp', arguments: ['name' => 'shop'])
+        ->assertNotified('Deploying shop');
+
+    $task = $this->server->tasks()->sole();
+
+    expect($task->type)->toBe(TaskType::Deploy)
+        ->and((new DeployApp($task))->arguments())->toBe('app:deploy --name=shop');
+
+    Queue::assertPushed(DeployApp::class);
+});
+
+it('queues a rollback', function () {
+    Queue::fake();
+
+    livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
+        ->callAction('rollbackApp', arguments: ['name' => 'shop'])
+        ->assertNotified('Rolling back shop');
+
+    expect((new RollbackApp($this->server->tasks()->sole()))->arguments())->toBe('app:rollback --name=shop');
+    Queue::assertPushed(RollbackApp::class);
+});
+
+it('builds deploy and rollback arguments only from safe values', function () {
+    $deploy = Task::factory()->create(['options' => ['name' => 'shop', 'branch' => 'release/2', 'commit' => 'abc1234']]);
+    $unsafe = Task::factory()->create(['options' => ['name' => 'shop', 'branch' => 'x;y', 'commit' => 'nope']]);
+    $rollback = Task::factory()->create(['options' => ['name' => 'shop', 'release' => '20261027110000']]);
+    $badRelease = Task::factory()->create(['options' => ['name' => 'shop', 'release' => '../etc']]);
+
+    expect((new DeployApp($deploy))->arguments())->toBe('app:deploy --name=shop --branch=release/2 --commit=abc1234')
+        ->and((new DeployApp($unsafe))->arguments())->toBe('app:deploy --name=shop')
+        ->and((new RollbackApp($rollback))->arguments())->toBe('app:rollback --name=shop --release=20261027110000')
+        ->and((new RollbackApp($badRelease))->arguments())->toBe('app:rollback --name=shop');
 });

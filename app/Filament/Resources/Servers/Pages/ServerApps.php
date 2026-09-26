@@ -8,6 +8,8 @@ use App\Enums\WwwMode;
 use App\Filament\Resources\Servers\ServerResource;
 use App\Jobs\CreateApp;
 use App\Jobs\DeleteApp;
+use App\Jobs\DeployApp;
+use App\Jobs\RollbackApp;
 use App\Jobs\RunMandalTask;
 use App\Mandal\MandalClient;
 use App\Models\Server;
@@ -88,7 +90,7 @@ class ServerApps extends Page
         $server = $this->getRecord();
 
         return $server->tasks()
-            ->whereIn('type', [TaskType::CreateApp, TaskType::DeleteApp])
+            ->whereIn('type', [TaskType::CreateApp, TaskType::DeleteApp, TaskType::Deploy, TaskType::Rollback])
             ->whereIn('status', [TaskStatus::Pending, TaskStatus::Running])
             ->exists();
     }
@@ -163,6 +165,49 @@ class ServerApps extends Page
                     'branch' => $data['branch'] ?: 'main',
                     'database' => (bool) ($data['database'] ?? true),
                 ], "Creating {$data['name']}");
+            });
+    }
+
+    public function deployAppAction(): Action
+    {
+        return Action::make('deployApp')
+            ->label('Deploy')
+            ->icon(Heroicon::OutlinedRocketLaunch)
+            ->link()
+            ->requiresConfirmation()
+            ->modalHeading(fn (array $arguments): string => "Deploy {$arguments['name']}?")
+            ->modalDescription('Clones the configured branch into a new release, runs the app\'s deploy script and switches over when it succeeds. The live release is untouched if anything fails.')
+            ->modalSubmitActionLabel('Deploy')
+            ->action(function (array $arguments): void {
+                $name = (string) ($arguments['name'] ?? '');
+
+                if (! preg_match('/^[a-z][a-z0-9-]{1,31}$/', $name)) {
+                    return;
+                }
+
+                $this->queueTask(TaskType::Deploy, DeployApp::class, ['name' => $name], "Deploying {$name}");
+            });
+    }
+
+    public function rollbackAppAction(): Action
+    {
+        return Action::make('rollbackApp')
+            ->label('Roll back')
+            ->icon(Heroicon::OutlinedArrowUturnLeft)
+            ->color('warning')
+            ->link()
+            ->requiresConfirmation()
+            ->modalHeading(fn (array $arguments): string => "Roll back {$arguments['name']}?")
+            ->modalDescription('Switches to the previous release and restarts the workers. Database migrations are not reversed.')
+            ->modalSubmitActionLabel('Roll back')
+            ->action(function (array $arguments): void {
+                $name = (string) ($arguments['name'] ?? '');
+
+                if (! preg_match('/^[a-z][a-z0-9-]{1,31}$/', $name)) {
+                    return;
+                }
+
+                $this->queueTask(TaskType::Rollback, RollbackApp::class, ['name' => $name], "Rolling back {$name}");
             });
     }
 

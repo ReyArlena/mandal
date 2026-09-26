@@ -9,6 +9,8 @@ enum TaskType: string implements HasLabel
     case Provision = 'provision';
     case CreateApp = 'create-app';
     case DeleteApp = 'delete-app';
+    case Deploy = 'deploy';
+    case Rollback = 'rollback';
 
     public function getLabel(): string
     {
@@ -16,6 +18,8 @@ enum TaskType: string implements HasLabel
             self::Provision => 'Provision',
             self::CreateApp => 'Create app',
             self::DeleteApp => 'Delete app',
+            self::Deploy => 'Deploy',
+            self::Rollback => 'Roll back',
         };
     }
 }

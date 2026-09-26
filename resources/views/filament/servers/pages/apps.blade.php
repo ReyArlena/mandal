@@ -31,10 +31,19 @@
                         @if (! empty($app['repo']))
                             <span class="font-mono text-xs text-gray-500">{{ $app['repo'] }}@{{ $app['branch'] ?? 'main' }}</span>
                         @endif
+                        @if (! empty($app['deploy_key']))
+                            <x-filament::badge color="gray" x-data x-on:click="navigator.clipboard.writeText(@js($app['deploy_key']))" class="cursor-pointer" title="Copy the deploy key for GitHub">Deploy key</x-filament::badge>
+                        @endif
                         @if (! empty($app['current_release']))
                             <x-filament::badge color="success">Deployed</x-filament::badge>
                         @else
                             <x-filament::badge color="gray">Not deployed</x-filament::badge>
+                        @endif
+                        @if (! empty($app['repo']))
+                            {{ ($this->deployAppAction)(['name' => $app['name']]) }}
+                        @endif
+                        @if (($app['releases'] ?? 0) > 1)
+                            {{ ($this->rollbackAppAction)(['name' => $app['name']]) }}
                         @endif
                         {{ ($this->deleteAppAction)(['name' => $app['name']]) }}
                     </div>
