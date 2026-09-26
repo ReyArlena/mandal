@@ -6,7 +6,7 @@
 #
 #   server/tests/run.sh
 
-# shellcheck disable=SC2015
+# shellcheck disable=SC2015,SC2016,SC2329
 set -uo pipefail
 
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -35,7 +35,7 @@ mkdir -p "${MANDAL_APT_SOURCES_DIR}"
 # Only the fakes and a fixed set of real tools are on PATH, so whatever the
 # host has installed (bun, docker, nginx...) cannot leak into the results.
 mkdir -p "${TMP}/bin"
-for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch flock printf mkdir cp rm ln env; do
+for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch base64 flock printf mkdir cp rm ln env; do
     if path="$(command -v "$tool" 2> /dev/null)"; then
         ln -s "$path" "${TMP}/bin/${tool}"
     fi
@@ -292,6 +292,71 @@ skip="$(MANDAL_DRY_RUN=1 MANDAL_SKIP_SSH_HARDENING=1 provision_apply 2>&1)"
 (provision_set_driver database=nope) > /dev/null 2>&1 && fail "unknown drivers are rejected" || pass
 provision_set_driver database=mariadb > /dev/null
 assert_eq "chosen drivers are recorded in server.conf" "mariadb" "$(conf_get "$MANDAL_SERVER_CONF" DATABASE)"
+
+# ---------------------------------------------------------------------------
+# apps: templates and app:create --dry-run
+# ---------------------------------------------------------------------------
+
+assert_eq "hostnames for redirect-to-naked" "example.com www.example.com" "$(app_hostnames redirect-to-naked example.com | tr '\n' ' ' | sed 's/ $//')"
+assert_eq "hostnames for naked-only" "example.com" "$(app_hostnames naked-only example.com | tr '\n' ' ' | sed 's/ $//')"
+assert_eq "primary hostnames for redirect-to-www" "www.example.com www.example.org" "$(app_primary_hostnames redirect-to-www example.com example.org | tr '\n' ' ' | sed 's/ $//')"
+assert_eq "redirect hostnames for redirect-to-naked" "www.example.com www.example.org" "$(app_redirect_hostnames redirect-to-naked example.com example.org | tr '\n' ' ' | sed 's/ $//')"
+assert_eq "no redirect hostnames for naked-only" "" "$(app_redirect_hostnames naked-only example.com)"
+
+vhost="$(app_render_vhost shop 8.5 redirect-to-naked shop.example.com shop.example.org)"
+[[ "$vhost" == "# managed-by: mandal app=shop"* ]] && pass || fail "vhost starts with the managed marker"
+[[ "$vhost" == *"server_name www.shop.example.com www.shop.example.org;"* ]] && pass || fail "vhost redirects the www names"
+[[ "$vhost" == *'return 301 $scheme://shop.example.com$request_uri;'* ]] && pass || fail "vhost redirects to the naked primary domain"
+[[ "$vhost" == *"server_name shop.example.com shop.example.org;"* ]] && pass || fail "vhost serves the naked names"
+[[ "$vhost" == *"root ${MANDAL_HOME_DIR}/shop/current/public;"* ]] && pass || fail "vhost roots at current/public"
+[[ "$vhost" == *"fastcgi_pass unix:/run/php/php8.5-fpm-shop.sock;"* ]] && pass || fail "vhost uses the app socket"
+[[ "$vhost" == *"access_log /var/log/nginx/shop-access.log;"* ]] && pass || fail "vhost has per-app logs"
+www_vhost="$(app_render_vhost shop 8.5 redirect-to-www shop.example.com)"
+[[ "$www_vhost" == *'return 301 $scheme://www.shop.example.com$request_uri;'* ]] && pass || fail "redirect-to-www sends the naked name to www"
+naked_vhost="$(app_render_vhost shop 8.5 naked-only shop.example.com)"
+[[ "$naked_vhost" != *"return 301"* ]] && pass || fail "naked-only has no redirect block"
+
+pool="$(app_render_pool shop 8.5)"
+[[ "$pool" == *"[shop]"* && "$pool" == *"user = shop"* && "$pool" == *"listen = /run/php/php8.5-fpm-shop.sock"* ]] && pass || fail "pool has the app user and socket"
+[[ "$pool" == *"php_admin_value[open_basedir] = ${MANDAL_HOME_DIR}/shop:/tmp:/dev/urandom"* ]] && pass || fail "pool restricts open_basedir"
+[[ "$pool" == *"listen.owner = www-data"* ]] && pass || fail "pool socket is owned by nginx"
+
+env_file="$(app_render_env shop shop.example.com shop shop secret cachepass)"
+[[ "$env_file" == *"APP_URL=https://shop.example.com"* && "$env_file" == *'DB_PASSWORD="secret"'* && "$env_file" == *'REDIS_PASSWORD="cachepass"'* && "$env_file" == *"APP_KEY=base64:"* ]] && pass || fail "env file has the app settings"
+
+cron="$(app_render_cron shop 8.5)"
+[[ "$cron" == *"* * * * * /usr/bin/php8.5 ${MANDAL_HOME_DIR}/shop/current/artisan schedule:run"* ]] && pass || fail "cron runs the scheduler with the versioned php"
+
+(validate_branch main) && pass || fail "validate_branch accepts main"
+(validate_branch feature/x-1) && pass || fail "validate_branch accepts slashes"
+(validate_branch 'a;b') 2> /dev/null && fail "validate_branch rejects shell characters" || pass
+(validate_repo acme/shop) && pass || fail "validate_repo accepts owner/name"
+(validate_repo 'git@github.com:acme/shop') 2> /dev/null && fail "validate_repo rejects URLs" || pass
+(validate_www_mode naked-only) && pass || fail "validate_www_mode accepts naked-only"
+(validate_www_mode both) 2> /dev/null && fail "validate_www_mode rejects unknown modes" || pass
+
+create="$(php_default_version() { echo 8.5; }; cmd_app_create --name=blog --domain=blog.example.com --alias=blog.example.org --repo=acme/blog --dry-run 2>&1)"
+create_status=$?
+assert_eq "app:create dry run completes" "0" "$create_status"
+[[ "$create_status" -eq 0 ]] || printf '%s\n' "$create" | tail -n 6 | sed 's/^/      | /'
+for marker in "useradd --create-home --home-dir ${MANDAL_HOME_DIR}/blog" "chmod 0750 ${MANDAL_HOME_DIR}/blog" "setfacl -m u:www-data:x" "ssh-keygen" "write ${MANDAL_PHP_DIR}/8.5/fpm/pool.d/blog.conf" "write ${MANDAL_NGINX_DIR}/sites-available/blog.conf" "sites-enabled/blog.conf" "CREATE DATABASE IF NOT EXISTS \`blog\`" "GRANT ALL PRIVILEGES ON \`blog\`.* TO 'blog'@'localhost'" "write ${MANDAL_HOME_DIR}/blog/shared/.env (0600 blog:blog)" "write ${MANDAL_HOME_DIR}/blog/deploy.sh (0750 blog:blog)" "crontab for blog" "App blog created."; do
+    if [[ "$create" == *"$marker"* ]]; then pass; else fail "app:create mentions: $marker"; fi
+done
+[[ "$create" == *"ALTER USER 'blog'@'localhost' IDENTIFIED BY '"*"'"* ]] && pass || fail "app:create sets a database password"
+[[ "$create" != *"IDENTIFIED BY ''"* ]] && pass || fail "database password is not empty"
+
+(cmd_app_create --name=shop --domain=x.example.com --dry-run) > /dev/null 2>&1 && fail "app:create refuses an existing app" || pass
+(cmd_app_create --name=Bad --domain=x.example.com --dry-run) > /dev/null 2>&1 && fail "app:create validates the name" || pass
+(cmd_app_create --name=ok --domain=x.example.com --www=sideways --dry-run) > /dev/null 2>&1 && fail "app:create validates the www mode" || pass
+(cmd_app_create --name=ok --dry-run) > /dev/null 2>&1 && fail "app:create requires a domain" || pass
+
+delete="$(cmd_app_delete --name=shop --dry-run 2>&1)"
+assert_eq "app:delete dry run completes" "0" "$?"
+for marker in "rm -f ${MANDAL_NGINX_DIR}/sites-enabled/shop.conf" "rm -f ${MANDAL_PHP_DIR}/8.5/fpm/pool.d/shop.conf" "DROP DATABASE IF EXISTS \`shop\`" "userdel --remove shop" "App shop removed."; do
+    if [[ "$delete" == *"$marker"* ]]; then pass; else fail "app:delete mentions: $marker"; fi
+done
+keep="$(cmd_app_delete --name=shop --keep-database --keep-files --dry-run 2>&1)"
+[[ "$keep" != *"DROP DATABASE"* && "$keep" == *"userdel shop"* ]] && pass || fail "app:delete can keep the database and files"
 
 MANDAL_OS_RELEASE="${FIXTURES}/os-release-debian" bash -c 'source "'"${MANDAL_ROOT}"'/lib/core.sh"; mandal_load_commands; load_all_drivers; is_root(){ return 0; }; MANDAL_DRY_RUN=1 provision_apply' > /dev/null 2>&1
 assert_eq "provisioning refuses an unsupported OS" "1" "$?"
