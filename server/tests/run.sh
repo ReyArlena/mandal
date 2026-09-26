@@ -263,6 +263,8 @@ MANDAL_PROC_SWAPS="${FIXTURES}/swaps-present" swap_present && pass || fail "swap
 assert_eq "dry run skips commands but echoes them" "+ rm -rf /nothing" "$(MANDAL_DRY_RUN=1 run_cmd rm -rf /nothing)"
 MANDAL_DRY_RUN=1 download https://example.com/file.tar.gz > /dev/null
 [[ -n "${DOWNLOADED_FILE:-}" && "$DOWNLOADED_FILE" != *"download"* ]] && pass || fail "download leaves a clean path in DOWNLOADED_FILE"
+MANDAL_DRY_RUN=1 download https://example.com/pkg.deb .deb > /dev/null
+[[ "$DOWNLOADED_FILE" == *.deb ]] && pass || fail "download keeps the requested suffix"
 cache_password > /dev/null
 [[ "$CACHE_PASSWORD" =~ ^[A-Za-z0-9]{40}$ ]] && pass || fail "cache_password generates a clean 40-character secret"
 first_password="$CACHE_PASSWORD"
@@ -366,6 +368,42 @@ for marker in "rm -f ${MANDAL_NGINX_DIR}/sites-enabled/shop.conf" "rm -f ${MANDA
 done
 keep="$(cmd_app_delete --name=shop --keep-database --keep-files --dry-run 2>&1)"
 [[ "$keep" != *"DROP DATABASE"* && "$keep" == *"userdel shop"* ]] && pass || fail "app:delete can keep the database and files"
+
+# ---------------------------------------------------------------------------
+# deployments
+# ---------------------------------------------------------------------------
+
+export MANDAL_DEPLOY_LOG_DIR="${TMP}/deploys"
+releases_json="$(deploy_releases_json shop)"
+assert_json "app:releases lists releases oldest first" "$releases_json" 'map(.release) | join(",")' "20261027110000,20261027120000"
+assert_json "app:releases marks the current release" "$releases_json" 'map(select(.current)) | .[0].release' "20261027120000"
+assert_eq "deploy_current_release reads the symlink" "20261027120000" "$(deploy_current_release "${MANDAL_HOME_DIR}/shop")"
+
+deploy="$(cmd_app_deploy --name=shop --dry-run 2>&1)"
+deploy_status=$?
+assert_eq "app:deploy dry run completes" "0" "$deploy_status"
+[[ "$deploy_status" -eq 0 ]] || printf '%s\n' "$deploy" | tail -n 6 | sed 's/^/      | /'
+for marker in "==> Deploying shop from acme/shop@main" "git clone --quiet --depth 1 --branch main git@github.com:acme/shop.git ${MANDAL_HOME_DIR}/shop/releases/" "GIT_SSH_COMMAND=ssh -i ${MANDAL_HOME_DIR}/shop/.ssh/id_ed25519" "ln -sfn ${MANDAL_HOME_DIR}/shop/shared/storage" "ln -sfn ${MANDAL_HOME_DIR}/shop/shared/.env" "exec bash '${MANDAL_HOME_DIR}/shop/deploy.sh'" "PHP=/usr/bin/php8.5" "mv -T ${MANDAL_HOME_DIR}/shop/current.new ${MANDAL_HOME_DIR}/shop/current" "systemctl reload-or-restart php8.5-fpm" "artisan queue:restart" "==> Pruning old releases (keeping 5)" "Deployed shop"; do
+    if [[ "$deploy" == *"$marker"* ]]; then pass; else fail "app:deploy mentions: $marker"; fi
+done
+[[ "$deploy" == *"sudo -u shop -H env HOME=${MANDAL_HOME_DIR}/shop"* ]] && pass || fail "deploy steps run as the app user"
+assert_eq "dry run writes no deploy log" "0" "$(find "$MANDAL_DEPLOY_LOG_DIR" -type f 2> /dev/null | wc -l)"
+
+branch_deploy="$(cmd_app_deploy --name=shop --branch=release/1.2 --commit=abc1234 --dry-run 2>&1)"
+[[ "$branch_deploy" == *"--branch release/1.2"* && "$branch_deploy" == *"checkout --quiet abc1234"* ]] && pass || fail "app:deploy accepts a branch and commit"
+(cmd_app_deploy --name=shop --commit='abc;rm' --dry-run) > /dev/null 2>&1 && fail "app:deploy rejects an unsafe commit" || pass
+(cmd_app_deploy --name=api --dry-run) > /dev/null 2>&1 && fail "app:deploy refuses an app without a repository" || pass
+
+rollback="$(cmd_app_rollback --name=shop --dry-run 2>&1)"
+assert_eq "app:rollback dry run completes" "0" "$?"
+[[ "$rollback" == *"Rolling shop back to release 20261027110000"* ]] && pass || fail "app:rollback picks the previous release"
+[[ "$rollback" == *"ln -sfn ${MANDAL_HOME_DIR}/shop/releases/20261027110000 ${MANDAL_HOME_DIR}/shop/current.new"* ]] && pass || fail "app:rollback switches the symlink"
+(cmd_app_rollback --name=shop --release=nope --dry-run) > /dev/null 2>&1 && fail "app:rollback validates the release name" || pass
+
+prune_home="${TMP}/prune/home"
+mkdir -p "$prune_home/releases/"{20260101000000,20260102000000,20260103000000,20260104000000}
+MANDAL_DRY_RUN=1 deploy_prune "$prune_home" 2 > "${TMP}/prune.out"
+assert_eq "deploy_prune removes the oldest releases beyond the limit" "20260101000000 20260102000000" "$(grep -oE '[0-9]{14}' "${TMP}/prune.out" | tr '\n' ' ' | sed 's/ $//')"
 
 MANDAL_OS_RELEASE="${FIXTURES}/os-release-debian" bash -c 'source "'"${MANDAL_ROOT}"'/lib/core.sh"; mandal_load_commands; load_all_drivers; is_root(){ return 0; }; MANDAL_DRY_RUN=1 provision_apply' > /dev/null 2>&1
 assert_eq "provisioning refuses an unsupported OS" "1" "$?"
