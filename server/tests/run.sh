@@ -210,6 +210,9 @@ assert_json "system reads reboot packages" "$system" '.reboot_packages | join(",
 
 mandal_json="$(inv_mandal)"
 assert_json "mandal reports provisioned" "$mandal_json" '.provisioned' "true"
+unprov="${TMP}/unprovisioned.conf"
+printf 'DATABASE=mariadb\n' > "$unprov"
+assert_json "mandal is not provisioned until PROVISIONED_AT is recorded" "$(MANDAL_SERVER_CONF="$unprov" inv_mandal)" '.provisioned' "false"
 assert_json "mandal reports drivers" "$mandal_json" '.drivers.cache' "dragonfly"
 
 # ---------------------------------------------------------------------------

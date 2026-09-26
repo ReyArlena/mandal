@@ -39,7 +39,7 @@ cmd_app_list() {
 
 inv_mandal() {
     local provisioned=false
-    [[ -f "$MANDAL_SERVER_CONF" ]] && provisioned=true
+    [[ -n "$(conf_get "$MANDAL_SERVER_CONF" PROVISIONED_AT 2> /dev/null || true)" ]] && provisioned=true
     jq -n \
         --arg version "$(mandal_version)" \
         --argjson provisioned "$provisioned" \
