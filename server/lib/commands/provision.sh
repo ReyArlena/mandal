@@ -141,13 +141,13 @@ provision_components() {
     fi
 
     if has_cmd docker; then
-        component_row docker true "$(docker --version 2> /dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)" keep ""
+        component_row docker true "$(docker --version 2> /dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | awk 'NR == 1' || true)" keep ""
     else
         component_row docker false "" install ""
     fi
 
     if has_cmd composer; then
-        component_row composer true "$(composer --version 2> /dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)" keep ""
+        component_row composer true "$(composer --version 2> /dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | awk 'NR == 1' || true)" keep ""
     else
         component_row composer false "" install ""
     fi
@@ -170,7 +170,7 @@ provision_components() {
 # Which process (if any) listens on a TCP port. Prints the process name.
 port_listener() {
     has_cmd ss || return 0
-    ss -H -ltnp "sport = :$1" 2> /dev/null | grep -oE 'users:\(\("[^"]+"' | head -n 1 | sed -e 's/^users:(("//' -e 's/"$//'
+    ss -H -ltnp "sport = :$1" 2> /dev/null | grep -oE 'users:\(\("[^"]+"' | awk 'NR == 1' | sed -e 's/^users:(("//' -e 's/"$//'
 }
 
 provision_conflicts() {

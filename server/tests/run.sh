@@ -35,7 +35,7 @@ mkdir -p "${MANDAL_APT_SOURCES_DIR}"
 # Only the fakes and a fixed set of real tools are on PATH, so whatever the
 # host has installed (bun, docker, nginx...) cannot leak into the results.
 mkdir -p "${TMP}/bin"
-for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch base64 flock printf mkdir cp rm ln env; do
+for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch base64 cut flock printf mkdir cp rm ln env; do
     if path="$(command -v "$tool" 2> /dev/null)"; then
         ln -s "$path" "${TMP}/bin/${tool}"
     fi
@@ -281,6 +281,12 @@ MANDAL_DRY_RUN=1 download https://example.com/file.tar.gz > /dev/null
 [[ -n "${DOWNLOADED_FILE:-}" && "$DOWNLOADED_FILE" != *"download"* ]] && pass || fail "download leaves a clean path in DOWNLOADED_FILE"
 MANDAL_DRY_RUN=1 download https://example.com/pkg.deb .deb > /dev/null
 [[ "$DOWNLOADED_FILE" == *.deb ]] && pass || fail "download keeps the requested suffix"
+sigpipe_failures=0
+for _ in $(seq 1 200); do
+    secret="$(random_secret 40)" || sigpipe_failures=$((sigpipe_failures + 1))
+    [[ "$secret" =~ ^[A-Za-z0-9]{40}$ ]] || sigpipe_failures=$((sigpipe_failures + 1))
+done
+assert_eq "random_secret never fails under pipefail" "0" "$sigpipe_failures"
 cache_password > /dev/null
 [[ "$CACHE_PASSWORD" =~ ^[A-Za-z0-9]{40}$ ]] && pass || fail "cache_password generates a clean 40-character secret"
 first_password="$CACHE_PASSWORD"

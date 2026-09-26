@@ -25,9 +25,9 @@ db_installed() {
 
 db_version() {
     if has_cmd mariadbd; then
-        mariadbd --version 2> /dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1
+        mariadbd --version 2> /dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | awk 'NR == 1'
     else
-        package_version mariadb-server | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true
+        package_version mariadb-server | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | awk 'NR == 1' || true
     fi
 }
 

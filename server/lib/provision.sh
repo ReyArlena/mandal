@@ -143,7 +143,7 @@ prov_php() {
 prov_composer() {
     step "Composer"
     if has_cmd composer; then
-        printf '+ composer already installed (%s)\n' "$(composer --version 2> /dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)"
+        printf '+ composer already installed (%s)\n' "$(composer --version 2> /dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | awk 'NR == 1')"
         return 0
     fi
     local installer expected actual

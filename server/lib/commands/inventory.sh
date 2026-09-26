@@ -208,7 +208,7 @@ inv_nginx() {
     local installed=false version="" config_ok=null file name enabled sites='[]' row
     if has_cmd nginx || package_installed nginx; then
         installed=true
-        version="$(nginx -v 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)"
+        version="$(nginx -v 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | awk 'NR == 1' || true)"
         if has_cmd nginx && is_root; then
             if nginx -t > /dev/null 2>&1; then config_ok=true; else config_ok=false; fi
         fi
@@ -369,7 +369,7 @@ inv_docker() {
     local installed=false version="" projects='[]' containers='[]'
     if has_cmd docker; then
         installed=true
-        version="$(docker --version 2> /dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)"
+        version="$(docker --version 2> /dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | awk 'NR == 1' || true)"
         if [[ "$(unit_state docker)" == "active" ]] && is_root; then
             projects="$(docker compose ls --all --format json 2> /dev/null || true)"
             [[ -n "$projects" ]] && jq -e . <<< "$projects" > /dev/null 2>&1 || projects='[]'

@@ -21,7 +21,7 @@ cache_version() {
     local binary
     binary="$(command -v dragonfly 2> /dev/null || echo /usr/bin/dragonfly)"
     [[ -x "$binary" ]] || return 0
-    "$binary" --version 2> /dev/null | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 | tr -d 'v'
+    "$binary" --version 2> /dev/null | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' | awk 'NR == 1' | tr -d 'v'
 }
 
 # JSON: {driver, installed, active, version, port}

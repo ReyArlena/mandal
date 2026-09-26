@@ -165,9 +165,11 @@ cpu_arch() {
 }
 
 # A random password safe for config files and shells.
+# Reads a bounded amount of entropy first so no stage is killed by SIGPIPE
+# (which pipefail would otherwise turn into a failure).
 random_secret() {
     local length="${1:-32}"
-    LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$length"
+    head -c 2048 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | cut -c1-"$length"
 }
 
 # download url [suffix] - download to a temp file whose path is left in

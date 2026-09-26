@@ -19,7 +19,7 @@ js_installed() {
 
 js_version() {
     js_installed || return 0
-    "$(js_binary)" --version 2> /dev/null | head -n 1
+    "$(js_binary)" --version 2> /dev/null | awk 'NR == 1'
 }
 
 # JSON: {driver, installed, version, path}
