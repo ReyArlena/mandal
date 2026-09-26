@@ -19,6 +19,7 @@ To                         Action      From
 OUT
     ;;
   "show added")
+    [[ -n "${MANDAL_FAKE_UFW_EMPTY:-}" ]] && { echo "Added user rules (see 'ufw status' for running firewall):"; exit 0; }
     cat <<'OUT'
 Added user rules (see 'ufw status' for running firewall):
 ufw allow 22/tcp

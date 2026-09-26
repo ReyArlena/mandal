@@ -51,8 +51,9 @@ db_list() {
         return 0
     fi
     local databases users
-    databases="$("$client" -N -B -e 'SHOW DATABASES' 2> /dev/null | grep -vE "^(${MANDAL_DB_SYSTEM_SCHEMAS})\$" | json_lines || echo '[]')"
-    users="$("$client" -N -B -e "SELECT user, host FROM mysql.user WHERE user NOT IN ('root', 'mariadb.sys', 'mysql', 'debian-sys-maint', 'healthcheck') AND user <> ''" 2> /dev/null | json_tsv user host || echo '[]')"
+    # Each stage may legitimately match nothing; under pipefail that must not abort the pipeline.
+    databases="$({ "$client" -N -B -e 'SHOW DATABASES' 2> /dev/null || true; } | { grep -vE "^(${MANDAL_DB_SYSTEM_SCHEMAS})\$" || true; } | json_lines)"
+    users="$({ "$client" -N -B -e "SELECT user, host FROM mysql.user WHERE user NOT IN ('root', 'mariadb.sys', 'mysql', 'debian-sys-maint', 'healthcheck') AND user <> ''" 2> /dev/null || true; } | json_tsv user host)"
     jq -n --argjson databases "$databases" --argjson users "$users" '{databases: $databases, users: $users}'
 }
 

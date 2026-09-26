@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Fake systemctl: nginx and mariadb are loaded and active; php8.5-fpm loaded but inactive; anything else unknown.
+case "$1" in
+  is-active)
+    case "$2" in nginx|mariadb) echo active; exit 0 ;; php8.5-fpm) echo inactive; exit 3 ;; *) echo inactive; exit 3 ;; esac ;;
+  show)
+    case "$2" in nginx|mariadb|php8.5-fpm|ssh|cron) echo loaded ;; *) echo not-found ;; esac ;;
+  *) exit 0 ;;
+esac

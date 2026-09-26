@@ -287,7 +287,7 @@ inv_supervisor() {
     fi
     programs="$(supervisor_programs_tsv | json_tsv name command user numprocs managed_app file | jq 'map(.numprocs |= tonumber | .managed_app |= (if . == "" then null else . end))')"
     if [[ "$installed" == true ]] && is_root; then
-        status="$(supervisorctl status 2> /dev/null | awk '{print $1 "\t" $2}' | json_tsv process state || echo '[]')"
+        status="$({ supervisorctl status 2> /dev/null || true; } | awk '{print $1 "\t" $2}' | json_tsv process state)"
     fi
     jq -n --argjson installed "$installed" --arg active "$(unit_state supervisor)" --argjson programs "$programs" --argjson status "$status" \
         '{installed: $installed, active: $active, programs: $programs, processes: $status}'
@@ -319,7 +319,7 @@ inv_certificates() {
     if has_cmd certbot; then
         installed=true
         if is_root; then
-            certificates="$(certbot certificates 2> /dev/null | certbot_tsv | json_tsv name domains expiry status path | jq 'map(.domains |= (split(" ") | map(select(length > 0))))' || echo '[]')"
+            certificates="$({ certbot certificates 2> /dev/null || true; } | certbot_tsv | json_tsv name domains expiry status path | jq 'map(.domains |= (split(" ") | map(select(length > 0))))')"
         fi
     fi
     jq -n --argjson installed "$installed" --argjson certificates "$certificates" '{installed: $installed, certificates: $certificates}'
@@ -338,7 +338,7 @@ inv_firewall() {
             status="$(printf '%s\n' "$verbose" | awk -F': ' '/^Status:/ {print $2}')"
             incoming="$(printf '%s\n' "$verbose" | grep -oE '[a-z]+ \(incoming\)' | awk '{print $1}' || true)"
             outgoing="$(printf '%s\n' "$verbose" | grep -oE '[a-z]+ \(outgoing\)' | awk '{print $1}' || true)"
-            rules="$(ufw show added 2> /dev/null | grep -E '^ufw ' | sed 's/^ufw //' | json_lines || echo '[]')"
+            rules="$({ ufw show added 2> /dev/null || true; } | { grep -E '^ufw ' || true; } | sed 's/^ufw //' | json_lines)"
         fi
     fi
     jq -n --argjson installed "$installed" --arg status "${status:-unknown}" --arg incoming "$incoming" --arg outgoing "$outgoing" --argjson rules "$rules" \
@@ -371,8 +371,9 @@ inv_docker() {
         installed=true
         version="$(docker --version 2> /dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)"
         if [[ "$(unit_state docker)" == "active" ]] && is_root; then
-            projects="$(docker compose ls --all --format json 2> /dev/null || echo '[]')"
-            containers="$(docker ps --all --format '{{json .}}' 2> /dev/null | jq -s '.' || echo '[]')"
+            projects="$(docker compose ls --all --format json 2> /dev/null || true)"
+            [[ -n "$projects" ]] && jq -e . <<< "$projects" > /dev/null 2>&1 || projects='[]'
+            containers="$({ docker ps --all --format '{{json .}}' 2> /dev/null || true; } | jq -s '.')"
         fi
     fi
     jq -n --argjson installed "$installed" --arg active "$(unit_state docker)" --arg version "$version" --argjson projects "$projects" --argjson containers "$containers" \

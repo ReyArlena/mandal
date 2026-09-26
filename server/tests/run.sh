@@ -227,6 +227,19 @@ assert_json "inventory reports the absent cache honestly" "$inventory" '.cache.i
 check="$(provision_check)"
 assert_json "check accepts Ubuntu 24.04" "$check" '.os.supported' "true"
 assert_json "check has no conflicts on a clean fixture" "$check" '.conflicts | length' "0"
+# db_list under pipefail: only system schemas present, then one user database
+set -o pipefail
+dbs="$(db_list)"
+assert_json "db_list is valid JSON when every schema is a system one" "$dbs" '.databases | length' "0"
+assert_json "db_list lists users" "$dbs" '.users | map(.user) | join(",")' "shop"
+dbs="$(MANDAL_FAKE_DBS=$'information_schema\nmysql\nshop' db_list)"
+assert_json "db_list filters system schemas" "$dbs" '.databases | join(",")' "shop"
+assert_json "database inventory stays valid JSON under pipefail" "$(inv_database)" '.installed' "true"
+assert_json "firewall inventory stays valid JSON under pipefail" "$(MANDAL_FAKE_UFW_EMPTY=1 inv_firewall)" '.rules | length' "0"
+assert_json "supervisor inventory stays valid JSON under pipefail" "$(inv_supervisor)" '.processes | length' "3"
+assert_json "whole inventory is valid JSON under pipefail" "$(cmd_inventory)" 'keys | length' "14"
+set +o pipefail
+
 assert_eq "port_listener strips the ss decoration" "nginx" "$(port_listener 80)"
 assert_eq "port_listener is empty for a free port" "" "$(port_listener 3306)"
 assert_json "check is ok" "$check" '.ok' "true"
