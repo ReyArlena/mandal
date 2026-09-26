@@ -170,7 +170,7 @@ provision_components() {
 # Which process (if any) listens on a TCP port. Prints the process name.
 port_listener() {
     has_cmd ss || return 0
-    ss -H -ltnp "sport = :$1" 2> /dev/null | grep -oE 'users:\(\("[^"]+"' | head -n 1 | sed 's/users:(("//'
+    ss -H -ltnp "sport = :$1" 2> /dev/null | grep -oE 'users:\(\("[^"]+"' | head -n 1 | sed -e 's/^users:(("//' -e 's/"$//'
 }
 
 provision_conflicts() {

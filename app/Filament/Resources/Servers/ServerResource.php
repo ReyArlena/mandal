@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Servers;
 use App\Filament\Resources\Servers\Pages\CreateServer;
 use App\Filament\Resources\Servers\Pages\EditServer;
 use App\Filament\Resources\Servers\Pages\ListServers;
+use App\Filament\Resources\Servers\Pages\ServerApps;
 use App\Filament\Resources\Servers\Pages\ServerInventory;
 use App\Filament\Resources\Servers\Pages\ServerTasks;
 use App\Filament\Resources\Servers\Pages\ViewServer;
@@ -50,6 +51,7 @@ class ServerResource extends Resource
     {
         return $page->generateNavigationItems([
             ViewServer::class,
+            ServerApps::class,
             ServerInventory::class,
             ServerTasks::class,
             EditServer::class,
@@ -62,6 +64,7 @@ class ServerResource extends Resource
             'index' => ListServers::route('/'),
             'create' => CreateServer::route('/create'),
             'view' => ViewServer::route('/{record}'),
+            'apps' => ServerApps::route('/{record}/apps'),
             'inventory' => ServerInventory::route('/{record}/inventory'),
             'tasks' => ServerTasks::route('/{record}/tasks'),
             'task' => ViewTask::route('/{record}/tasks/{task}'),

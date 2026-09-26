@@ -227,6 +227,8 @@ assert_json "inventory reports the absent cache honestly" "$inventory" '.cache.i
 check="$(provision_check)"
 assert_json "check accepts Ubuntu 24.04" "$check" '.os.supported' "true"
 assert_json "check has no conflicts on a clean fixture" "$check" '.conflicts | length' "0"
+assert_eq "port_listener strips the ss decoration" "nginx" "$(port_listener 80)"
+assert_eq "port_listener is empty for a free port" "" "$(port_listener 3306)"
 assert_json "check is ok" "$check" '.ok' "true"
 assert_json "check plans to install missing components" "$check" '.components[] | select(.name == "nginx") | .action' "install"
 assert_json "check reads sshd settings" "$check" '.ssh.password_authentication' "yes"
@@ -259,6 +261,13 @@ assert_eq "ensure_line appends once" "1" "$(grep -c '^three$' "$f")"
 assert_eq "swap_present reads the swaps fixture" "1" "$(swap_present; echo $?)"
 MANDAL_PROC_SWAPS="${FIXTURES}/swaps-present" swap_present && pass || fail "swap_present detects an existing swap"
 assert_eq "dry run skips commands but echoes them" "+ rm -rf /nothing" "$(MANDAL_DRY_RUN=1 run_cmd rm -rf /nothing)"
+MANDAL_DRY_RUN=1 download https://example.com/file.tar.gz > /dev/null
+[[ -n "${DOWNLOADED_FILE:-}" && "$DOWNLOADED_FILE" != *"download"* ]] && pass || fail "download leaves a clean path in DOWNLOADED_FILE"
+cache_password > /dev/null
+[[ "$CACHE_PASSWORD" =~ ^[A-Za-z0-9]{40}$ ]] && pass || fail "cache_password generates a clean 40-character secret"
+first_password="$CACHE_PASSWORD"
+cache_password > /dev/null
+assert_eq "cache_password is stable once written" "$first_password" "$CACHE_PASSWORD"
 
 # ---------------------------------------------------------------------------
 # php version discovery (fake apt-cache: 8.6 lacks redis)

@@ -48,20 +48,20 @@ cache_deb_arch() {
 }
 
 # The password apps use, created once and kept in /etc/mandal/cache.conf.
+# Left in CACHE_PASSWORD.
 cache_password() {
-    local file="${MANDAL_ETC}/cache.conf" password
-    password="$(conf_get "$file" PASSWORD 2> /dev/null || true)"
-    if [[ -z "$password" ]]; then
-        password="$(random_secret 40)"
+    local file="${MANDAL_ETC}/cache.conf"
+    CACHE_PASSWORD="$(conf_get "$file" PASSWORD 2> /dev/null || true)"
+    if [[ -z "$CACHE_PASSWORD" ]]; then
+        CACHE_PASSWORD="$(random_secret 40)"
         write_file "$file" 0600 <<EOF
 # managed-by: mandal
 DRIVER=dragonfly
 HOST=127.0.0.1
 PORT=6379
-PASSWORD=${password}
+PASSWORD=${CACHE_PASSWORD}
 EOF
     fi
-    printf '%s\n' "$password"
 }
 
 cache_install() {
@@ -69,7 +69,8 @@ cache_install() {
     if cache_installed; then
         printf '+ dragonfly already installed (%s)\n' "$(cache_status_version)"
     else
-        deb="$(download "${MANDAL_DRAGONFLY_RELEASES}/latest/download/dragonfly_$(cache_deb_arch).deb")"
+        download "${MANDAL_DRAGONFLY_RELEASES}/latest/download/dragonfly_$(cache_deb_arch).deb"
+        deb="$DOWNLOADED_FILE"
         run_cmd apt-get install "${APT_OPTIONS[@]}" "$deb"
         dry_run || rm -f "$deb"
     fi
@@ -82,7 +83,8 @@ cache_install() {
 # administrator put there in place.
 cache_configure() {
     local password
-    password="$(cache_password)"
+    cache_password
+    password="$CACHE_PASSWORD"
     ensure_line "$MANDAL_DRAGONFLY_CONF" "--bind=127.0.0.1"
     ensure_line "$MANDAL_DRAGONFLY_CONF" "--default_lua_flags=allow-undeclared-keys"
     if [[ -f "$MANDAL_DRAGONFLY_CONF" ]] && grep -q '^--requirepass=' "$MANDAL_DRAGONFLY_CONF"; then

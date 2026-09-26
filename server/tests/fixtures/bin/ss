@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Fake ss: nginx listens on 80 and 443, nothing else.
+case "$*" in
+  *":80"*) printf 'LISTEN 0      511          0.0.0.0:80        0.0.0.0:*    users:(("nginx",pid=1234,fd=6),("nginx",pid=1233,fd=6))\n' ;;
+  *":443"*) printf 'LISTEN 0      511          0.0.0.0:443       0.0.0.0:*    users:(("nginx",pid=1234,fd=7))\n' ;;
+esac

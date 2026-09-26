@@ -147,7 +147,8 @@ prov_composer() {
         return 0
     fi
     local installer expected actual
-    installer="$(download "$MANDAL_COMPOSER_INSTALLER")"
+    download "$MANDAL_COMPOSER_INSTALLER"
+    installer="$DOWNLOADED_FILE"
     if ! dry_run; then
         expected="$(curl -fsSL "$MANDAL_COMPOSER_SIGNATURE")"
         actual="$(sha384sum "$installer" | awk '{print $1}')"

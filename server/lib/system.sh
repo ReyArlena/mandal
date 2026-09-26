@@ -170,15 +170,12 @@ random_secret() {
     LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$length"
 }
 
-# Download to a temp file and print its path. Fails loudly.
+# Download to a temp file; the path is left in DOWNLOADED_FILE. Fails loudly.
+# (Not printed, so callers' progress output keeps streaming to stdout.)
 download() {
-    local url="$1" file
-    file="$(mktemp)"
+    local url="$1"
+    DOWNLOADED_FILE="$(mktemp)"
     printf '+ download %s\n' "$url"
-    if dry_run; then
-        printf '%s\n' "$file"
-        return 0
-    fi
-    curl -fsSL --retry 3 --retry-delay 2 -o "$file" "$url" || die "download failed: $url"
-    printf '%s\n' "$file"
+    dry_run && return 0
+    curl -fsSL --retry 3 --retry-delay 2 -o "$DOWNLOADED_FILE" "$url" || die "download failed: $url"
 }

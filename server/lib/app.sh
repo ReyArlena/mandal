@@ -328,7 +328,9 @@ app_write_env() {
         printf '+ %s/shared/.env already exists, keeping it\n' "$home"
         return 0
     fi
-    write_file "$home/shared/.env" 0600 "$name:$name" < <(app_render_env "$name" "$domain" "$db" "$db" "$db_password" "$(cache_password)")
+    cache_password
+    # shellcheck disable=SC2153  # set by cache_password
+    write_file "$home/shared/.env" 0600 "$name:$name" < <(app_render_env "$name" "$domain" "$db" "$db" "$db_password" "$CACHE_PASSWORD")
 }
 
 app_write_deploy_script() {
