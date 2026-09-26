@@ -50,7 +50,7 @@ js_install() {
     fi
     apt_install unzip
     target="$(js_release_target)"
-    download "${MANDAL_BUN_RELEASES}/latest/download/bun-${target}.zip"
+    download "${MANDAL_BUN_RELEASES}/latest/download/bun-${target}.zip" .zip
     zip="$DOWNLOADED_FILE"
     dir="$(mktemp -d)"
     run_cmd unzip -q -o "$zip" -d "$dir"

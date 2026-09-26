@@ -69,7 +69,7 @@ cache_install() {
     if cache_installed; then
         printf '+ dragonfly already installed (%s)\n' "$(cache_status_version)"
     else
-        download "${MANDAL_DRAGONFLY_RELEASES}/latest/download/dragonfly_$(cache_deb_arch).deb"
+        download "${MANDAL_DRAGONFLY_RELEASES}/latest/download/dragonfly_$(cache_deb_arch).deb" .deb
         deb="$DOWNLOADED_FILE"
         run_cmd apt-get install "${APT_OPTIONS[@]}" "$deb"
         dry_run || rm -f "$deb"

@@ -170,11 +170,13 @@ random_secret() {
     LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$length"
 }
 
-# Download to a temp file; the path is left in DOWNLOADED_FILE. Fails loudly.
+# download url [suffix] - download to a temp file whose path is left in
+# DOWNLOADED_FILE. The suffix matters to tools such as apt, which only
+# treat a local file as a package when its name ends in .deb.
 # (Not printed, so callers' progress output keeps streaming to stdout.)
 download() {
-    local url="$1"
-    DOWNLOADED_FILE="$(mktemp)"
+    local url="$1" suffix="${2:-}"
+    DOWNLOADED_FILE="$(mktemp --suffix="$suffix")"
     printf '+ download %s\n' "$url"
     dry_run && return 0
     curl -fsSL --retry 3 --retry-delay 2 -o "$DOWNLOADED_FILE" "$url" || die "download failed: $url"
