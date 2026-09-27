@@ -467,6 +467,31 @@ assert_eq "app:env --from dry run completes" "0" "$?"
 printf 'A=1\x00B=2\n' > "${TMP}/bad.env"
 (cmd_app_env --name=shop --from="${TMP}/bad.env" --dry-run) > /dev/null 2>&1 && fail "app:env rejects binary content" || pass
 
+# ---------------------------------------------------------------------------
+# workers
+# ---------------------------------------------------------------------------
+
+program="$(worker_render shop default 8.5 "queue:work --sleep=3 --tries=3" 2)"
+[[ "$program" == "# managed-by: mandal app=shop"* ]] && pass || fail "worker config has the managed marker"
+[[ "$program" == *"[program:shop-default]"* && "$program" == *"command=/usr/bin/php8.5 ${MANDAL_HOME_DIR}/shop/current/artisan queue:work --sleep=3 --tries=3"* ]] && pass || fail "worker config runs artisan with the app's php"
+[[ "$program" == *"user=shop"* && "$program" == *"numprocs=2"* && "$program" == *"stdout_logfile=/var/log/supervisor/shop-default.log"* ]] && pass || fail "worker config sets user, processes and log"
+
+add="$(cmd_worker_add --app=shop --name=default --processes=2 --dry-run 2>&1)"
+assert_eq "worker:add dry run completes" "0" "$?"
+[[ "$add" == *"write ${MANDAL_SUPERVISOR_DIR}/shop-default.conf"* && "$add" == *"supervisorctl reread"* && "$add" == *"supervisorctl update"* ]] && pass || fail "worker:add writes the program and reloads supervisor"
+horizon="$(cmd_worker_add --app=shop --name=horizon --horizon --dry-run 2>&1)"
+[[ "$horizon" == *"(1 x horizon)"* ]] && pass || fail "worker:add --horizon runs horizon with one process"
+(cmd_worker_add --app=shop --name=bad --command='queue:work; rm -rf /' --dry-run) > /dev/null 2>&1 && fail "worker:add rejects shell characters in the command" || pass
+(cmd_worker_add --app=shop --name='Bad Name' --dry-run) > /dev/null 2>&1 && fail "worker:add validates the worker name" || pass
+(cmd_worker_add --app=nope --name=x --dry-run) > /dev/null 2>&1 && fail "worker:add requires an existing app" || pass
+
+remove="$(cmd_worker_remove --app=shop --name=worker --dry-run 2>&1)"
+[[ "$remove" == *"supervisorctl stop shop-worker:*"* && "$remove" == *"rm -f ${MANDAL_SUPERVISOR_DIR}/shop-worker.conf"* ]] && pass || fail "worker:remove stops and deletes the program"
+restart="$(cmd_worker_restart --app=shop --dry-run 2>&1)"
+[[ "$restart" == *"supervisorctl restart shop-worker:*"* ]] && pass || fail "worker:restart restarts every program of the app"
+assert_json "worker:list filters by app" "$(cmd_worker_list --app=shop)" 'map(.worker) | join(",")' "worker"
+assert_json "worker:list is empty for an app without workers" "$(cmd_worker_list --app=api)" 'length' "0"
+
 MANDAL_OS_RELEASE="${FIXTURES}/os-release-debian" bash -c 'source "'"${MANDAL_ROOT}"'/lib/core.sh"; mandal_load_commands; load_all_drivers; is_root(){ return 0; }; MANDAL_DRY_RUN=1 provision_apply' > /dev/null 2>&1
 assert_eq "provisioning refuses an unsupported OS" "1" "$?"
 
