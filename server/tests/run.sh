@@ -376,7 +376,7 @@ assert_eq "app:create dry run completes" "0" "$create_status"
 for marker in "useradd --create-home --home-dir ${MANDAL_HOME_DIR}/blog" "chmod 0750 ${MANDAL_HOME_DIR}/blog" "setfacl -m u:www-data:x" "ssh-keygen" "write ${MANDAL_PHP_DIR}/8.5/fpm/pool.d/blog.conf" "write ${MANDAL_NGINX_DIR}/sites-available/blog.conf" "sites-enabled/blog.conf" "CREATE DATABASE IF NOT EXISTS \`blog\`" "GRANT ALL PRIVILEGES ON \`blog\`.* TO 'blog'@'localhost'" "write ${MANDAL_HOME_DIR}/blog/shared/.env (0600 blog:blog)" "write ${MANDAL_HOME_DIR}/blog/deploy.sh (0750 blog:blog)" "crontab for blog" "App blog created."; do
     if [[ "$create" == *"$marker"* ]]; then pass; else fail "app:create mentions: $marker"; fi
 done
-[[ "$create" == *"ALTER USER 'blog'@'localhost' IDENTIFIED BY '"*"'"* ]] && pass || fail "app:create sets a database password"
+[[ "$create" == *"ALTER USER 'blog'@'localhost' IDENTIFIED BY '***'"* ]] && pass || fail "app:create masks the database password in its output"
 [[ "$create" != *"IDENTIFIED BY ''"* ]] && pass || fail "database password is not empty"
 
 (cmd_app_create --name=shop --domain=x.example.com --dry-run) > /dev/null 2>&1 && fail "app:create refuses an existing app" || pass

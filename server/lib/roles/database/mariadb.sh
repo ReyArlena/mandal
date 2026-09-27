@@ -57,9 +57,10 @@ db_list() {
     jq -n --argjson databases "$databases" --argjson users "$users" '{databases: $databases, users: $users}'
 }
 
+# Secrets in statements are masked in the progress output.
 db_sql() {
     local client
-    printf '+ sql: %s\n' "$1"
+    printf '+ sql: %s\n' "$(sed -E "s/(IDENTIFIED BY ')[^']*(')/\\1***\\2/g" <<< "$1")"
     dry_run && return 0
     client="$(db_client)" || die "no MariaDB client found"
     "$client" --batch -e "$1"
