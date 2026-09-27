@@ -10,6 +10,8 @@ use App\Enums\TaskStatus;
 use App\Enums\TaskType;
 use App\Filament\Resources\Servers\ServerResource;
 use App\Jobs\ProvisionServer;
+use App\Jobs\UpdateCli;
+use App\Mandal\CliArchive;
 use App\Mandal\MandalClient;
 use App\Models\Server;
 use App\Ssh\KeyPair;
@@ -36,6 +38,7 @@ class ViewServer extends ViewRecord
             $this->setupCommandAction(),
             $this->testConnectionAction(),
             $this->provisionAction(),
+            $this->updateCliAction(),
             EditAction::make(),
             DeleteAction::make(),
         ];
@@ -132,6 +135,46 @@ class ViewServer extends ViewRecord
             })
             ->modalSubmitAction(false)
             ->modalCancelActionLabel('Close');
+    }
+
+    /**
+     * Offered when the CLI on the server differs from the one this panel ships.
+     */
+    private function updateCliAction(): Action
+    {
+        return Action::make('updateCli')
+            ->label('Update CLI')
+            ->icon(Heroicon::OutlinedArrowDownTray)
+            ->color('warning')
+            ->visible(function (Server $record, MandalClient $mandal, CliArchive $archive): bool {
+                if ($record->connected_at === null) {
+                    return false;
+                }
+
+                try {
+                    $build = $mandal->inventory($record)['mandal']['build'] ?? null;
+                } catch (SshException) {
+                    return false;
+                }
+
+                return $build !== $archive->hash();
+            })
+            ->requiresConfirmation()
+            ->modalHeading('Update the mandal CLI on this server')
+            ->modalDescription(fn (CliArchive $archive): string => "Uploads and installs mandal {$archive->version()} (build {$archive->hash()}). Nothing else on the server changes.")
+            ->action(function (Server $record): void {
+                $task = $record->tasks()->create([
+                    'type' => TaskType::UpdateCli,
+                    'user_id' => auth()->id(),
+                    'options' => [],
+                ]);
+
+                UpdateCli::dispatch($task);
+
+                Notification::make()->title('CLI update started')->success()->send();
+
+                $this->redirect(ServerResource::getUrl('task', ['record' => $record, 'task' => $task]));
+            });
     }
 
     /**

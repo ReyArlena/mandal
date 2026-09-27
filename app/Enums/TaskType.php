@@ -11,6 +11,8 @@ enum TaskType: string implements HasLabel
     case DeleteApp = 'delete-app';
     case Deploy = 'deploy';
     case Rollback = 'rollback';
+    case Certificate = 'certificate';
+    case UpdateCli = 'update-cli';
 
     public function getLabel(): string
     {
@@ -20,6 +22,8 @@ enum TaskType: string implements HasLabel
             self::DeleteApp => 'Delete app',
             self::Deploy => 'Deploy',
             self::Rollback => 'Roll back',
+            self::Certificate => 'Request certificate',
+            self::UpdateCli => 'Update CLI',
         };
     }
 }

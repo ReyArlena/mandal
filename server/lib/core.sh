@@ -58,8 +58,8 @@ mandal_build_hash() {
     local file
     {
         while IFS= read -r file; do
-            printf '%s' "${file#./}"
-            cat "$file"
+            printf '%s' "$file"
+            cat "$MANDAL_ROOT/$file"
         done < <(cd "$MANDAL_ROOT" && find bin lib -type f ! -path '*/tests/*' ! -name '.*' 2> /dev/null | sort)
         printf '%s' "$(mandal_version)"
     } | sha256sum | cut -c1-12

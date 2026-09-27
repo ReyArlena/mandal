@@ -45,6 +45,12 @@
                         @if (($app['releases'] ?? 0) > 1)
                             {{ ($this->rollbackAppAction)(['name' => $app['name']]) }}
                         @endif
+                        {{ ($this->editEnvAction)(['name' => $app['name']]) }}
+                        @if (empty($app['ssl']))
+                            {{ ($this->requestCertificateAction)(['name' => $app['name']]) }}
+                        @else
+                            <x-filament::badge color="success">HTTPS</x-filament::badge>
+                        @endif
                         {{ ($this->deleteAppAction)(['name' => $app['name']]) }}
                     </div>
                 </div>

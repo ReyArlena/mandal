@@ -9,6 +9,7 @@ use App\Filament\Resources\Servers\ServerResource;
 use App\Jobs\CreateApp;
 use App\Jobs\DeleteApp;
 use App\Jobs\DeployApp;
+use App\Jobs\RequestCertificate;
 use App\Jobs\RollbackApp;
 use App\Jobs\RunMandalTask;
 use App\Mandal\MandalClient;
@@ -20,10 +21,12 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 
 /**
@@ -90,7 +93,7 @@ class ServerApps extends Page
         $server = $this->getRecord();
 
         return $server->tasks()
-            ->whereIn('type', [TaskType::CreateApp, TaskType::DeleteApp, TaskType::Deploy, TaskType::Rollback])
+            ->whereIn('type', [TaskType::CreateApp, TaskType::DeleteApp, TaskType::Deploy, TaskType::Rollback, TaskType::Certificate])
             ->whereIn('status', [TaskStatus::Pending, TaskStatus::Running])
             ->exists();
     }
@@ -208,6 +211,96 @@ class ServerApps extends Page
                 }
 
                 $this->queueTask(TaskType::Rollback, RollbackApp::class, ['name' => $name], "Rolling back {$name}");
+            });
+    }
+
+    public function requestCertificateAction(): Action
+    {
+        return Action::make('requestCertificate')
+            ->label('SSL')
+            ->icon(Heroicon::OutlinedLockClosed)
+            ->link()
+            ->modalHeading(fn (array $arguments): string => "Request a certificate for {$arguments['name']}")
+            ->modalDescription('Checks that every host name points at this server, then asks Let\'s Encrypt for a certificate and switches the site to HTTPS. Renewals are automatic.')
+            ->modalSubmitActionLabel('Request certificate')
+            ->schema([
+                TextInput::make('email')
+                    ->label('Email for expiry notices')
+                    ->email()
+                    ->default(fn (): ?string => auth()->user()?->email),
+                Checkbox::make('skip_dns_check')
+                    ->label('Skip the DNS check (server behind NAT)'),
+            ])
+            ->action(function (array $arguments, array $data): void {
+                $name = (string) ($arguments['name'] ?? '');
+
+                if (! preg_match('/^[a-z][a-z0-9-]{1,31}$/', $name)) {
+                    return;
+                }
+
+                $this->queueTask(TaskType::Certificate, RequestCertificate::class, [
+                    'name' => $name,
+                    'email' => $data['email'] ?: null,
+                    'skip_dns_check' => (bool) ($data['skip_dns_check'] ?? false),
+                ], "Requesting a certificate for {$name}");
+            });
+    }
+
+    public function editEnvAction(): Action
+    {
+        return Action::make('editEnv')
+            ->label('.env')
+            ->icon(Heroicon::OutlinedDocumentText)
+            ->link()
+            ->modalHeading(fn (array $arguments): string => "{$arguments['name']} .env")
+            ->modalDescription('Saved to shared/.env on the server. Running queue workers keep the old values until they are restarted or the app is redeployed.')
+            ->modalWidth(Width::ThreeExtraLarge)
+            ->modalSubmitActionLabel('Save')
+            ->fillForm(function (array $arguments): array {
+                $name = (string) ($arguments['name'] ?? '');
+
+                if (! preg_match('/^[a-z][a-z0-9-]{1,31}$/', $name)) {
+                    return ['contents' => ''];
+                }
+
+                try {
+                    $result = app(MandalClient::class)->run($this->getRecord(), 'app:env --name='.$name, timeoutSeconds: 30);
+                } catch (SshException $exception) {
+                    return ['contents' => '# Could not read the file: '.$exception->getMessage()];
+                }
+
+                return ['contents' => $result->successful() ? $result->output : '# '.trim($result->errorOutput ?: $result->output)];
+            })
+            ->schema([
+                Textarea::make('contents')
+                    ->hiddenLabel()
+                    ->rows(24)
+                    ->required()
+                    ->maxLength(262144)
+                    ->extraInputAttributes(['class' => 'font-mono text-sm', 'spellcheck' => 'false']),
+            ])
+            ->action(function (array $arguments, array $data): void {
+                $name = (string) ($arguments['name'] ?? '');
+
+                if (! preg_match('/^[a-z][a-z0-9-]{1,31}$/', $name)) {
+                    return;
+                }
+
+                try {
+                    $result = app(MandalClient::class)->runWithUpload($this->getRecord(), 'app:env --name='.$name, rtrim((string) $data['contents'])."\n", '.env', timeoutSeconds: 30);
+                } catch (SshException $exception) {
+                    Notification::make()->title('Could not save .env')->body($exception->getMessage())->danger()->send();
+
+                    return;
+                }
+
+                if ($result->failed()) {
+                    Notification::make()->title('Could not save .env')->body(trim($result->errorOutput ?: $result->output))->danger()->send();
+
+                    return;
+                }
+
+                Notification::make()->title("Saved {$name} .env")->success()->send();
             });
     }
 

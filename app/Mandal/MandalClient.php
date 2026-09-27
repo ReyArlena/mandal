@@ -7,6 +7,7 @@ use App\Ssh\CommandResult;
 use App\Ssh\SshClient;
 use App\Ssh\SshException;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 /**
  * Runs the mandal CLI on a server over SSH and returns its JSON output.
@@ -14,6 +15,11 @@ use Illuminate\Support\Facades\Cache;
 class MandalClient
 {
     public const string BINARY = '/opt/mandal/bin/mandal';
+
+    /**
+     * Where files for the CLI are uploaded before a command consumes them.
+     */
+    public const string UPLOAD_DIR = '.mandal';
 
     /**
      * How long inventory reads are cached per server, in seconds.
@@ -70,6 +76,29 @@ class MandalClient
 
         try {
             return $connection->run($this->command($arguments, $asRoot), $onOutput, $timeoutSeconds);
+        } finally {
+            $connection->disconnect();
+        }
+    }
+
+    /**
+     * Upload a file into the SSH user's upload directory and run a mandal
+     * command that consumes it. The command receives the remote path as
+     * `--from=<path>`.
+     *
+     * @param  (callable(string): void)|null  $onOutput
+     */
+    public function runWithUpload(Server $server, string $arguments, string $contents, string $extension = '', ?callable $onOutput = null, int $timeoutSeconds = 60): CommandResult
+    {
+        $connection = $this->ssh->connect($server);
+        $remote = self::UPLOAD_DIR.'/'.Str::random(16).$extension;
+
+        try {
+            $connection->upload($remote, $contents, 0600);
+            $absolute = $connection->run('printf %s "$HOME"', timeoutSeconds: 15)->output;
+            $path = rtrim(trim($absolute), '/').'/'.$remote;
+
+            return $connection->run($this->command($arguments.' --from='.escapeshellarg($path), asRoot: true), $onOutput, $timeoutSeconds);
         } finally {
             $connection->disconnect();
         }

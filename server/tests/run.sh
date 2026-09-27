@@ -434,6 +434,7 @@ assert_eq "deploy_prune removes the oldest releases beyond the limit" "202601010
 
 [[ "$(mandal_build_hash)" =~ ^[0-9a-f]{12}$ ]] && pass || fail "build hash is 12 hex characters"
 assert_eq "build hash is stable" "$(mandal_build_hash)" "$(mandal_build_hash)"
+assert_eq "build hash does not depend on the working directory" "$(mandal_build_hash)" "$(cd "$TMP" && mandal_build_hash)"
 assert_json "version --json includes the build" "$(cmd_version --json)" '.build' "$(mandal_build_hash)"
 
 archive="${TMP}/cli.tar.gz"
