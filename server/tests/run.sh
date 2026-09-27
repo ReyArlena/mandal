@@ -412,6 +412,10 @@ done
 [[ "$deploy" == *"sudo -u shop -H env HOME=${MANDAL_HOME_DIR}/shop"* ]] && pass || fail "deploy steps run as the app user"
 assert_eq "dry run writes no deploy log" "0" "$(find "$MANDAL_DEPLOY_LOG_DIR" -type f 2> /dev/null | wc -l)"
 
+assert_eq "clone url defaults to ssh" "git@github.com:acme/shop.git" "$(deploy_clone_url acme/shop)"
+assert_eq "clone url can use https" "https://github.com/acme/shop.git" "$(deploy_clone_url acme/shop https)"
+https_create="$(php_default_version() { echo 8.5; }; cmd_app_create --name=pub --domain=pub.example.com --repo=laravel/laravel --https --dry-run 2>&1)"
+[[ "$https_create" == *"App pub created."* ]] && pass || fail "app:create accepts --https"
 branch_deploy="$(cmd_app_deploy --name=shop --branch=release/1.2 --commit=abc1234 --dry-run 2>&1)"
 [[ "$branch_deploy" == *"--branch release/1.2"* && "$branch_deploy" == *"checkout --quiet abc1234"* ]] && pass || fail "app:deploy accepts a branch and commit"
 (cmd_app_deploy --name=shop --commit='abc;rm' --dry-run) > /dev/null 2>&1 && fail "app:deploy rejects an unsafe commit" || pass

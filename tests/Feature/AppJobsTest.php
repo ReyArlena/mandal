@@ -28,6 +28,13 @@ it('drops unsafe aliases, branches and repositories', function () {
         ->toBe('app:create --name=blog --domain=blog.example.com --www=redirect-to-naked --alias=ok.example.com');
 });
 
+it('clones over https when asked', function () {
+    $task = Task::factory()->create(['options' => ['name' => 'pub', 'domain' => 'pub.example.com', 'repo' => 'laravel/laravel', 'https' => true]]);
+
+    expect((new CreateApp($task))->arguments())
+        ->toBe('app:create --name=pub --domain=pub.example.com --www=redirect-to-naked --repo=laravel/laravel --https');
+});
+
 it('refuses to build arguments for an invalid app name', function () {
     $task = Task::factory()->create(['options' => ['name' => 'Bad Name', 'domain' => 'blog.example.com']]);
 

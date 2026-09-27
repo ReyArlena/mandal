@@ -87,6 +87,8 @@ cmd_app_configure() {
                 validate_branch "${arg#*=}"
                 conf_set "$manifest" BRANCH "${arg#*=}"
                 ;;
+            --https) conf_set "$manifest" CLONE https ;;
+            --ssh) conf_set "$manifest" CLONE ssh ;;
             --keep-releases=*)
                 [[ "${arg#*=}" =~ ^[1-9][0-9]?$ ]] || die 2 "--keep-releases must be between 1 and 99"
                 conf_set "$manifest" KEEP_RELEASES "${arg#*=}"

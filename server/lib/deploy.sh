@@ -10,8 +10,13 @@ deploy_timestamp() {
     date -u +%Y%m%d%H%M%S
 }
 
+# deploy_clone_url repo [ssh|https]
 deploy_clone_url() {
-    printf 'git@github.com:%s.git\n' "$1"
+    if [[ "${2:-ssh}" == "https" ]]; then
+        printf 'https://github.com/%s.git\n' "$1"
+    else
+        printf 'git@github.com:%s.git\n' "$1"
+    fi
 }
 
 # Run a command as the app user with the deploy environment.
@@ -99,11 +104,12 @@ EOF
 
 # deploy_run name branch [commit]
 deploy_run() {
-    local name="$1" branch="$2" commit="${3:-}" manifest home php repo keep timestamp release log
+    local name="$1" branch="$2" commit="${3:-}" manifest home php repo keep timestamp release log clone
     manifest="$(app_conf_path "$name")"
     home="$(app_home "$name")"
     php="$(conf_get "$manifest" PHP)" || die "app '$name' has no PHP version in its manifest"
     repo="$(conf_get "$manifest" REPO)" || die "app '$name' has no repository; set one with app:configure"
+    clone="$(conf_get "$manifest" CLONE 2> /dev/null || echo ssh)"
     keep="$(conf_get "$manifest" KEEP_RELEASES 2> /dev/null || echo 5)"
     [[ -n "$branch" ]] || branch="$(conf_get "$manifest" BRANCH 2> /dev/null || echo main)"
     validate_branch "$branch"
@@ -118,7 +124,7 @@ deploy_run() {
     {
         step "Deploying $name from $repo@$branch"
         printf 'release: %s\n' "$release"
-        deploy_as "$name" "$home" "$php" -- git clone --quiet --depth 1 --branch "$branch" "$(deploy_clone_url "$repo")" "$release"
+        deploy_as "$name" "$home" "$php" -- git clone --quiet --depth 1 --branch "$branch" "$(deploy_clone_url "$repo" "$clone")" "$release"
         if [[ -n "$commit" ]]; then
             deploy_as "$name" "$home" "$php" -- git -C "$release" fetch --quiet --depth 1 origin "$commit"
             deploy_as "$name" "$home" "$php" -- git -C "$release" checkout --quiet "$commit"

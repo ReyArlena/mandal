@@ -16,6 +16,7 @@ Usage: mandal app:create --name=<name> --domain=<domain> [options]
   --www=<mode>            redirect-to-naked (default), redirect-to-www or naked-only
   --php=<version>         PHP version (default: the server's CLI default)
   --repo=<owner/name>     GitHub repository to deploy
+  --https                 Clone over HTTPS (public repository, no deploy key needed)
   --branch=<branch>       Branch to deploy (default: main)
   --keep-releases=<n>     Releases to keep (default: 5)
   --no-database           Do not create a database and user
@@ -24,7 +25,7 @@ EOF
 }
 
 cmd_app_create() {
-    local name="" domain="" www="redirect-to-naked" php="" repo="" branch="main" keep=5 database=true arg
+    local name="" domain="" www="redirect-to-naked" php="" repo="" branch="main" keep=5 database=true clone=ssh arg
     local aliases=()
     for arg in "$@"; do
         case "$arg" in
@@ -34,6 +35,7 @@ cmd_app_create() {
             --www=*) www="${arg#*=}" ;;
             --php=*) php="${arg#*=}" ;;
             --repo=*) repo="${arg#*=}" ;;
+            --https) clone=https ;;
             --branch=*) branch="${arg#*=}" ;;
             --keep-releases=*) keep="${arg#*=}" ;;
             --no-database) database=false ;;
@@ -92,6 +94,7 @@ cmd_app_create() {
         "PHP=$php" \
         "SOURCE=github" \
         "REPO=$repo" \
+        "CLONE=$clone" \
         "BRANCH=$branch" \
         "KEEP_RELEASES=$keep" \
         "DATABASE=$([[ "$database" == true ]] && app_db_name "$name" || echo "")" \

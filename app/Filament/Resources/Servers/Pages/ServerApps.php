@@ -153,6 +153,8 @@ class ServerApps extends Page
                 TextInput::make('branch')
                     ->default('main')
                     ->regex('#^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$#'),
+                Checkbox::make('https')
+                    ->label('Public repository: clone over HTTPS without a deploy key'),
                 Checkbox::make('database')
                     ->label('Create a database and user')
                     ->default(true),
@@ -166,6 +168,7 @@ class ServerApps extends Page
                     'php' => $data['php'],
                     'repo' => $data['repo'] ?: null,
                     'branch' => $data['branch'] ?: 'main',
+                    'https' => (bool) ($data['https'] ?? false),
                     'database' => (bool) ($data['database'] ?? true),
                 ], "Creating {$data['name']}");
             });

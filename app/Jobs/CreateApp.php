@@ -50,6 +50,10 @@ class CreateApp extends RunMandalTask
             $arguments[] = '--branch='.$options['branch'];
         }
 
+        if (! empty($options['https'])) {
+            $arguments[] = '--https';
+        }
+
         if (array_key_exists('database', $options) && ! $options['database']) {
             $arguments[] = '--no-database';
         }
