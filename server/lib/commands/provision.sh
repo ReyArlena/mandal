@@ -215,8 +215,10 @@ provision_notes() {
     fi
 }
 
+# Reads one sshd setting. awk consumes all of the output on purpose: exiting
+# early would kill sshd with SIGPIPE, which pipefail reports as a failure.
 ssh_setting() {
-    sshd -T 2> /dev/null | awk -v key="$1" '$1 == key {print $2; exit}'
+    { sshd -T 2> /dev/null || true; } | awk -v key="$1" '$1 == key && !found {print $2; found = 1}'
 }
 
 provision_ssh() {

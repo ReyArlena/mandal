@@ -35,7 +35,7 @@ mkdir -p "${MANDAL_APT_SOURCES_DIR}"
 # Only the fakes and a fixed set of real tools are on PATH, so whatever the
 # host has installed (bun, docker, nginx...) cannot leak into the results.
 mkdir -p "${TMP}/bin"
-for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch base64 flock printf mkdir cp rm ln env; do
+for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch base64 sha256sum tar gzip getent flock printf mkdir cp rm ln env; do
     if path="$(command -v "$tool" 2> /dev/null)"; then
         ln -s "$path" "${TMP}/bin/${tool}"
     fi
@@ -243,6 +243,7 @@ assert_json "supervisor inventory stays valid JSON under pipefail" "$(inv_superv
 assert_json "whole inventory is valid JSON under pipefail" "$(cmd_inventory)" 'keys | length' "14"
 set +o pipefail
 
+assert_eq "ssh_setting reads one value without exiting early" "2222" "$(ssh_setting port)"
 assert_eq "port_listener strips the ss decoration" "nginx" "$(port_listener 80)"
 assert_eq "port_listener is empty for a free port" "" "$(port_listener 3306)"
 assert_json "check is ok" "$check" '.ok' "true"
@@ -426,6 +427,40 @@ prune_home="${TMP}/prune/home"
 mkdir -p "$prune_home/releases/"{20260101000000,20260102000000,20260103000000,20260104000000}
 MANDAL_DRY_RUN=1 deploy_prune "$prune_home" 2 > "${TMP}/prune.out"
 assert_eq "deploy_prune removes the oldest releases beyond the limit" "20260101000000 20260102000000" "$(grep -oE '[0-9]{14}' "${TMP}/prune.out" | tr '\n' ' ' | sed 's/ $//')"
+
+# ---------------------------------------------------------------------------
+# cli:update, app:ssl, app:env
+# ---------------------------------------------------------------------------
+
+[[ "$(mandal_build_hash)" =~ ^[0-9a-f]{12}$ ]] && pass || fail "build hash is 12 hex characters"
+assert_eq "build hash is stable" "$(mandal_build_hash)" "$(mandal_build_hash)"
+assert_json "version --json includes the build" "$(cmd_version --json)" '.build' "$(mandal_build_hash)"
+
+archive="${TMP}/cli.tar.gz"
+(cd "$MANDAL_ROOT" && tar -czf "$archive" --exclude='tests' bin lib ../VERSION 2> /dev/null || tar -czf "$archive" --exclude='tests' bin lib)
+update="$(cmd_cli_update --from="$archive" --dry-run 2>&1)"
+assert_eq "cli:update dry run completes" "0" "$?"
+[[ "$update" == *"tar -xzf $archive"* && "$update" == *"mv "* ]] && pass || fail "cli:update extracts and swaps the install directory"
+(cmd_cli_update --from=/nonexistent --dry-run) > /dev/null 2>&1 && fail "cli:update requires an existing archive" || pass
+
+server_addresses() { printf '203.0.113.10\n'; }
+resolve_addresses() { case "$1" in shop.example.com|www.shop.example.com) echo 203.0.113.10 ;; *) echo 198.51.100.1 ;; esac; }
+assert_eq "dns mismatches lists names that point elsewhere" "other.example.com" "$(ssl_dns_mismatches shop.example.com www.shop.example.com other.example.com)"
+ssl="$(cmd_app_ssl --name=shop --email=admin@example.com --dry-run 2>&1)"
+assert_eq "app:ssl dry run completes" "0" "$?"
+[[ "$ssl" == *"certbot --nginx --non-interactive --agree-tos --redirect --keep-until-expiring --expand --email admin@example.com -d shop.example.com -d www.shop.example.com"* ]] && pass || fail "app:ssl runs certbot for every host name"
+(cmd_app_ssl --name=api --dry-run) > /dev/null 2>&1
+assert_eq "app:ssl refuses when DNS does not point here" "3" "$?"
+skip_ssl="$(cmd_app_ssl --name=api --skip-dns-check --dry-run 2>&1)"
+[[ "$skip_ssl" == *"--register-unsafely-without-email -d api.example.com"* ]] && pass || fail "app:ssl can skip the DNS check and works without an email"
+(cmd_app_ssl --name=shop --email='not an email' --dry-run) > /dev/null 2>&1 && fail "app:ssl validates the email" || pass
+
+printf 'APP_ENV=production\n' > "${TMP}/new.env"
+env_out="$(cmd_app_env --name=shop --from="${TMP}/new.env" --dry-run 2>&1)"
+assert_eq "app:env --from dry run completes" "0" "$?"
+[[ "$env_out" == *"write ${MANDAL_HOME_DIR}/shop/shared/.env (0600 shop:shop)"* ]] && pass || fail "app:env writes the env file as the app user"
+printf 'A=1\x00B=2\n' > "${TMP}/bad.env"
+(cmd_app_env --name=shop --from="${TMP}/bad.env" --dry-run) > /dev/null 2>&1 && fail "app:env rejects binary content" || pass
 
 MANDAL_OS_RELEASE="${FIXTURES}/os-release-debian" bash -c 'source "'"${MANDAL_ROOT}"'/lib/core.sh"; mandal_load_commands; load_all_drivers; is_root(){ return 0; }; MANDAL_DRY_RUN=1 provision_apply' > /dev/null 2>&1
 assert_eq "provisioning refuses an unsupported OS" "1" "$?"

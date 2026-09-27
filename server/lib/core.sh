@@ -52,6 +52,19 @@ mandal_version() {
     echo "unknown"
 }
 
+# A short hash of the installed CLI files, computed the same way as the
+# panel computes it for the archive it ships, so the two can be compared.
+mandal_build_hash() {
+    local file
+    {
+        while IFS= read -r file; do
+            printf '%s' "${file#./}"
+            cat "$file"
+        done < <(cd "$MANDAL_ROOT" && find bin lib -type f ! -path '*/tests/*' ! -name '.*' 2> /dev/null | sort)
+        printf '%s' "$(mandal_version)"
+    } | sha256sum | cut -c1-12
+}
+
 log() {
     printf '%s\n' "$*"
 }

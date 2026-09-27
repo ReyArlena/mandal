@@ -42,6 +42,7 @@ inv_mandal() {
     [[ -n "$(conf_get "$MANDAL_SERVER_CONF" PROVISIONED_AT 2> /dev/null || true)" ]] && provisioned=true
     jq -n \
         --arg version "$(mandal_version)" \
+        --arg build "$(mandal_build_hash)" \
         --argjson provisioned "$provisioned" \
         --argjson settings "$(conf_read "$MANDAL_SERVER_CONF")" \
         --arg database "$(driver_for database)" \
@@ -49,6 +50,7 @@ inv_mandal() {
         --arg js "$(driver_for js)" \
         '{
             version: $version,
+            build: $build,
             provisioned: $provisioned,
             provisioned_at: ($settings.provisioned_at // null),
             drivers: {database: $database, cache: $cache, js: $js}
