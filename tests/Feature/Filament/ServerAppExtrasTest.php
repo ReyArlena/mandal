@@ -1,7 +1,7 @@
 <?php
 
 use App\Enums\TaskType;
-use App\Filament\Resources\Servers\Pages\ServerApps;
+use App\Filament\Resources\Servers\Pages\ServerApp;
 use App\Filament\Resources\Servers\Pages\ViewServer;
 use App\Jobs\RequestCertificate;
 use App\Jobs\UpdateCli;
@@ -28,7 +28,7 @@ beforeEach(function () {
 it('queues a certificate request with the email and DNS option', function () {
     Queue::fake();
 
-    livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
+    livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'shop'])
         ->callAction('requestCertificate', data: ['email' => 'ops@example.com', 'skip_dns_check' => true], arguments: ['name' => 'shop'])
         ->assertNotified('Requesting a certificate for shop');
 
@@ -51,7 +51,7 @@ it('prefills the env editor from the server and saves through an upload', functi
     $this->ssh->respondTo('app:env --name=shop', "APP_ENV=production\nAPP_DEBUG=false\n");
     $this->ssh->respondTo('printf %s "$HOME"', '/home/mandal');
 
-    livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
+    livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'shop'])
         ->mountAction('editEnv', arguments: ['name' => 'shop'])
         ->assertActionDataSet(['contents' => "APP_ENV=production\nAPP_DEBUG=false\n"])
         ->setActionData(['contents' => "APP_ENV=production\nAPP_DEBUG=true"])
@@ -72,7 +72,7 @@ it('reports an env save failure', function () {
     $this->ssh->respondTo('app:env --name=shop', "A=1\n");
     $this->ssh->respondTo('printf %s "$HOME"', '/home/mandal');
 
-    livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
+    livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'shop'])
         ->mountAction('editEnv', arguments: ['name' => 'shop'])
         ->setActionData(['contents' => 'A=2'])
         ->callMountedAction()

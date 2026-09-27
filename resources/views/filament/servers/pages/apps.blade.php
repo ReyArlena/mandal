@@ -18,7 +18,7 @@
             @forelse ($this->apps as $app)
                 <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 py-3 text-sm last:border-0 dark:border-white/10">
                     <div>
-                        <span class="font-medium">{{ $app['name'] }}</span>
+                        <a href="{{ $this->appUrl($app['name']) }}" class="font-medium text-primary-600 hover:underline dark:text-primary-400">{{ $app['name'] }}</a>
                         <span class="ml-2 text-gray-500">{{ $app['domain'] ?? '' }}</span>
                         @if (! empty($app['aliases']))
                             <span class="ml-1 text-xs text-gray-400">+ {{ $app['aliases'] }}</span>
@@ -31,8 +31,8 @@
                         @if (! empty($app['repo']))
                             <span class="font-mono text-xs text-gray-500">{{ $app['repo'] }}@{{ $app['branch'] ?? 'main' }}</span>
                         @endif
-                        @if (! empty($app['deploy_key']))
-                            <x-filament::badge color="gray" x-data x-on:click="navigator.clipboard.writeText(@js($app['deploy_key']))" class="cursor-pointer" title="Copy the deploy key for GitHub">Deploy key</x-filament::badge>
+                        @if (! empty($app['ssl']))
+                            <x-filament::badge color="success">HTTPS</x-filament::badge>
                         @endif
                         @if (! empty($app['current_release']))
                             <x-filament::badge color="success">Deployed</x-filament::badge>
@@ -40,18 +40,9 @@
                             <x-filament::badge color="gray">Not deployed</x-filament::badge>
                         @endif
                         @if (! empty($app['repo']))
-                            {{ ($this->deployAppAction)(['name' => $app['name']]) }}
+                            {{ ($this->deployAppAction)(['name' => $app['name']])->link() }}
                         @endif
-                        @if (($app['releases'] ?? 0) > 1)
-                            {{ ($this->rollbackAppAction)(['name' => $app['name']]) }}
-                        @endif
-                        {{ ($this->editEnvAction)(['name' => $app['name']]) }}
-                        @if (empty($app['ssl']))
-                            {{ ($this->requestCertificateAction)(['name' => $app['name']]) }}
-                        @else
-                            <x-filament::badge color="success">HTTPS</x-filament::badge>
-                        @endif
-                        {{ ($this->deleteAppAction)(['name' => $app['name']]) }}
+                        {{ ($this->deleteAppAction)(['name' => $app['name']])->link() }}
                     </div>
                 </div>
             @empty

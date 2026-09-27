@@ -5,28 +5,20 @@ namespace App\Filament\Resources\Servers\Pages;
 use App\Enums\TaskStatus;
 use App\Enums\TaskType;
 use App\Enums\WwwMode;
+use App\Filament\Resources\Servers\Concerns\ManagesApps;
 use App\Filament\Resources\Servers\ServerResource;
 use App\Jobs\CreateApp;
-use App\Jobs\DeleteApp;
-use App\Jobs\DeployApp;
-use App\Jobs\RequestCertificate;
-use App\Jobs\RollbackApp;
-use App\Jobs\RunMandalTask;
 use App\Mandal\MandalClient;
 use App\Models\Server;
-use App\Models\Task;
 use App\Ssh\SshException;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
-use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
-use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 
 /**
@@ -35,6 +27,7 @@ use Filament\Support\Icons\Heroicon;
 class ServerApps extends Page
 {
     use InteractsWithRecord;
+    use ManagesApps;
 
     protected static string $resource = ServerResource::class;
 
@@ -61,12 +54,24 @@ class ServerApps extends Page
         $this->loadApps();
     }
 
+    protected function server(): Server
+    {
+        /** @var Server $server */
+        $server = $this->getRecord();
+
+        return $server;
+    }
+
+    protected function appChanged(): void
+    {
+        $this->loadApps(fresh: true);
+    }
+
     public function loadApps(bool $fresh = false): void
     {
         $this->error = null;
 
-        /** @var Server $server */
-        $server = $this->getRecord();
+        $server = $this->server();
 
         if (! $server->isProvisioned()) {
             $this->error = 'Provision this server before creating apps.';
@@ -89,13 +94,15 @@ class ServerApps extends Page
 
     public function hasPendingTask(): bool
     {
-        /** @var Server $server */
-        $server = $this->getRecord();
-
-        return $server->tasks()
+        return $this->server()->tasks()
             ->whereIn('type', [TaskType::CreateApp, TaskType::DeleteApp, TaskType::Deploy, TaskType::Rollback, TaskType::Certificate])
             ->whereIn('status', [TaskStatus::Pending, TaskStatus::Running])
             ->exists();
+    }
+
+    public function appUrl(string $name): string
+    {
+        return ServerResource::getUrl('app', ['record' => $this->server(), 'app' => $name]);
     }
 
     protected function getHeaderActions(): array
@@ -122,7 +129,7 @@ class ServerApps extends Page
             ->schema([
                 TextInput::make('name')
                     ->required()
-                    ->regex('/^[a-z][a-z0-9-]{1,31}$/')
+                    ->regex(self::APP_NAME_PATTERN)
                     ->notIn(array_column($this->apps, 'name'))
                     ->helperText('2 to 32 lower-case letters, digits or hyphens. Used for the system user, database and directories.')
                     ->placeholder('shop'),
@@ -172,190 +179,5 @@ class ServerApps extends Page
                     'database' => (bool) ($data['database'] ?? true),
                 ], "Creating {$data['name']}");
             });
-    }
-
-    public function deployAppAction(): Action
-    {
-        return Action::make('deployApp')
-            ->label('Deploy')
-            ->icon(Heroicon::OutlinedRocketLaunch)
-            ->link()
-            ->requiresConfirmation()
-            ->modalHeading(fn (array $arguments): string => "Deploy {$arguments['name']}?")
-            ->modalDescription('Clones the configured branch into a new release, runs the app\'s deploy script and switches over when it succeeds. The live release is untouched if anything fails.')
-            ->modalSubmitActionLabel('Deploy')
-            ->action(function (array $arguments): void {
-                $name = (string) ($arguments['name'] ?? '');
-
-                if (! preg_match('/^[a-z][a-z0-9-]{1,31}$/', $name)) {
-                    return;
-                }
-
-                $this->queueTask(TaskType::Deploy, DeployApp::class, ['name' => $name], "Deploying {$name}");
-            });
-    }
-
-    public function rollbackAppAction(): Action
-    {
-        return Action::make('rollbackApp')
-            ->label('Roll back')
-            ->icon(Heroicon::OutlinedArrowUturnLeft)
-            ->color('warning')
-            ->link()
-            ->requiresConfirmation()
-            ->modalHeading(fn (array $arguments): string => "Roll back {$arguments['name']}?")
-            ->modalDescription('Switches to the previous release and restarts the workers. Database migrations are not reversed.')
-            ->modalSubmitActionLabel('Roll back')
-            ->action(function (array $arguments): void {
-                $name = (string) ($arguments['name'] ?? '');
-
-                if (! preg_match('/^[a-z][a-z0-9-]{1,31}$/', $name)) {
-                    return;
-                }
-
-                $this->queueTask(TaskType::Rollback, RollbackApp::class, ['name' => $name], "Rolling back {$name}");
-            });
-    }
-
-    public function requestCertificateAction(): Action
-    {
-        return Action::make('requestCertificate')
-            ->label('SSL')
-            ->icon(Heroicon::OutlinedLockClosed)
-            ->link()
-            ->modalHeading(fn (array $arguments): string => "Request a certificate for {$arguments['name']}")
-            ->modalDescription('Checks that every host name points at this server, then asks Let\'s Encrypt for a certificate and switches the site to HTTPS. Renewals are automatic.')
-            ->modalSubmitActionLabel('Request certificate')
-            ->schema([
-                TextInput::make('email')
-                    ->label('Email for expiry notices')
-                    ->email()
-                    ->default(fn (): ?string => auth()->user()?->email),
-                Checkbox::make('skip_dns_check')
-                    ->label('Skip the DNS check (server behind NAT)'),
-            ])
-            ->action(function (array $arguments, array $data): void {
-                $name = (string) ($arguments['name'] ?? '');
-
-                if (! preg_match('/^[a-z][a-z0-9-]{1,31}$/', $name)) {
-                    return;
-                }
-
-                $this->queueTask(TaskType::Certificate, RequestCertificate::class, [
-                    'name' => $name,
-                    'email' => $data['email'] ?: null,
-                    'skip_dns_check' => (bool) ($data['skip_dns_check'] ?? false),
-                ], "Requesting a certificate for {$name}");
-            });
-    }
-
-    public function editEnvAction(): Action
-    {
-        return Action::make('editEnv')
-            ->label('.env')
-            ->icon(Heroicon::OutlinedDocumentText)
-            ->link()
-            ->modalHeading(fn (array $arguments): string => "{$arguments['name']} .env")
-            ->modalDescription('Saved to shared/.env on the server. Running queue workers keep the old values until they are restarted or the app is redeployed.')
-            ->modalWidth(Width::ThreeExtraLarge)
-            ->modalSubmitActionLabel('Save')
-            ->fillForm(function (array $arguments): array {
-                $name = (string) ($arguments['name'] ?? '');
-
-                if (! preg_match('/^[a-z][a-z0-9-]{1,31}$/', $name)) {
-                    return ['contents' => ''];
-                }
-
-                try {
-                    $result = app(MandalClient::class)->run($this->getRecord(), 'app:env --name='.$name, timeoutSeconds: 30);
-                } catch (SshException $exception) {
-                    return ['contents' => '# Could not read the file: '.$exception->getMessage()];
-                }
-
-                return ['contents' => $result->successful() ? $result->output : '# '.trim($result->errorOutput ?: $result->output)];
-            })
-            ->schema([
-                Textarea::make('contents')
-                    ->hiddenLabel()
-                    ->rows(24)
-                    ->required()
-                    ->maxLength(262144)
-                    ->extraInputAttributes(['class' => 'font-mono text-sm', 'spellcheck' => 'false']),
-            ])
-            ->action(function (array $arguments, array $data): void {
-                $name = (string) ($arguments['name'] ?? '');
-
-                if (! preg_match('/^[a-z][a-z0-9-]{1,31}$/', $name)) {
-                    return;
-                }
-
-                try {
-                    $result = app(MandalClient::class)->runWithUpload($this->getRecord(), 'app:env --name='.$name, rtrim((string) $data['contents'])."\n", '.env', timeoutSeconds: 30);
-                } catch (SshException $exception) {
-                    Notification::make()->title('Could not save .env')->body($exception->getMessage())->danger()->send();
-
-                    return;
-                }
-
-                if ($result->failed()) {
-                    Notification::make()->title('Could not save .env')->body(trim($result->errorOutput ?: $result->output))->danger()->send();
-
-                    return;
-                }
-
-                Notification::make()->title("Saved {$name} .env")->success()->send();
-            });
-    }
-
-    public function deleteAppAction(): Action
-    {
-        return Action::make('deleteApp')
-            ->label('Delete')
-            ->icon(Heroicon::OutlinedTrash)
-            ->color('danger')
-            ->link()
-            ->requiresConfirmation()
-            ->modalHeading(fn (array $arguments): string => "Delete {$arguments['name']}?")
-            ->modalDescription('Removes the site, pool, worker programs, crontab and system user. Choose what to keep below.')
-            ->schema([
-                Checkbox::make('keep_database')->label('Keep the database and its user'),
-                Checkbox::make('keep_files')->label('Keep the home directory and files'),
-            ])
-            ->action(function (array $arguments, array $data): void {
-                $name = (string) ($arguments['name'] ?? '');
-
-                if (! preg_match('/^[a-z][a-z0-9-]{1,31}$/', $name)) {
-                    return;
-                }
-
-                $this->queueTask(TaskType::DeleteApp, DeleteApp::class, [
-                    'name' => $name,
-                    'keep_database' => (bool) ($data['keep_database'] ?? false),
-                    'keep_files' => (bool) ($data['keep_files'] ?? false),
-                ], "Deleting {$name}");
-            });
-    }
-
-    /**
-     * @param  class-string<RunMandalTask>  $job
-     * @param  array<string, mixed>  $options
-     */
-    private function queueTask(TaskType $type, string $job, array $options, string $title): void
-    {
-        /** @var Server $server */
-        $server = $this->getRecord();
-
-        /** @var Task $task */
-        $task = $server->tasks()->create([
-            'type' => $type,
-            'user_id' => auth()->id(),
-            'options' => $options,
-        ]);
-
-        $job::dispatch($task);
-
-        Notification::make()->title($title)->body('Follow the progress on the task page.')->success()->send();
-
-        $this->redirect(ServerResource::getUrl('task', ['record' => $server, 'task' => $task]));
     }
 }

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Servers;
 use App\Filament\Resources\Servers\Pages\CreateServer;
 use App\Filament\Resources\Servers\Pages\EditServer;
 use App\Filament\Resources\Servers\Pages\ListServers;
+use App\Filament\Resources\Servers\Pages\ServerApp;
 use App\Filament\Resources\Servers\Pages\ServerApps;
 use App\Filament\Resources\Servers\Pages\ServerInventory;
 use App\Filament\Resources\Servers\Pages\ServerTasks;
@@ -65,6 +66,7 @@ class ServerResource extends Resource
             'create' => CreateServer::route('/create'),
             'view' => ViewServer::route('/{record}'),
             'apps' => ServerApps::route('/{record}/apps'),
+            'app' => ServerApp::route('/{record}/apps/{app}'),
             'inventory' => ServerInventory::route('/{record}/inventory'),
             'tasks' => ServerTasks::route('/{record}/tasks'),
             'task' => ViewTask::route('/{record}/tasks/{task}'),
