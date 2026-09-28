@@ -53,6 +53,14 @@ Each server gets its own SSH key pair when it is added; the private key is store
 
 4. Choose **Provision**. Mandal installs and hardens the stack in the background (nginx, PHP, Composer, MariaDB, Dragonfly, Bun, Supervisor, Certbot, Docker, firewall, fail2ban, automatic security updates) and shows the output live under the server's **Tasks** tab. A queue worker must be running for this (`php artisan queue:work`, or `composer run dev` locally).
 
+### Apps
+
+The **Apps** tab creates Laravel apps on a provisioned server. Each app gets its own system user and home (`/home/<app>`), a PHP-FPM pool running as that user, an nginx site with per-app logs, a database and user, a production `.env` under `shared/`, the scheduler crontab, a deploy key and an editable `deploy.sh`. Add the deploy key to the GitHub repository (read-only is enough), then use **Deploy**: the branch is cloned into `releases/<timestamp>`, `deploy.sh` runs (Composer, Bun build, migrations, `optimize`), and the `current` symlink switches only when it succeeds. **Roll back** returns to the previous release, or to any release listed on the app's page.
+
+Each app's page also edits its `.env`, requests a Let's Encrypt certificate (after checking DNS points at the server) and manages Supervisor **workers**: `queue:work`, Horizon or Reverb processes that run as the app user and restart after every deploy.
+
+When the panel's copy of the `mandal` CLI is newer than a server's, the server page offers **Update CLI**, which uploads and installs it over SSH.
+
 Once connected, the server's **Inventory** tab shows what is on it (services, PHP versions and pools, nginx sites, databases, Supervisor programs, certificates, firewall rules, Docker, and apps managed by Mandal). Nothing is stored in the panel; it is read from the server on each visit and cached for a few seconds.
 
 The setup link expires after 24 hours and stops working after the first successful connection. The server needs to reach the panel to download the script and the CLI, so a panel that only runs on your own machine cannot use the one-line command; open the script from the dialog instead.
