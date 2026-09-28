@@ -30,12 +30,15 @@ export MANDAL_PROC_SWAPS="${FIXTURES}/swaps-none"
 export MANDAL_APT_SOURCES_DIR="${TMP}/apt-sources"
 export MANDAL_CONFIG_BACKUP_DIR="${TMP}/config-backups"
 export MANDAL_DRAGONFLY_CONF="${TMP}/dragonfly.conf"
+export MANDAL_BACKUP_DIR="${TMP}/backups"
+export MANDAL_BACKUP_CRON="${TMP}/cron.d/mandal-backups"
+export MANDAL_BACKUP_LOCK="${TMP}/backup.lock"
 mkdir -p "${MANDAL_APT_SOURCES_DIR}"
 
 # Only the fakes and a fixed set of real tools are on PATH, so whatever the
 # host has installed (bun, docker, nginx...) cannot leak into the results.
 mkdir -p "${TMP}/bin"
-for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch base64 sha256sum tar gzip getent flock printf mkdir cp rm ln env; do
+for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch base64 sha256sum tar gzip getent stat flock printf mkdir cp rm ln env; do
     if path="$(command -v "$tool" 2> /dev/null)"; then
         ln -s "$path" "${TMP}/bin/${tool}"
     fi
@@ -220,7 +223,7 @@ assert_json "mandal reports drivers" "$mandal_json" '.drivers.cache' "dragonfly"
 # ---------------------------------------------------------------------------
 
 inventory="$(cmd_inventory)"
-assert_json "inventory is one object with every section" "$inventory" 'keys | join(",")' "apps,cache,certificates,database,docker,fail2ban,firewall,js,mandal,nginx,php,services,supervisor,system"
+assert_json "inventory is one object with every section" "$inventory" 'keys | join(",")' "apps,backups,cache,certificates,database,docker,fail2ban,firewall,js,mandal,nginx,php,services,supervisor,system"
 assert_json "inventory reports the absent cache honestly" "$inventory" '.cache.installed' "false"
 
 # ---------------------------------------------------------------------------
@@ -240,7 +243,7 @@ assert_json "db_list filters system schemas" "$dbs" '.databases | join(",")' "sh
 assert_json "database inventory stays valid JSON under pipefail" "$(inv_database)" '.installed' "true"
 assert_json "firewall inventory stays valid JSON under pipefail" "$(MANDAL_FAKE_UFW_EMPTY=1 inv_firewall)" '.rules | length' "0"
 assert_json "supervisor inventory stays valid JSON under pipefail" "$(inv_supervisor)" '.processes | length' "3"
-assert_json "whole inventory is valid JSON under pipefail" "$(cmd_inventory)" 'keys | length' "14"
+assert_json "whole inventory is valid JSON under pipefail" "$(cmd_inventory)" 'keys | length' "15"
 set +o pipefail
 
 assert_eq "ssh_setting reads one value without exiting early" "2222" "$(ssh_setting port)"
@@ -491,6 +494,46 @@ restart="$(cmd_worker_restart --app=shop --dry-run 2>&1)"
 [[ "$restart" == *"supervisorctl restart shop-worker:*"* ]] && pass || fail "worker:restart restarts every program of the app"
 assert_json "worker:list filters by app" "$(cmd_worker_list --app=shop)" 'map(.worker) | join(",")' "worker"
 assert_json "worker:list is empty for an app without workers" "$(cmd_worker_list --app=api)" 'length' "0"
+
+# ---------------------------------------------------------------------------
+# backups
+# ---------------------------------------------------------------------------
+
+assert_json "backup status is unconfigured at first" "$(backup_status_json)" '.configured' "false"
+assert_json "inventory carries a backups section" "$(cmd_inventory)" '.backups.configured' "false"
+(cmd_backup_run --dry-run) > /dev/null 2>&1 && fail "backup:run refuses to run unconfigured" || pass
+
+printf 'SCHEDULE=0 3 * * *\nKEEP_LOCAL=3\nKEEP_REMOTE=10\nREMOTE=true\nS3_BUCKET=my-backups\nS3_PATH=srv1\nS3_ENDPOINT=https://s3.example.com\nS3_REGION=auto\nS3_KEY=AKIAEXAMPLE\nS3_SECRET=sekret\n' > "${TMP}/backup.env"
+configure="$(cmd_backup_configure --from="${TMP}/backup.env" --dry-run 2>&1)"
+assert_eq "backup:configure dry run completes" "0" "$?"
+[[ "$configure" == *"write ${MANDAL_ETC}/backups.conf (0600"* && "$configure" == *"write ${MANDAL_ETC}/rclone.conf (0600"* && "$configure" == *"write ${MANDAL_BACKUP_CRON}"* ]] && pass || fail "backup:configure writes the config, rclone config and cron"
+[[ "$configure" != *"sekret"* ]] && pass || fail "backup:configure never prints the secret"
+[[ "$(backup_render_rclone https://s3.example.com auto AKIA sek)" == *"secret_access_key = sek"* ]] && pass || fail "rclone config carries the credentials"
+assert_eq "cron renders the schedule" "0 3 * * * root /opt/mandal/bin/mandal backup:run >> ${MANDAL_LOG_DIR}/backups.log 2>&1" "$(backup_render_cron '0 3 * * *' | tail -n 1)"
+printf 'SCHEDULE=0 3 * * *\nREMOTE=true\nS3_BUCKET=Bad Bucket\nS3_ENDPOINT=https://s3.example.com\nS3_KEY=a\nS3_SECRET=b\n' > "${TMP}/bad.env"
+(cmd_backup_configure --from="${TMP}/bad.env" --dry-run) > /dev/null 2>&1 && fail "backup:configure validates the bucket" || pass
+(cmd_backup_configure --schedule='rm -rf' --dry-run) > /dev/null 2>&1 && fail "backup:configure validates the schedule" || pass
+
+# a configured server with existing local backups
+cmd_backup_configure --schedule='30 2 * * *' --keep-local=2 --keep-remote=5 --no-remote > /dev/null 2>&1
+assert_json "backup status reflects the configuration" "$(backup_status_json)" '.schedule + "|" + (.keep_local|tostring) + "|" + (.remote.enabled|tostring)' "30 2 * * *|2|false"
+mkdir -p "${MANDAL_BACKUP_DIR}/shop"
+for ts in 20261020020000 20261021020000 20261022020000; do printf 'x' > "${MANDAL_BACKUP_DIR}/shop/shop-${ts}.sql.zst"; done
+assert_json "backup:list shows local files" "$(MANDAL_FAKE_DBS=$'mysql\nshop' backup_list_json)" '.[0].local | map(.file) | join(",")' "shop-20261020020000.sql.zst,shop-20261021020000.sql.zst,shop-20261022020000.sql.zst"
+MANDAL_DRY_RUN=1 backup_prune_local shop 2 > "${TMP}/prune.out"
+assert_eq "local pruning removes the oldest beyond the limit" "shop-20261020020000.sql.zst" "$(grep -oE 'shop-[0-9]+\.sql\.zst' "${TMP}/prune.out" | tr '\n' ' ' | sed 's/ $//')"
+
+run="$(MANDAL_FAKE_DBS=$'mysql\nshop' MANDAL_DRY_RUN=1 backup_run 2>&1)"
+assert_eq "backup:run dry run completes" "0" "$?"
+[[ "$run" == *"+ dump shop -> ${MANDAL_BACKUP_DIR}/shop/shop-"* && "$run" == *" ok shop "* ]] && pass || fail "backup:run dumps each database and logs the result"
+[[ "$run" != *"rclone"* ]] && pass || fail "backup:run skips the remote when disabled"
+(MANDAL_FAKE_DBS=$'mysql\nshop' MANDAL_DRY_RUN=1 backup_run nope) > /dev/null 2>&1 && fail "backup:run fails for an unknown database" || pass
+
+restore="$(cmd_backup_restore --database=shop --file=shop-20261021020000.sql.zst --dry-run 2>&1)"
+assert_eq "backup:restore dry run completes" "0" "$?"
+[[ "$restore" == *"CREATE DATABASE IF NOT EXISTS \`shop_restore_"* && "$restore" == *"zstd -dc ${MANDAL_BACKUP_DIR}/shop/shop-20261021020000.sql.zst | mariadb shop_restore_"* && "$restore" == *"GRANT ALL PRIVILEGES ON \`shop_restore_"* ]] && pass || fail "backup:restore restores into a new database the app user can read"
+(cmd_backup_restore --database=shop --file='../etc/passwd' --dry-run) > /dev/null 2>&1 && fail "backup:restore validates the file name" || pass
+(cmd_backup_restore --database=shop --file=shop-20261021020000.sql.zst --into='shop;drop' --dry-run) > /dev/null 2>&1 && fail "backup:restore validates the target database" || pass
 
 MANDAL_OS_RELEASE="${FIXTURES}/os-release-debian" bash -c 'source "'"${MANDAL_ROOT}"'/lib/core.sh"; mandal_load_commands; load_all_drivers; is_root(){ return 0; }; MANDAL_DRY_RUN=1 provision_apply' > /dev/null 2>&1
 assert_eq "provisioning refuses an unsupported OS" "1" "$?"

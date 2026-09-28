@@ -26,6 +26,7 @@ cmd_inventory() {
         --argjson fail2ban "$(inv_fail2ban)" \
         --argjson docker "$(inv_docker)" \
         --argjson apps "$(inv_apps)" \
+        --argjson backups "$(inv_backups)" \
         '$ARGS.named'
 }
 
@@ -380,6 +381,14 @@ inv_docker() {
     fi
     jq -n --argjson installed "$installed" --arg active "$(unit_state docker)" --arg version "$version" --argjson projects "$projects" --argjson containers "$containers" \
         '{installed: $installed, active: $active, version: $version, projects: $projects, containers: $containers}'
+}
+
+# ---------------------------------------------------------------------------
+# Backups
+# ---------------------------------------------------------------------------
+
+inv_backups() {
+    backup_status_json
 }
 
 # ---------------------------------------------------------------------------
