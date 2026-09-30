@@ -35,11 +35,12 @@ rclone_cmd() {
     rclone --config "$MANDAL_RCLONE_CONF" --quiet "$@"
 }
 
-# The databases to back up: every app database, plus any others that are not system schemas.
+# The databases to back up: everything that is not a system schema or a
+# database produced by backup:restore (those are copies for checking).
 backup_databases() {
     local list
     list="$(db_list | jq -r '.databases[]')"
-    printf '%s\n' "$list" | grep -v '^$' | sort -u
+    printf '%s\n' "$list" | { grep -vE '^$|_restore_[0-9]{14}$' || true; } | sort -u
 }
 
 backup_file_name() {

@@ -499,6 +499,7 @@ assert_json "worker:list is empty for an app without workers" "$(cmd_worker_list
 # backups
 # ---------------------------------------------------------------------------
 
+assert_eq "restored copies are not backed up again" "shop" "$(MANDAL_FAKE_DBS=$'mysql\nshop\nshop_restore_20261027041515' backup_databases | tr '\n' ' ' | sed 's/ $//')"
 assert_json "backup status is unconfigured at first" "$(backup_status_json)" '.configured' "false"
 assert_json "inventory carries a backups section" "$(cmd_inventory)" '.backups.configured' "false"
 (cmd_backup_run --dry-run) > /dev/null 2>&1 && fail "backup:run refuses to run unconfigured" || pass
