@@ -13,6 +13,8 @@ enum TaskType: string implements HasLabel
     case Rollback = 'rollback';
     case Certificate = 'certificate';
     case UpdateCli = 'update-cli';
+    case Backup = 'backup';
+    case Restore = 'restore';
 
     public function getLabel(): string
     {
@@ -24,6 +26,8 @@ enum TaskType: string implements HasLabel
             self::Rollback => 'Roll back',
             self::Certificate => 'Request certificate',
             self::UpdateCli => 'Update CLI',
+            self::Backup => 'Back up',
+            self::Restore => 'Restore backup',
         };
     }
 }
