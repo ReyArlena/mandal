@@ -61,6 +61,10 @@ Each app's page also edits its `.env`, requests a Let's Encrypt certificate (aft
 
 When the panel's copy of the `mandal` CLI is newer than a server's, the server page offers **Update CLI**, which uploads and installs it over SSH.
 
+### Backups
+
+The **Backups** tab sets a nightly schedule for dumping every database on the server (`mariadb-dump` compressed with zstd), how many copies to keep locally and remotely, and optionally an S3-compatible bucket (AWS S3, Backblaze B2, Cloudflare R2, Wasabi, MinIO, Hetzner and others) to upload to. Credentials are written to `/etc/mandal/rclone.conf` on the server, readable only by root; the panel never stores them. Any backup can be restored into a fresh database next to the live one for checking.
+
 Once connected, the server's **Inventory** tab shows what is on it (services, PHP versions and pools, nginx sites, databases, Supervisor programs, certificates, firewall rules, Docker, and apps managed by Mandal). Nothing is stored in the panel; it is read from the server on each visit and cached for a few seconds.
 
 The setup link expires after 24 hours and stops working after the first successful connection. The server needs to reach the panel to download the script and the CLI, so a panel that only runs on your own machine cannot use the one-line command; open the script from the dialog instead.
