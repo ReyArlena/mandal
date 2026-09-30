@@ -33,6 +33,10 @@ export MANDAL_DRAGONFLY_CONF="${TMP}/dragonfly.conf"
 export MANDAL_BACKUP_DIR="${TMP}/backups"
 export MANDAL_BACKUP_CRON="${TMP}/cron.d/mandal-backups"
 export MANDAL_BACKUP_LOCK="${TMP}/backup.lock"
+export MANDAL_NGINX_LOG_DIR="${TMP}/log/nginx"
+export MANDAL_SUPERVISOR_LOG_DIR="${TMP}/log/supervisor"
+export MANDAL_VAR_LOG="${TMP}/log"
+export MANDAL_DEPLOY_LOG_DIR="${TMP}/log/mandal/deploys"
 mkdir -p "${MANDAL_APT_SOURCES_DIR}"
 
 # Only the fakes and a fixed set of real tools are on PATH, so whatever the
@@ -535,6 +539,58 @@ assert_eq "backup:restore dry run completes" "0" "$?"
 [[ "$restore" == *"CREATE DATABASE IF NOT EXISTS \`shop_restore_"* && "$restore" == *"zstd -dc ${MANDAL_BACKUP_DIR}/shop/shop-20261021020000.sql.zst | mariadb shop_restore_"* && "$restore" == *"GRANT ALL PRIVILEGES ON \`shop_restore_"* ]] && pass || fail "backup:restore restores into a new database the app user can read"
 (cmd_backup_restore --database=shop --file='../etc/passwd' --dry-run) > /dev/null 2>&1 && fail "backup:restore validates the file name" || pass
 (cmd_backup_restore --database=shop --file=shop-20261021020000.sql.zst --into='shop;drop' --dry-run) > /dev/null 2>&1 && fail "backup:restore validates the target database" || pass
+
+# ---------------------------------------------------------------------------
+# logs
+# ---------------------------------------------------------------------------
+
+mkdir -p "$MANDAL_NGINX_LOG_DIR" "$MANDAL_SUPERVISOR_LOG_DIR" "${MANDAL_HOME_DIR}/shop/shared/storage/logs" "$MANDAL_DEPLOY_LOG_DIR/shop" "$MANDAL_VAR_LOG/apt"
+for i in $(printf '%s\n' {1..300}); do printf '127.0.0.1 - - [27/Oct/2026:04:00:%02d +0000] "GET /page%d HTTP/1.1" 200 12\n' "$((i % 60))" "$i"; done > "$MANDAL_NGINX_LOG_DIR/shop-access.log"
+printf '2026/10/27 04:01:00 [error] 1#1: *1 open() failed\n' > "$MANDAL_NGINX_LOG_DIR/shop-error.log"
+printf 'Start-Date: 2026-10-27  02:30:01\nUpgrade: nginx:amd64 (1.24.0-1, 1.24.0-2)\nEnd-Date: 2026-10-27  02:30:05\n' > "$MANDAL_VAR_LOG/apt/history.log"
+printf 'deploy one\n' > "$MANDAL_DEPLOY_LOG_DIR/shop/20261027110000.log"
+printf 'deploy two\nDeployed shop\n' > "$MANDAL_DEPLOY_LOG_DIR/shop/20261027120000.log"
+cat > "${MANDAL_HOME_DIR}/shop/shared/storage/logs/laravel-2026-10-27.log" <<'LOGEOF'
+[2026-10-27 04:00:00] production.INFO: Scheduler ran
+[2026-10-27 04:01:00] production.ERROR: Something broke {"exception":"[object] (RuntimeException(code: 0): boom at /home/shop/current/app/Foo.php:12)
+[stacktrace]
+#0 /home/shop/current/vendor/laravel/framework/src/Illuminate/Foundation/Application.php(1): App\\Foo->bar()
+#1 {main}
+"}
+[2026-10-27 04:02:00] production.WARNING: Slow query
+LOGEOF
+
+sources="$(logs_sources_json)"
+assert_json "sources include per-app nginx logs" "$sources" 'map(.id) | index("nginx:shop:access") != null' "true"
+assert_json "sources include laravel logs" "$sources" 'map(select(.id == "laravel:shop")) | .[0].kind' "laravel"
+assert_json "sources include worker logs" "$sources" 'map(.id) | index("supervisor:shop:worker") != null' "true"
+assert_json "sources include the kernel journal" "$sources" 'map(.id) | index("journal:kernel") != null' "true"
+assert_json "sources filter by app" "$(logs_sources_json api)" 'map(.app) | unique | join(",")' "api"
+(logs_source '../../etc/passwd') > /dev/null 2>&1 && fail "sources never accept paths" || pass
+(logs_source 'nginx:nope:access') > /dev/null 2>&1 && fail "unknown sources are refused" || pass
+
+read_out="$(cmd_logs_read --source=nginx:shop:access --lines=50)"
+assert_json "logs:read returns the last N lines" "$read_out" '.lines | length' "50"
+assert_json "logs:read returns the newest line last" "$read_out" '.lines[-1] | test("/page300 ")' "true"
+assert_json "logs:read reports a cursor" "$read_out" '.cursor | tonumber > 0' "true"
+cursor="$(jq -r .cursor <<< "$read_out")"
+assert_json "logs:read --after returns nothing new" "$(cmd_logs_read --source=nginx:shop:access --after="$cursor")" '.lines | length' "0"
+printf '127.0.0.1 - - [27/Oct/2026:04:05:00 +0000] "GET /new HTTP/1.1" 200 12\n' >> "$MANDAL_NGINX_LOG_DIR/shop-access.log"
+assert_json "logs:read --after returns only new lines" "$(cmd_logs_read --source=nginx:shop:access --after="$cursor")" '.lines | join("")' '127.0.0.1 - - [27/Oct/2026:04:05:00 +0000] "GET /new HTTP/1.1" 200 12'
+assert_json "logs:read --grep filters case-insensitively" "$(cmd_logs_read --source=nginx:shop:access --grep=PAGE29 --lines=1000)" '.lines | length' "11"
+assert_json "logs:read reports a missing file" "$(cmd_logs_read --source=php:shop:slow)" '.exists' "false"
+
+laravel="$(cmd_logs_read --source=laravel:shop)"
+assert_json "laravel entries are split at headers" "$laravel" '.entries | length' "3"
+assert_json "laravel entries keep the stack trace attached" "$laravel" '.entries[1].text | contains("#1 {main}")' "true"
+assert_json "laravel entries carry level and message" "$laravel" '.entries[1].level + "|" + .entries[1].message' "ERROR|Something broke {\"exception\":\"[object] (RuntimeException(code: 0): boom at /home/shop/current/app/Foo.php:12)"
+assert_json "laravel entries filter by level" "$(cmd_logs_read --source=laravel:shop --level=error)" '.entries | length' "1"
+assert_json "laravel entries filter by text" "$(cmd_logs_read --source=laravel:shop --grep=slow)" '.entries[0].level' "WARNING"
+
+assert_json "deploy logs read the newest deployment" "$(cmd_logs_read --source=deploy:shop)" '.lines | join("|")' "deploy two|Deployed shop"
+assert_json "journal sources report absence without journalctl" "$(cmd_logs_read --source=journal:kernel)" '.exists' "false"
+(cmd_logs_read --source=nginx:shop:access --lines=99999) > /dev/null 2>&1 && fail "logs:read caps the line count" || pass
+(cmd_logs_read --source=nginx:shop:access --since=yesterday) > /dev/null 2>&1 && fail "logs:read validates --since" || pass
 
 MANDAL_OS_RELEASE="${FIXTURES}/os-release-debian" bash -c 'source "'"${MANDAL_ROOT}"'/lib/core.sh"; mandal_load_commands; load_all_drivers; is_root(){ return 0; }; MANDAL_DRY_RUN=1 provision_apply' > /dev/null 2>&1
 assert_eq "provisioning refuses an unsupported OS" "1" "$?"
