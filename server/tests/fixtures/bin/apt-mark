@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+[[ "$1" == "showhold" ]] && echo linux-image-generic
+exit 0

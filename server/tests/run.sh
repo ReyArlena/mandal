@@ -37,12 +37,17 @@ export MANDAL_NGINX_LOG_DIR="${TMP}/log/nginx"
 export MANDAL_SUPERVISOR_LOG_DIR="${TMP}/log/supervisor"
 export MANDAL_VAR_LOG="${TMP}/log"
 export MANDAL_DEPLOY_LOG_DIR="${TMP}/log/mandal/deploys"
+export MANDAL_UPDATES_CACHE="${TMP}/cache"
+export MANDAL_UNATTENDED_LOG="${TMP}/log/unattended-upgrades.log"
+export MANDAL_APT_HISTORY="${TMP}/log/apt/history.log"
+export MANDAL_BOOT_DIR="${TMP}/boot"
+export MANDAL_RELEASE_UPGRADES_CACHE="${TMP}/release-upgrade"
 mkdir -p "${MANDAL_APT_SOURCES_DIR}"
 
 # Only the fakes and a fixed set of real tools are on PATH, so whatever the
 # host has installed (bun, docker, nginx...) cannot leak into the results.
 mkdir -p "${TMP}/bin"
-for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch base64 sha256sum tar gzip getent stat flock printf mkdir cp rm ln env; do
+for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch base64 sha256sum tar gzip getent stat flock curl printf mkdir cp rm ln env; do
     if path="$(command -v "$tool" 2> /dev/null)"; then
         ln -s "$path" "${TMP}/bin/${tool}"
     fi
@@ -591,6 +596,51 @@ assert_json "deploy logs read the newest deployment" "$(cmd_logs_read --source=d
 assert_json "journal sources report absence without journalctl" "$(cmd_logs_read --source=journal:kernel)" '.exists' "false"
 (cmd_logs_read --source=nginx:shop:access --lines=99999) > /dev/null 2>&1 && fail "logs:read caps the line count" || pass
 (cmd_logs_read --source=nginx:shop:access --since=yesterday) > /dev/null 2>&1 && fail "logs:read validates --since" || pass
+
+# ---------------------------------------------------------------------------
+# updates
+# ---------------------------------------------------------------------------
+
+mkdir -p "$MANDAL_UPDATES_CACHE" "$MANDAL_BOOT_DIR"
+printf '{"tag_name":"v9.9.9"}' > "$MANDAL_UPDATES_CACHE/github-dragonflydb-dragonfly.json"
+printf '{"tag_name":"bun-v1.3.13"}' > "$MANDAL_UPDATES_CACHE/github-oven-sh-bun.json"
+printf '{"stable":[{"path":"/download/2.9.7/composer.phar","version":"2.9.7"}]}' > "$MANDAL_UPDATES_CACHE/composer-latest.txt"
+touch "$MANDAL_BOOT_DIR/vmlinuz-6.8.0-100-generic" "$MANDAL_BOOT_DIR/vmlinuz-6.8.0-147-generic"
+printf '2026-10-27 06:00:01,123 INFO Starting unattended upgrades script\n2026-10-27 06:00:09,456 INFO All upgrades installed\n' > "$MANDAL_UNATTENDED_LOG"
+printf 'Latest release: 26.04 LTS\n' > "$MANDAL_RELEASE_UPGRADES_CACHE"
+
+assert_eq "updates_newer compares versions" "true false false" "$(updates_newer 1.2.3 1.10.0) $(updates_newer 2.0.0 1.9.9) $(updates_newer '' 1.0)"
+pending="$(updates_pending_tsv)"
+assert_eq "pending updates come from apt-get --just-print" "nginx	1.24.0-2ubuntu7.19	1.24.0-2ubuntu7.20	true
+curl	8.5.0-2ubuntu10.1	8.5.0-2ubuntu10.2	false" "$pending"
+status="$(updates_status_json)"
+assert_json "status splits security from other updates" "$status" '(.pending.security | length | tostring) + "/" + (.pending.other | length | tostring)' "1/1"
+assert_json "status lists held packages" "$status" '.pending.held | join(",")' "linux-image-generic"
+assert_json "status finds the newest installed kernel" "$status" '.kernel.newest' "6.8.0-147-generic"
+assert_json "status flags a newer cache release" "$status" '.components[] | select(.id == "cache") | .latest + "|" + (.update_available|tostring)' "9.9.9|false"
+assert_json "status reads the composer release" "$status" '.components[] | select(.id == "composer") | .latest' "2.9.7"
+assert_json "status reports the last unattended run" "$status" '.unattended.status + "|" + .unattended.last' "ok|2026-10-27 06:00:09"
+assert_json "status reads apt history newest first" "$status" '.history[0].action + " " + .history[0].packages' "Upgrade nginx:amd64 (1.24.0-1, 1.24.0-2)"
+assert_json "status mentions a newer LTS" "$status" '.release_upgrade' "26.04 LTS"
+assert_json "status carries the reboot flag" "$status" '.reboot_required' "true"
+
+apply="$(cmd_updates_apply --security --dry-run 2>&1)"
+assert_eq "updates:apply --security dry run completes" "0" "$?"
+[[ "$apply" == *"apt-get update"* && "$apply" == *"unattended-upgrade -v"* && "$apply" == *"systemctl reload-or-restart php8.5-fpm"* ]] && pass || fail "security updates refresh apt, run unattended-upgrade and reload PHP-FPM afterwards"
+all="$(cmd_updates_apply --all --dry-run 2>&1)"
+[[ "$all" == *"apt-get dist-upgrade"* && "$all" == *"apt-get autoremove"* ]] && pass || fail "updates:apply --all dist-upgrades and autoremoves"
+one="$(cmd_updates_apply --package=curl --dry-run 2>&1)"
+[[ "$one" == *"apt-get install --only-upgrade"*"curl"* ]] && pass || fail "updates:apply --package upgrades one package"
+(cmd_updates_apply --package='curl; rm' --dry-run) > /dev/null 2>&1 && fail "updates:apply validates the package name" || pass
+(cmd_updates_apply --dry-run) > /dev/null 2>&1 && fail "updates:apply needs a mode" || pass
+
+comp="$(cmd_component_update --component=cache --dry-run 2>&1)"
+[[ "$comp" == *"dragonfly_amd64.deb"* && "$comp" == *"systemctl restart dragonfly"* ]] && pass || fail "component:update cache reinstalls dragonfly"
+comp="$(cmd_component_update --component=js --dry-run 2>&1)"
+[[ "$comp" == *"bun-linux-x64.zip"* ]] && pass || fail "component:update js downloads bun"
+(cmd_component_update --component=mandal --dry-run) > /dev/null 2>&1 && fail "component:update refuses unknown components" || pass
+reboot_out="$(cmd_reboot --dry-run 2>&1)"
+[[ "$reboot_out" == *"systemd-run --quiet --on-active=5"*"systemctl reboot"* ]] && pass || fail "reboot is scheduled a few seconds out"
 
 MANDAL_OS_RELEASE="${FIXTURES}/os-release-debian" bash -c 'source "'"${MANDAL_ROOT}"'/lib/core.sh"; mandal_load_commands; load_all_drivers; is_root(){ return 0; }; MANDAL_DRY_RUN=1 provision_apply' > /dev/null 2>&1
 assert_eq "provisioning refuses an unsupported OS" "1" "$?"

@@ -97,3 +97,14 @@ cache_configure() {
         chown dfly:dfly "$MANDAL_DRAGONFLY_CONF" 2> /dev/null || true
     fi
 }
+
+# Replace the installed package with the latest release; the service restarts.
+cache_upgrade() {
+    local deb
+    download "${MANDAL_DRAGONFLY_RELEASES}/latest/download/dragonfly_$(cache_deb_arch).deb" .deb
+    deb="$DOWNLOADED_FILE"
+    run_cmd apt-get install "${APT_OPTIONS[@]}" "$deb"
+    dry_run || rm -f "$deb"
+    cache_configure
+    service_restart dragonfly
+}
