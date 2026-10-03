@@ -83,16 +83,17 @@ class FakeSshClient implements Connection, SshClient
     {
         $this->commands[] = $command;
 
-        foreach ($this->responses as $fragment => $response) {
-            if (str_contains($command, $fragment)) {
-                $result = $response($command);
+        $fragments = array_filter(array_keys($this->responses), fn (string $fragment): bool => str_contains($command, $fragment));
+        usort($fragments, fn (string $a, string $b): int => strlen($b) <=> strlen($a));
 
-                if ($onOutput !== null && $result->output !== '') {
-                    $onOutput($result->output);
-                }
+        foreach ($fragments as $fragment) {
+            $result = ($this->responses[$fragment])($command);
 
-                return $result;
+            if ($onOutput !== null && $result->output !== '') {
+                $onOutput($result->output);
             }
+
+            return $result;
         }
 
         return new CommandResult($command, 127, '', "mandal: unknown command [{$command}]");

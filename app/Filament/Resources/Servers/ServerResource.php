@@ -9,6 +9,7 @@ use App\Filament\Resources\Servers\Pages\ServerApp;
 use App\Filament\Resources\Servers\Pages\ServerApps;
 use App\Filament\Resources\Servers\Pages\ServerBackups;
 use App\Filament\Resources\Servers\Pages\ServerInventory;
+use App\Filament\Resources\Servers\Pages\ServerLogs;
 use App\Filament\Resources\Servers\Pages\ServerTasks;
 use App\Filament\Resources\Servers\Pages\ViewServer;
 use App\Filament\Resources\Servers\Pages\ViewTask;
@@ -56,6 +57,7 @@ class ServerResource extends Resource
             ServerApps::class,
             ServerInventory::class,
             ServerBackups::class,
+            ServerLogs::class,
             ServerTasks::class,
             EditServer::class,
         ]);
@@ -71,6 +73,7 @@ class ServerResource extends Resource
             'app' => ServerApp::route('/{record}/apps/{app}'),
             'inventory' => ServerInventory::route('/{record}/inventory'),
             'backups' => ServerBackups::route('/{record}/backups'),
+            'logs' => ServerLogs::route('/{record}/logs'),
             'tasks' => ServerTasks::route('/{record}/tasks'),
             'task' => ViewTask::route('/{record}/tasks/{task}'),
             'edit' => EditServer::route('/{record}/edit'),
