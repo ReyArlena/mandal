@@ -226,6 +226,16 @@ class ServerBackups extends Page
     {
         $server = $this->server();
 
+        if ($server->hasActiveTask()) {
+            Notification::make()
+                ->title('Another task is still running')
+                ->body('Wait for it to finish; only one task runs on a server at a time.')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
         /** @var Task $task */
         $task = $server->tasks()->create([
             'type' => $type,

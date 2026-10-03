@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ServerSetupMode;
+use App\Enums\TaskStatus;
 use App\Ssh\KeyPair;
 use Database\Factories\ServerFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -58,6 +59,17 @@ class Server extends Model
     public function tasks(): HasMany
     {
         return $this->hasMany(Task::class);
+    }
+
+    /**
+     * Whether a task is queued or running on this server. Only one mandal
+     * command runs per server at a time, so a second one must wait.
+     */
+    public function hasActiveTask(): bool
+    {
+        return $this->tasks()
+            ->whereIn('status', [TaskStatus::Pending, TaskStatus::Running])
+            ->exists();
     }
 
     /**

@@ -15,6 +15,7 @@ enum TaskType: string implements HasLabel
     case UpdateCli = 'update-cli';
     case Backup = 'backup';
     case Restore = 'restore';
+    case Updates = 'updates';
 
     public function getLabel(): string
     {
@@ -28,6 +29,7 @@ enum TaskType: string implements HasLabel
             self::UpdateCli => 'Update CLI',
             self::Backup => 'Back up',
             self::Restore => 'Restore backup',
+            self::Updates => 'Install updates',
         };
     }
 }

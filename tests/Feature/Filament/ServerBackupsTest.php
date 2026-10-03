@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\TaskStatus;
 use App\Enums\TaskType;
 use App\Filament\Resources\Servers\Pages\ServerBackups;
 use App\Jobs\RestoreBackup;
@@ -113,6 +114,8 @@ it('queues a backup run and a restore', function () {
     livewire(ServerBackups::class, ['record' => $this->server->getRouteKey()])
         ->callAction('runBackup')
         ->assertNotified('Backup started');
+
+    Task::query()->update(['status' => TaskStatus::Succeeded]);
 
     livewire(ServerBackups::class, ['record' => $this->server->getRouteKey()])
         ->callAction('restore', data: ['into' => ''], arguments: ['database' => 'shop', 'file' => 'shop-20261027023000.sql.zst'])

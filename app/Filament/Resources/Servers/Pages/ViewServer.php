@@ -6,7 +6,6 @@ use App\Enums\CacheDriver;
 use App\Enums\DatabaseDriver;
 use App\Enums\JsDriver;
 use App\Enums\ServerSetupMode;
-use App\Enums\TaskStatus;
 use App\Enums\TaskType;
 use App\Filament\Resources\Servers\ServerResource;
 use App\Jobs\ProvisionServer;
@@ -55,7 +54,7 @@ class ViewServer extends ViewRecord
             ->icon(Heroicon::OutlinedRocketLaunch)
             ->color(fn (Server $record): string => $record->isProvisioned() ? 'gray' : 'primary')
             ->visible(fn (Server $record): bool => $record->connected_at !== null)
-            ->disabled(fn (Server $record): bool => $record->tasks()->where('status', '!=', TaskStatus::Succeeded)->where('status', '!=', TaskStatus::Failed)->exists())
+            ->disabled(fn (Server $record): bool => $record->hasActiveTask())
             ->modalHeading('Provision the server')
             ->modalDescription('Installs and hardens the stack. Existing configuration is kept; Mandal only adds what is missing. This runs in the background and usually takes 5 to 15 minutes.')
             ->modalSubmitActionLabel('Start provisioning')
@@ -88,6 +87,12 @@ class ViewServer extends ViewRecord
                     ->helperText('By default password logins and root logins over SSH are disabled once the panel\'s key is confirmed to work.'),
             ])
             ->action(function (Server $record, array $data): void {
+                if ($record->hasActiveTask()) {
+                    Notification::make()->title('Another task is still running')->warning()->send();
+
+                    return;
+                }
+
                 $task = $record->tasks()->create([
                     'type' => TaskType::Provision,
                     'user_id' => auth()->id(),
@@ -163,6 +168,12 @@ class ViewServer extends ViewRecord
             ->modalHeading('Update the mandal CLI on this server')
             ->modalDescription(fn (CliArchive $archive): string => "Uploads and installs mandal {$archive->version()} (build {$archive->hash()}). Nothing else on the server changes.")
             ->action(function (Server $record): void {
+                if ($record->hasActiveTask()) {
+                    Notification::make()->title('Another task is still running')->warning()->send();
+
+                    return;
+                }
+
                 $task = $record->tasks()->create([
                     'type' => TaskType::UpdateCli,
                     'user_id' => auth()->id(),
