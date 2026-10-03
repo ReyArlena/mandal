@@ -378,6 +378,7 @@ cron="$(app_render_cron shop 8.5)"
 (validate_branch 'a;b') 2> /dev/null && fail "validate_branch rejects shell characters" || pass
 (validate_repo acme/shop) && pass || fail "validate_repo accepts owner/name"
 (validate_repo 'git@github.com:acme/shop') 2> /dev/null && fail "validate_repo rejects URLs" || pass
+(validate_repo '../etc') 2> /dev/null && fail "validate_repo rejects dot segments" || pass
 (validate_www_mode naked-only) && pass || fail "validate_www_mode accepts naked-only"
 (validate_www_mode both) 2> /dev/null && fail "validate_www_mode rejects unknown modes" || pass
 

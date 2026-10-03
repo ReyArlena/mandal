@@ -33,7 +33,7 @@ validate_branch() {
 }
 
 validate_repo() {
-    [[ "$1" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die 2 "invalid repository '$1' (expected owner/name)"
+    [[ "$1" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*$ ]] || die 2 "invalid repository '$1' (expected owner/name)"
 }
 
 # ---------------------------------------------------------------------------
