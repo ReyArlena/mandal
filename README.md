@@ -65,6 +65,14 @@ When the panel's copy of the `mandal` CLI is newer than a server's, the server p
 
 The **Backups** tab sets a nightly schedule for dumping every database on the server (`mariadb-dump` compressed with zstd), how many copies to keep locally and remotely, and optionally an S3-compatible bucket (AWS S3, Backblaze B2, Cloudflare R2, Wasabi, MinIO, Hetzner and others) to upload to. Credentials are written to `/etc/mandal/rclone.conf` on the server, readable only by root; the panel never stores them. Any backup can be restored into a fresh database next to the live one for checking.
 
+### Updates
+
+Ubuntu security updates and PHP patch releases install themselves (unattended-upgrades, no automatic reboot). The **Updates** tab shows everything else: pending packages split into security and other, held packages, whether a reboot is needed and why, the running kernel against the newest installed one, the last automatic update run, each component's installed and latest version (Dragonfly, Bun, Composer and Docker are checked against their releases) and recent package changes. Install security updates, all updates or a single package, update a component or the CLI, and reboot, all from the page. Existing configuration files are always kept.
+
+### Logs
+
+The **Logs** tab reads logs straight from the server: service journals (nginx, PHP-FPM, MariaDB, Dragonfly, Supervisor, Docker, fail2ban, SSH), the kernel and authentication journals, global nginx and PHP-FPM logs, fail2ban, package updates, and for each app its nginx access and error logs, Laravel log (one entry per message, stack traces attached, filterable by level), PHP slow log, worker logs and the latest deployment. Filter by text, limit the lines, and switch on **Tail** to follow a log live. Sources are addressed by name, never by path, so the panel can only read the logs listed.
+
 Once connected, the server's **Inventory** tab shows what is on it (services, PHP versions and pools, nginx sites, databases, Supervisor programs, certificates, firewall rules, Docker, and apps managed by Mandal). Nothing is stored in the panel; it is read from the server on each visit and cached for a few seconds.
 
 The setup link expires after 24 hours and stops working after the first successful connection. The server needs to reach the panel to download the script and the CLI, so a panel that only runs on your own machine cannot use the one-line command; open the script from the dialog instead.
