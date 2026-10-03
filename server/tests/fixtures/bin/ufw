@@ -18,6 +18,20 @@ To                         Action      From
 3306                       ALLOW IN    10.0.0.0/8
 OUT
     ;;
+  "status numbered")
+    cat <<'OUT'
+Status: active
+
+     To                         Action      From
+     --                         ------      ----
+[ 1] 22/tcp                     ALLOW IN    Anywhere                   # SSH
+[ 2] 80/tcp                     ALLOW IN    Anywhere                   # HTTP
+[ 3] 3306                       ALLOW IN    10.0.0.0/8
+[ 4] 22/tcp (v6)                ALLOW IN    Anywhere (v6)              # SSH
+[ 5] 80/tcp (v6)                ALLOW IN    Anywhere (v6)              # HTTP
+[ 6] 443/tcp                    ALLOW IN    Anywhere                   # HTTPS
+OUT
+    ;;
   "show added")
     [[ -n "${MANDAL_FAKE_UFW_EMPTY:-}" ]] && { echo "Added user rules (see 'ufw status' for running firewall):"; exit 0; }
     cat <<'OUT'

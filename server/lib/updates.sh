@@ -52,7 +52,7 @@ updates_cached_fetch() {
 
 # The tag name of the latest GitHub release of owner/repo, without a leading v.
 updates_github_latest() {
-    updates_cached_fetch "github-${1//\//-}.json" "https://api.github.com/repos/$1/releases/latest" | { jq -r '.tag_name // empty' 2> /dev/null || true; } | sed 's/^v//'
+    updates_cached_fetch "github-${1//\//-}.json" "https://api.github.com/repos/$1/releases/latest" | { jq -r '.tag_name // empty' 2> /dev/null || true; } | sed -E 's/^[a-z-]*v//'
 }
 
 updates_composer_latest() {

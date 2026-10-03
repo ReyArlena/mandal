@@ -618,6 +618,7 @@ assert_json "status splits security from other updates" "$status" '(.pending.sec
 assert_json "status lists held packages" "$status" '.pending.held | join(",")' "linux-image-generic"
 assert_json "status finds the newest installed kernel" "$status" '.kernel.newest' "6.8.0-147-generic"
 assert_json "status flags a newer cache release" "$status" '.components[] | select(.id == "cache") | .latest + "|" + (.update_available|tostring)' "9.9.9|false"
+assert_json "status strips the bun tag prefix" "$status" '.components[] | select(.id == "js") | .latest' "1.3.13"
 assert_json "status reads the composer release" "$status" '.components[] | select(.id == "composer") | .latest' "2.9.7"
 assert_json "status reports the last unattended run" "$status" '.unattended.status + "|" + .unattended.last' "ok|2026-10-27 06:00:09"
 assert_json "status reads apt history newest first" "$status" '.history[0].action + " " + .history[0].packages' "Upgrade nginx:amd64 (1.24.0-1, 1.24.0-2)"
@@ -641,6 +642,37 @@ comp="$(cmd_component_update --component=js --dry-run 2>&1)"
 (cmd_component_update --component=mandal --dry-run) > /dev/null 2>&1 && fail "component:update refuses unknown components" || pass
 reboot_out="$(cmd_reboot --dry-run 2>&1)"
 [[ "$reboot_out" == *"systemd-run --quiet --on-active=5"*"systemctl reboot"* ]] && pass || fail "reboot is scheduled a few seconds out"
+
+# ---------------------------------------------------------------------------
+# firewall and php management
+# ---------------------------------------------------------------------------
+
+fw="$(cmd_firewall_list)"
+assert_json "firewall:list parses numbered rules" "$fw" '.rules | length' "6"
+assert_json "firewall:list reads the rule parts" "$fw" '.rules[0] | (.number|tostring) + "|" + .to + "|" + .action + "|" + .from + "|" + .comment' "1|22/tcp|ALLOW IN|Anywhere|SSH"
+assert_json "firewall:list marks v6 rules" "$fw" '.rules[] | select(.number == 4) | .ipv6' "true"
+assert_json "firewall:list reads a source address" "$fw" '.rules[] | select(.number == 3) | .from' "10.0.0.0/8"
+
+allow="$(cmd_firewall_allow --port=8443 --comment='Alt HTTPS' --dry-run 2>&1)"
+[[ "$allow" == *"ufw allow 8443/tcp comment Alt HTTPS"* ]] && pass || fail "firewall:allow adds a port rule"
+allow="$(cmd_firewall_allow --port=3306 --from=10.0.0.5 --dry-run 2>&1)"
+[[ "$allow" == *"ufw allow from 10.0.0.5 to any port 3306 proto tcp"* ]] && pass || fail "firewall:allow restricts by source"
+(cmd_firewall_allow --port='80; rm' --dry-run) > /dev/null 2>&1 && fail "firewall:allow validates the port" || pass
+(cmd_firewall_allow --port=80 --from='evil$(x)' --dry-run) > /dev/null 2>&1 && fail "firewall:allow validates the source" || pass
+(cmd_firewall_delete --number=1 --dry-run) > /dev/null 2>&1 && fail "firewall:delete refuses the SSH rule" || pass
+del="$(cmd_firewall_delete --number=3 --dry-run 2>&1)"
+[[ "$del" == *"ufw --force delete 3"* ]] && pass || fail "firewall:delete removes a rule by number"
+(cmd_firewall_delete --number=abc --dry-run) > /dev/null 2>&1 && fail "firewall:delete validates the number" || pass
+
+assert_json "php:available lists versions with completeness" "$(cmd_php_available)" 'map(select(.version == "8.6")) | .[0].complete' "false"
+assert_json "php:list shows installed versions and their apps" "$(cmd_php_list)" 'map(select(.version == "8.5")) | .[0].apps | sort | join(",")' "api,shop"
+install="$(cmd_php_install --version=8.4 --dry-run 2>&1)"
+[[ "$install" == *"php8.4-fpm"* && "$install" == *"systemctl enable --now --quiet php8.4-fpm"* ]] && pass || fail "php:install installs the packages and starts fpm"
+(cmd_php_remove --version=8.5 --dry-run) > /dev/null 2>&1 && fail "php:remove refuses a version apps use" || pass
+remove="$(php_default_version() { echo 8.5; }; cmd_php_remove --version=8.3 --dry-run 2>&1)"
+[[ "$remove" == *"apt-get remove --purge"*"php8.3-*"* ]] && pass || fail "php:remove purges an unused version"
+default="$(cmd_php_default --version=8.5 --dry-run 2>&1)"
+[[ "$default" == *"update-alternatives --set php /usr/bin/php8.5"* ]] && pass || fail "php:default switches the alternative"
 
 MANDAL_OS_RELEASE="${FIXTURES}/os-release-debian" bash -c 'source "'"${MANDAL_ROOT}"'/lib/core.sh"; mandal_load_commands; load_all_drivers; is_root(){ return 0; }; MANDAL_DRY_RUN=1 provision_apply' > /dev/null 2>&1
 assert_eq "provisioning refuses an unsupported OS" "1" "$?"
