@@ -122,6 +122,9 @@ cmd_app_delete() {
     require_root
     load_all_drivers
     app_exists "$name" || die "app '$name' does not exist"
+    if app_is_panel "$name" && [[ "${MANDAL_FORCE_PANEL:-0}" != "1" ]]; then
+        die 2 "app '$name' hosts the Mandal panel; deleting it would take the panel down (set MANDAL_FORCE_PANEL=1 on the server to override)"
+    fi
 
     local php db
     php="$(conf_get "$(app_conf_path "$name")" PHP || true)"

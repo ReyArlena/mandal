@@ -675,6 +675,28 @@ remove="$(php_default_version() { echo 8.5; }; cmd_php_remove --version=8.3 --dr
 default="$(cmd_php_default --version=8.5 --dry-run 2>&1)"
 [[ "$default" == *"update-alternatives --set php /usr/bin/php8.5"* ]] && pass || fail "php:default switches the alternative"
 
+# ---------------------------------------------------------------------------
+# panel hosting
+# ---------------------------------------------------------------------------
+
+assert_eq "no panel app by default" "" "$(panel_apps)"
+install="$(php_default_version() { echo 8.5; }; cmd_panel_install --domain=panel.example.com --repo=acme/mandal --https --dry-run 2>&1)"
+assert_eq "panel:install dry run completes" "0" "$?"
+[[ "$install" == *"Creating the panel app mandal-panel"* && "$install" == *"write ${MANDAL_HOME_DIR}/mandal-panel/shared/.env"* && "$install" == *"shared/database.sqlite"* && "$install" == *"write ${MANDAL_SUPERVISOR_DIR}/mandal-panel-queue.conf"* ]] && pass || fail "panel:install creates the app, its sqlite file and a queue worker"
+[[ "$(panel_render_env mandal-panel panel.example.com)" == *"DB_CONNECTION=sqlite"*"DB_DATABASE=${MANDAL_HOME_DIR}/mandal-panel/shared/database.sqlite"*"QUEUE_CONNECTION=database"* ]] && pass || fail "the panel env uses sqlite in shared and the database queue"
+(cmd_panel_install --repo=acme/mandal --dry-run) > /dev/null 2>&1 && fail "panel:install requires a domain" || pass
+
+printf 'TYPE=laravel\nPANEL=true\nDOMAIN=panel.example.com\nPHP=8.5\n' > "${MANDAL_APPS_DIR}/mandal-panel.conf"
+assert_eq "panel_apps finds the flagged app" "mandal-panel" "$(panel_apps)"
+server_hosts_panel && pass || fail "server_hosts_panel is true with a panel app"
+assert_json "inventory reports the panel app" "$(inv_mandal)" '(.hosts_panel|tostring) + "|" + .panel_app' "true|mandal-panel"
+(cmd_app_delete --name=mandal-panel --dry-run) > /dev/null 2>&1 && fail "app:delete refuses the panel app" || pass
+forced="$(MANDAL_FORCE_PANEL=1 cmd_app_delete --name=mandal-panel --dry-run 2>&1)"
+[[ "$forced" == *"App mandal-panel removed."* ]] && pass || fail "app:delete can be forced on the panel app"
+(cmd_firewall_delete --number=6 --dry-run) > /dev/null 2>&1 && fail "firewall:delete protects 443 while hosting the panel" || pass
+(cmd_panel_install --domain=x.example.com --repo=acme/mandal --dry-run) > /dev/null 2>&1 && fail "panel:install refuses a second panel app" || pass
+rm -f "${MANDAL_APPS_DIR}/mandal-panel.conf"
+
 MANDAL_OS_RELEASE="${FIXTURES}/os-release-debian" bash -c 'source "'"${MANDAL_ROOT}"'/lib/core.sh"; mandal_load_commands; load_all_drivers; is_root(){ return 0; }; MANDAL_DRY_RUN=1 provision_apply' > /dev/null 2>&1
 assert_eq "provisioning refuses an unsupported OS" "1" "$?"
 

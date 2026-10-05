@@ -20,6 +20,23 @@ app_db_name() {
     printf '%s\n' "${1//-/_}"
 }
 
+# Names of apps flagged as hosting the Mandal panel, one per line.
+panel_apps() {
+    local file
+    for file in "$MANDAL_APPS_DIR"/*.conf; do
+        [[ -f "$file" ]] || continue
+        [[ "$(conf_get "$file" PANEL 2> /dev/null || true)" == "true" ]] && basename "$file" .conf
+    done
+}
+
+app_is_panel() {
+    [[ "$(conf_get "$(app_conf_path "$1")" PANEL 2> /dev/null || true)" == "true" ]]
+}
+
+server_hosts_panel() {
+    [[ -n "$(panel_apps)" ]]
+}
+
 validate_www_mode() {
     local mode
     for mode in "${MANDAL_APP_WWW_MODES[@]}"; do

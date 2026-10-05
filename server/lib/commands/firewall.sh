@@ -94,6 +94,9 @@ cmd_firewall_delete() {
     if [[ "$rule" == *"22/tcp"* || "$rule" == *"OpenSSH"* ]] || { [[ -n "$(ssh_setting port)" ]] && [[ "$rule" == *"$(ssh_setting port)/tcp"* ]]; }; then
         die 2 "refusing to delete the SSH rule ($rule); that would lock the panel out"
     fi
+    if server_hosts_panel && [[ "$rule" == *"80/tcp"* || "$rule" == *"443/tcp"* ]]; then
+        die 2 "refusing to delete the web rule ($rule); this server hosts the panel"
+    fi
     if ! dry_run; then
         with_lock
         audit "firewall:delete $number ($rule)"

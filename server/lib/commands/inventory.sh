@@ -49,10 +49,13 @@ inv_mandal() {
         --arg database "$(driver_for database)" \
         --arg cache "$(driver_for cache)" \
         --arg js "$(driver_for js)" \
+        --arg panel "$(panel_apps | awk 'NR == 1')" \
         '{
             version: $version,
             build: $build,
             provisioned: $provisioned,
+            hosts_panel: ($panel != ""),
+            panel_app: (if $panel == "" then null else $panel end),
             provisioned_at: ($settings.provisioned_at // null),
             drivers: {database: $database, cache: $cache, js: $js}
         }'
