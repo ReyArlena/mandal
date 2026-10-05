@@ -6,6 +6,8 @@ use App\Filament\Resources\Servers\Concerns\ManagesApps;
 use App\Filament\Resources\Servers\ServerResource;
 use App\Mandal\MandalClient;
 use App\Models\Server;
+use App\Models\Webhook;
+use App\Sources\AutoDeploy;
 use App\Ssh\SshException;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
@@ -39,6 +41,11 @@ class ServerApp extends Page
     public array $workers = [];
 
     public ?string $error = null;
+
+    public function webhook(): ?Webhook
+    {
+        return app(AutoDeploy::class)->webhook($this->server(), $this->appName);
+    }
 
     public function mount(int|string $record, string $app): void
     {
@@ -115,6 +122,12 @@ class ServerApp extends Page
     {
         return [
             $this->deployAppAction()->arguments(['name' => $this->appName])->visible(fn (): bool => ! empty($this->appData['repo'])),
+            $this->enableAutoDeployAction()
+                ->arguments(['name' => $this->appName, 'repo' => (string) ($this->appData['repo'] ?? '')])
+                ->visible(fn (): bool => ! empty($this->appData['repo']) && $this->webhook() === null),
+            $this->disableAutoDeployAction()
+                ->arguments(['name' => $this->appName])
+                ->visible(fn (): bool => $this->webhook() !== null),
             $this->requestCertificateAction()->arguments(['name' => $this->appName])->visible(fn (): bool => empty($this->appData['ssl'])),
             $this->editEnvAction()->arguments(['name' => $this->appName]),
             $this->deleteAppAction()->arguments(['name' => $this->appName]),

@@ -156,7 +156,7 @@ class ServerApps extends Page
                 TextInput::make('repo')
                     ->label('GitHub repository')
                     ->placeholder('owner/name')
-                    ->regex('#^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$#'),
+                    ->regex('#^[A-Za-z0-9_][A-Za-z0-9_.-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*$#'),
                 TextInput::make('branch')
                     ->default('main')
                     ->regex('#^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$#'),

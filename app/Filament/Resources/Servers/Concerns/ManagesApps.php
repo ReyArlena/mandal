@@ -12,6 +12,7 @@ use App\Jobs\RunMandalTask;
 use App\Mandal\MandalClient;
 use App\Models\Server;
 use App\Models\Task;
+use App\Sources\AutoDeploy;
 use App\Ssh\CommandResult;
 use App\Ssh\SshException;
 use Filament\Actions\Action;
@@ -21,6 +22,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
+use RuntimeException;
 
 /**
  * The actions that act on one app of a server. Each takes the app name as
@@ -165,6 +167,59 @@ trait ManagesApps
                     "Saved {$name} .env",
                     'Could not save .env',
                 );
+            });
+    }
+
+    public function enableAutoDeployAction(): Action
+    {
+        return Action::make('enableAutoDeploy')
+            ->label('Enable auto deploy')
+            ->icon(Heroicon::OutlinedBolt)
+            ->color('gray')
+            ->requiresConfirmation()
+            ->modalHeading(fn (array $arguments): string => "Deploy {$arguments['name']} on every push?")
+            ->modalDescription('Adds a webhook to the GitHub repository and checks that GitHub can reach this panel. Pushes to the app\'s branch then queue a deploy automatically.')
+            ->modalSubmitActionLabel('Enable')
+            ->action(function (array $arguments, AutoDeploy $autoDeploy): void {
+                $name = $this->appName($arguments);
+                $repo = (string) ($arguments['repo'] ?? '');
+
+                if ($name === null || ! preg_match('#^[A-Za-z0-9_][A-Za-z0-9_.-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*$#', $repo)) {
+                    return;
+                }
+
+                try {
+                    $autoDeploy->enable($this->server(), $name, $repo);
+                } catch (RuntimeException $exception) {
+                    Notification::make()->title('Auto deploy stays off')->body($exception->getMessage())->warning()->persistent()->send();
+
+                    return;
+                }
+
+                Notification::make()->title("Auto deploy enabled for {$name}")->success()->send();
+                $this->appChanged();
+            });
+    }
+
+    public function disableAutoDeployAction(): Action
+    {
+        return Action::make('disableAutoDeploy')
+            ->label('Disable auto deploy')
+            ->icon(Heroicon::OutlinedBolt)
+            ->color('gray')
+            ->requiresConfirmation()
+            ->modalHeading(fn (array $arguments): string => "Stop deploying {$arguments['name']} on push?")
+            ->modalDescription('Removes the webhook from GitHub. Manual deploys keep working.')
+            ->action(function (array $arguments, AutoDeploy $autoDeploy): void {
+                $name = $this->appName($arguments);
+
+                if ($name === null) {
+                    return;
+                }
+
+                $autoDeploy->disable($this->server(), $name);
+                Notification::make()->title("Auto deploy disabled for {$name}")->success()->send();
+                $this->appChanged();
             });
     }
 

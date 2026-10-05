@@ -33,6 +33,23 @@
                     <dd class="col-span-2">{{ $app['php'] ?? '' }}</dd>
                     <dt class="text-gray-500 dark:text-gray-400">Repository</dt>
                     <dd class="col-span-2 font-mono">{{ ($app['repo'] ?? null) ?: 'none' }}@if (! empty($app['repo']))@{{ $app['branch'] ?? 'main' }} ({{ ($app['clone'] ?? 'ssh') === 'https' ? 'https' : 'deploy key' }})@endif</dd>
+                    @if (! empty($app['repo']))
+                        <dt class="text-gray-500 dark:text-gray-400">Auto deploy</dt>
+                        <dd class="col-span-2">
+                            @if ($webhook = $this->webhook())
+                                <x-filament::badge color="success">On</x-filament::badge>
+                                <span class="ml-1 text-xs text-gray-500">
+                                    @if ($webhook->last_delivery_at)
+                                        last delivery {{ $webhook->last_delivery_status }}, {{ $webhook->last_delivery_at->diffForHumans() }}
+                                    @else
+                                        waiting for the first push
+                                    @endif
+                                </span>
+                            @else
+                                <x-filament::badge color="gray">Off</x-filament::badge>
+                            @endif
+                        </dd>
+                    @endif
                     <dt class="text-gray-500 dark:text-gray-400">Database</dt>
                     <dd class="col-span-2 font-mono">{{ ($app['database'] ?? null) ?: 'none' }}</dd>
                     <dt class="text-gray-500 dark:text-gray-400">User / home</dt>

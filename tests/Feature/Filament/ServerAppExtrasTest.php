@@ -8,9 +8,13 @@ use App\Jobs\UpdateCli;
 use App\Mandal\CliArchive;
 use App\Mandal\MandalClient;
 use App\Models\Server;
+use App\Models\Setting;
+use App\Models\SourceCredential;
 use App\Models\Task;
 use App\Models\User;
+use App\Models\Webhook;
 use App\Ssh\SshClient;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\FakeSshClient;
 
@@ -116,4 +120,37 @@ it('uploads the archive and installs it', function () {
         ->and(array_key_first($this->ssh->uploads))->toEndWith('.tar.gz')
         ->and(strlen(collect($this->ssh->uploads)->first()['contents']))->toBeGreaterThan(1000)
         ->and($this->ssh->ran("sudo -n /opt/mandal/bin/mandal cli:update --from='/home/mandal/.mandal/"))->toBeTrue();
+});
+
+it('enables and disables auto deploy from the app page', function () {
+    Setting::set(Setting::PUBLIC_URL, 'https://panel.example.com');
+    SourceCredential::factory()->create();
+    Http::fake([
+        'api.github.com/repos/acme/shop/hooks' => Http::response(['id' => 5], 201),
+        'api.github.com/repos/acme/shop/hooks/5/pings' => function () {
+            Webhook::query()->firstOrFail()->recordDelivery('ping');
+
+            return Http::response(null, 204);
+        },
+        'api.github.com/repos/acme/shop/hooks/5/deliveries?per_page=1' => Http::response([['id' => 1, 'status' => 'OK', 'status_code' => 200, 'event' => 'ping', 'delivered_at' => 'now']]),
+        'api.github.com/repos/acme/shop/hooks/5' => Http::response(null, 204),
+    ]);
+
+    livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'shop'])
+        ->assertActionVisible('enableAutoDeploy')
+        ->assertActionHidden('disableAutoDeploy')
+        ->callAction('enableAutoDeploy')
+        ->assertNotified('Auto deploy enabled for shop')
+        ->assertSee('last delivery ping')
+        ->assertActionVisible('disableAutoDeploy')
+        ->callAction('disableAutoDeploy')
+        ->assertNotified('Auto deploy disabled for shop');
+
+    expect(Webhook::query()->count())->toBe(0);
+});
+
+it('explains why auto deploy stays off', function () {
+    livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'shop'])
+        ->callAction('enableAutoDeploy')
+        ->assertNotified('Auto deploy stays off');
 });

@@ -2,8 +2,14 @@
 
 namespace App\Jobs;
 
+use App\Enums\SourceProviderType;
 use App\Enums\WwwMode;
+use App\Mandal\MandalClient;
+use App\Models\Server;
+use App\Sources\SourceProviders;
+use App\Ssh\CommandResult;
 use InvalidArgumentException;
+use Throwable;
 
 /**
  * Runs `mandal app:create` with the options recorded on the task.
@@ -42,7 +48,7 @@ class CreateApp extends RunMandalTask
             $arguments[] = '--php='.$options['php'];
         }
 
-        if (! empty($options['repo']) && preg_match('#^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$#', (string) $options['repo'])) {
+        if (! empty($options['repo']) && preg_match('#^[A-Za-z0-9_][A-Za-z0-9_.-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*$#', (string) $options['repo'])) {
             $arguments[] = '--repo='.$options['repo'];
         }
 
@@ -59,6 +65,41 @@ class CreateApp extends RunMandalTask
         }
 
         return implode(' ', $arguments);
+    }
+
+    /**
+     * Register the app's deploy key with GitHub when a token is available.
+     */
+    protected function succeeded(Server $server, CommandResult $result): void
+    {
+        $options = $this->task->options ?? [];
+        $repo = (string) ($options['repo'] ?? '');
+
+        if ($repo === '' || ! empty($options['https'])) {
+            return;
+        }
+
+        $provider = app(SourceProviders::class)->for(SourceProviderType::GitHub);
+
+        if ($provider === null) {
+            $this->task->appendOutput("\nNo GitHub token is connected; add the deploy key to {$repo} by hand before deploying.\n");
+
+            return;
+        }
+
+        try {
+            $apps = app(MandalClient::class)->inventory($server, fresh: true)['apps'] ?? [];
+            $key = collect($apps)->firstWhere('name', $options['name'])['deploy_key'] ?? null;
+
+            if (! is_string($key) || $key === '') {
+                throw new \RuntimeException('the server did not report a deploy key');
+            }
+
+            $provider->addDeployKey($repo, "mandal {$options['name']}@{$server->name}", $key);
+            $this->task->appendOutput("\nDeploy key added to {$repo} on GitHub.\n");
+        } catch (Throwable $exception) {
+            $this->task->appendOutput("\nCould not add the deploy key to {$repo}: {$exception->getMessage()}. Add it by hand before deploying.\n");
+        }
     }
 
     public static function isDomain(string $domain): bool
