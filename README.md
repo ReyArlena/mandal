@@ -61,9 +61,19 @@ Each app's page also edits its `.env`, requests a Let's Encrypt certificate (aft
 
 When the panel's copy of the `mandal` CLI is newer than a server's, the server page offers **Update CLI**, which uploads and installs it over SSH.
 
+### GitHub and automatic deploys
+
+Under **Settings**, connect a fine-grained GitHub personal access token with repository permissions *Administration (read and write)*, *Webhooks (read and write)* and *Contents (read)* for the repositories you deploy. Mandal checks the token, stores it encrypted and shows when it expires. From then on, creating an app adds its deploy key to the repository and deleting the app removes it.
+
+To deploy on every push, set the panel's **Public URL** in Settings (it must be reachable from the internet over HTTPS), then use **Enable auto deploy** on the app. Mandal adds a webhook to the repository and asks GitHub to send a test delivery; if that delivery does not reach the panel, the webhook is removed again and the reason is shown. Only pushes to the app's configured branch deploy. Manual deploys always work, so a panel that runs on your own machine simply does without auto deploy.
+
 ### Backups
 
 The **Backups** tab sets a nightly schedule for dumping every database on the server (`mariadb-dump` compressed with zstd), how many copies to keep locally and remotely, and optionally an S3-compatible bucket (AWS S3, Backblaze B2, Cloudflare R2, Wasabi, MinIO, Hetzner and others) to upload to. Credentials are written to `/etc/mandal/rclone.conf` on the server, readable only by root; the panel never stores them. Any backup can be restored into a fresh database next to the live one for checking.
+
+### PHP versions and the firewall
+
+The **PHP** tab lists installed versions, which apps use each one and the CLI default, and installs any version the package source offers with every extension Laravel needs. A version cannot be removed while an app uses it. The **Firewall** tab shows the ufw rules, allows a port (optionally from one address only) and deletes rules, except the SSH rule.
 
 ### Updates
 
