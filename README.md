@@ -30,6 +30,19 @@ On first sign-in you will be asked to set up an authenticator app. Multi-factor 
 
 There is no public registration page. Additional users are created from within the panel.
 
+## Hosting the panel on a managed server
+
+The panel can live on one of the servers it manages. Provision the server from a local copy of the panel first, then on the server run:
+
+```bash
+sudo mandal panel:install --domain=panel.example.com --repo=<owner>/<repo>   # add --https for a public repository
+sudo mandal app:deploy --name=mandal-panel
+sudo mandal app:ssl --name=mandal-panel
+sudo -u mandal-panel -H php /home/mandal-panel/current/artisan db:seed      # first user
+```
+
+The panel app is flagged on the server: it cannot be deleted from the panel, the HTTP and HTTPS firewall rules stay protected, and the panel's SQLite database lives under `shared/` so deploys keep it. Add the server to the hosted panel afterwards with "Connect to an existing Mandal server" so it can manage itself. Keep a backup of `shared/database.sqlite` together with the `APP_KEY` from `shared/.env`.
+
 ## Running in production
 
 Mandal holds credentials for every server it manages, so treat it as the most sensitive application you run.
