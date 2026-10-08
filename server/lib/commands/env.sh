@@ -19,6 +19,11 @@ cmd_app_env() {
     app_exists "$DEPLOY_NAME" || die "app '$DEPLOY_NAME' does not exist"
     home="$(app_home "$DEPLOY_NAME")"
     target="$home/shared/.env"
+    local owner="$DEPLOY_NAME:$DEPLOY_NAME"
+    if [[ "$(conf_get "$(app_conf_path "$DEPLOY_NAME")" TYPE 2> /dev/null || echo laravel)" == "docker" ]]; then
+        target="$(docker_app_dir "$DEPLOY_NAME")/.env"
+        owner="root:root"
+    fi
 
     if [[ -z "$from" ]]; then
         [[ -f "$target" ]] || die "no .env for app '$DEPLOY_NAME'"
@@ -32,9 +37,11 @@ cmd_app_env() {
     fi
     [[ "$(wc -c < "$from")" -le 262144 ]] || die 2 "the new .env is larger than 256 KB"
 
-    with_lock
-    audit "app:env $DEPLOY_NAME write"
-    write_file "$target" 0600 "$DEPLOY_NAME:$DEPLOY_NAME" < "$from"
+    if ! dry_run; then
+        with_lock
+        audit "app:env $DEPLOY_NAME write"
+    fi
+    write_file "$target" 0600 "$owner" < "$from"
     dry_run || rm -f "$from"
     printf 'Updated %s. Restart queue workers or redeploy for the change to reach running processes.\n' "$target"
 }

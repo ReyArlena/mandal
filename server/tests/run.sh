@@ -47,7 +47,7 @@ mkdir -p "${MANDAL_APT_SOURCES_DIR}"
 # Only the fakes and a fixed set of real tools are on PATH, so whatever the
 # host has installed (bun, docker, nginx...) cannot leak into the results.
 mkdir -p "${TMP}/bin"
-for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch base64 sha256sum tar gzip getent stat flock curl printf mkdir cp rm ln env; do
+for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch base64 sha256sum tar gzip getent stat flock curl seq printf mkdir cp rm ln env; do
     if path="$(command -v "$tool" 2> /dev/null)"; then
         ln -s "$path" "${TMP}/bin/${tool}"
     fi
@@ -696,6 +696,43 @@ forced="$(MANDAL_FORCE_PANEL=1 cmd_app_delete --name=mandal-panel --dry-run 2>&1
 (cmd_firewall_delete --number=6 --dry-run) > /dev/null 2>&1 && fail "firewall:delete protects 443 while hosting the panel" || pass
 (cmd_panel_install --domain=x.example.com --repo=acme/mandal --dry-run) > /dev/null 2>&1 && fail "panel:install refuses a second panel app" || pass
 rm -f "${MANDAL_APPS_DIR}/mandal-panel.conf"
+
+# ---------------------------------------------------------------------------
+# docker apps
+# ---------------------------------------------------------------------------
+
+export MANDAL_DOCKER_DIR="${TMP}/srv/docker"
+compose="$(docker_render_compose tool ghcr.io/org/tool:1.2 8080 20000)"
+[[ "$compose" == *'image: ghcr.io/org/tool:1.2'* && "$compose" == *'"127.0.0.1:20000:8080"'* && "$compose" == *'restart: unless-stopped'* ]] && pass || fail "compose binds the container to loopback"
+proxy="$(docker_render_proxy_vhost tool redirect-to-naked 20000 tool.example.com)"
+[[ "$proxy" == *"proxy_pass http://127.0.0.1:20000;"* && "$proxy" == *"server_name www.tool.example.com;"* && "$proxy" == *'proxy_set_header Upgrade $http_upgrade;'* ]] && pass || fail "proxy vhost forwards to the container and handles websockets"
+assert_eq "the first docker port is the start of the range" "20000" "$(docker_next_port)"
+(validate_image 'evil; rm -rf /') 2> /dev/null && fail "validate_image rejects shell characters" || pass
+(validate_image ghcr.io/org/tool:1.2) && pass || fail "validate_image accepts registry paths and tags"
+(validate_env_pair 'bad key=1') 2> /dev/null && fail "validate_env_pair rejects spaces in keys" || pass
+
+dcreate="$(cmd_app_create --name=tool --type=docker --domain=tool.example.com --image=ghcr.io/org/tool:1.2 --port=8080 --env=APP_KEY=abc --env=DEBUG=0 --dry-run 2>&1)"
+assert_eq "docker app:create dry run completes" "0" "$?"
+for marker in "write ${MANDAL_DOCKER_DIR}/tool/compose.yml (0640" "write ${MANDAL_DOCKER_DIR}/tool/.env (0600" "write ${MANDAL_NGINX_DIR}/conf.d/mandal-upgrade.conf" "write ${MANDAL_NGINX_DIR}/sites-available/tool.conf" "docker compose --project-directory ${MANDAL_DOCKER_DIR}/tool --project-name tool pull --quiet" "--project-name tool up -d --remove-orphans" "Docker app tool created on 127.0.0.1:20000 behind nginx."; do
+    if [[ "$dcreate" == *"$marker"* ]]; then pass; else fail "docker app:create mentions: $marker"; fi
+done
+[[ "$dcreate" != *"useradd"* && "$dcreate" != *"CREATE DATABASE"* ]] && pass || fail "docker app:create creates no user or database"
+(cmd_app_create --name=tool --type=docker --domain=tool.example.com --port=8080 --dry-run) > /dev/null 2>&1 && fail "docker app:create requires an image" || pass
+(cmd_app_create --name=tool --type=docker --domain=tool.example.com --image=x --port=99999 --dry-run) > /dev/null 2>&1 && fail "docker app:create validates the port" || pass
+
+printf 'TYPE=docker\nDOMAIN=tool.example.com\nWWW=redirect-to-naked\nIMAGE=ghcr.io/org/tool:1.2\nCONTAINER_PORT=8080\nPORT=20000\n' > "${MANDAL_APPS_DIR}/tool.conf"
+assert_eq "the next docker port skips used ones" "20001" "$(docker_next_port)"
+ddeploy="$(cmd_app_deploy --name=tool --dry-run 2>&1)"
+[[ "$ddeploy" == *"--project-name tool pull --quiet"* && "$ddeploy" == *"up -d --remove-orphans"* && "$ddeploy" != *"git clone"* ]] && pass || fail "docker app:deploy pulls and recreates instead of cloning"
+ddelete="$(cmd_app_delete --name=tool --dry-run 2>&1)"
+[[ "$ddelete" == *"down --volumes --remove-orphans"* && "$ddelete" == *"rm -rf ${MANDAL_DOCKER_DIR}/tool"* && "$ddelete" == *"rm -f ${MANDAL_NGINX_DIR}/sites-enabled/tool.conf"* ]] && pass || fail "docker app:delete removes containers, volumes, files and the vhost"
+dkeep="$(cmd_app_delete --name=tool --keep-files --dry-run 2>&1)"
+[[ "$dkeep" == *"down --remove-orphans"* && "$dkeep" != *"--volumes"* ]] && pass || fail "docker app:delete can keep the volumes"
+printf 'A=1\n' > "${TMP}/tool.env"
+denv="$(cmd_app_env --name=tool --from="${TMP}/tool.env" --dry-run 2>&1)"
+[[ "$denv" == *"write ${MANDAL_DOCKER_DIR}/tool/.env (0600 root:root)"* ]] && pass || fail "app:env targets the docker app's env file" "$(printf '%s' "$denv" | tail -n 3)"
+assert_json "inventory marks docker apps with their port" "$(inv_apps)" 'map(select(.name == "tool")) | .[0] | .type + ":" + .port' "docker:20000"
+rm -f "${MANDAL_APPS_DIR}/tool.conf"
 
 MANDAL_OS_RELEASE="${FIXTURES}/os-release-debian" bash -c 'source "'"${MANDAL_ROOT}"'/lib/core.sh"; mandal_load_commands; load_all_drivers; is_root(){ return 0; }; MANDAL_DRY_RUN=1 provision_apply' > /dev/null 2>&1
 assert_eq "provisioning refuses an unsupported OS" "1" "$?"

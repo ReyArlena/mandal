@@ -11,6 +11,7 @@ app_create_usage() {
 Usage: mandal app:create --name=<name> --domain=<domain> [options]
 
   --name=<name>           2-32 lower-case letters, digits or hyphens
+  --type=laravel|docker   Laravel app (default) or a Docker image behind nginx
   --domain=<domain>       Primary domain (without www)
   --alias=<domain>        Extra domain served by the app (repeatable)
   --www=<mode>            redirect-to-naked (default), redirect-to-www or naked-only
@@ -20,16 +21,23 @@ Usage: mandal app:create --name=<name> --domain=<domain> [options]
   --branch=<branch>       Branch to deploy (default: main)
   --keep-releases=<n>     Releases to keep (default: 5)
   --no-database           Do not create a database and user
+  --image=<image>         Docker apps: the image to run (e.g. ghcr.io/org/app:1.2)
+  --port=<port>           Docker apps: the port the container listens on
+  --env=KEY=value         Docker apps: environment variable (repeatable)
   --dry-run               Print what would happen without doing it
 EOF
 }
 
 cmd_app_create() {
     local name="" domain="" www="redirect-to-naked" php="" repo="" branch="main" keep=5 database=true clone=ssh arg
-    local aliases=()
+    local type="laravel" image="" port="" aliases=() env=()
     for arg in "$@"; do
         case "$arg" in
             --name=*) name="${arg#*=}" ;;
+            --type=*) type="${arg#*=}" ;;
+            --image=*) image="${arg#*=}" ;;
+            --port=*) port="${arg#*=}" ;;
+            --env=*) env+=("${arg#*=}") ;;
             --domain=*) domain="${arg#*=}" ;;
             --alias=*) aliases+=("${arg#*=}") ;;
             --www=*) www="${arg#*=}" ;;
@@ -57,9 +65,41 @@ cmd_app_create() {
     [[ -n "$repo" ]] && validate_repo "$repo"
     validate_branch "$branch"
     [[ "$keep" =~ ^[1-9][0-9]?$ ]] || die 2 "--keep-releases must be between 1 and 99"
+    [[ "$type" =~ ^(laravel|docker)$ ]] || die 2 "--type must be laravel or docker"
 
     require_root
     load_all_drivers
+
+    if [[ "$type" == "docker" ]]; then
+        [[ -n "$image" ]] || die 64 "--image is required for a Docker app"
+        [[ -n "$port" ]] || die 64 "--port is required for a Docker app"
+        validate_image "$image"
+        validate_container_port "$port"
+        local pair
+        for pair in "${env[@]}"; do
+            validate_env_pair "$pair"
+        done
+        has_cmd docker || dry_run || die "Docker is not installed; run mandal provision first"
+        app_exists "$name" && die "app '$name' already exists"
+        if ! dry_run; then
+            with_lock
+            audit "app:create $name (docker)"
+        fi
+        step "Creating Docker app $name"
+        DOCKER_HOST_PORT=""
+        docker_app_create "$name" "$image" "$port" "$www" "$domain" "${aliases[*]:-}" "${env[@]}"
+        app_write_manifest "$name" \
+            "TYPE=docker" \
+            "DOMAIN=$domain" \
+            "ALIASES=${aliases[*]:-}" \
+            "WWW=$www" \
+            "IMAGE=$image" \
+            "CONTAINER_PORT=$port" \
+            "PORT=$DOCKER_HOST_PORT" \
+            "CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        printf '\nDocker app %s created on 127.0.0.1:%s behind nginx.\n' "$name" "${DOCKER_HOST_PORT:-?}"
+        return 0
+    fi
 
     if [[ -z "$php" ]]; then
         php="$(php_default_version)"
@@ -126,13 +166,22 @@ cmd_app_delete() {
         die 2 "app '$name' hosts the Mandal panel; deleting it would take the panel down (set MANDAL_FORCE_PANEL=1 on the server to override)"
     fi
 
-    local php db
+    local php db type
     php="$(conf_get "$(app_conf_path "$name")" PHP || true)"
     db="$(conf_get "$(app_conf_path "$name")" DATABASE || true)"
+    type="$(conf_get "$(app_conf_path "$name")" TYPE || echo laravel)"
 
     if ! dry_run; then
         with_lock
         audit "app:delete $name"
+    fi
+
+    if [[ "$type" == "docker" ]]; then
+        step "Removing Docker app $name"
+        docker_app_delete "$name" "$keep_home"
+        run_cmd rm -f "$(app_conf_path "$name")"
+        printf '\nApp %s removed.\n' "$name"
+        return 0
     fi
 
     step "Removing app $name"

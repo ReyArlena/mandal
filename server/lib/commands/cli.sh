@@ -26,8 +26,10 @@ cmd_cli_update() {
         [[ -x "$tmp/bin/mandal" && -f "$tmp/lib/core.sh" ]] || die "the archive does not contain a mandal CLI"
         bash -n "$tmp/bin/mandal" || die "the new CLI does not parse"
     fi
-    with_lock
-    audit "cli:update $(tr -d '[:space:]' < "$tmp/VERSION" 2> /dev/null || echo unknown)"
+    if ! dry_run; then
+        with_lock
+        audit "cli:update $(tr -d '[:space:]' < "$tmp/VERSION" 2> /dev/null || echo unknown)"
+    fi
     run_cmd chown -R root:root "$tmp"
     run_cmd chmod -R go-w "$tmp"
     run_cmd chmod 0755 "$tmp/bin/mandal" "$tmp"

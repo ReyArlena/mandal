@@ -412,11 +412,16 @@ inv_app() {
         releases="$(find "$home/releases" -mindepth 1 -maxdepth 1 -type d 2> /dev/null | wc -l)"
     fi
     [[ -r "$home/.ssh/id_ed25519.pub" ]] && deploy_key="$(cat "$home/.ssh/id_ed25519.pub")"
+    local containers='[]'
+    if [[ "$(jq -r '.type // "laravel"' <<< "$manifest")" == "docker" ]]; then
+        containers="$(docker_app_status_json "$name")"
+        home="$(docker_app_dir "$name")"
+    fi
     jq -n --arg name "$name" --argjson manifest "$manifest" --arg home "$home" --argjson user_exists "$user_exists" \
-        --arg current "$current" --argjson releases "$releases" --arg deploy_key "$deploy_key" '
+        --arg current "$current" --argjson releases "$releases" --arg deploy_key "$deploy_key" --argjson containers "$containers" '
         {name: $name, home: $home, user_exists: $user_exists}
         + $manifest
-        + {current_release: (if $current == "" then null else $current end), releases: $releases, deploy_key: (if $deploy_key == "" then null else $deploy_key end)}
+        + {current_release: (if $current == "" then null else $current end), releases: $releases, deploy_key: (if $deploy_key == "" then null else $deploy_key end), containers: $containers}
     '
 }
 

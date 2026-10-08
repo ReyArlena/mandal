@@ -38,6 +38,10 @@ cmd_app_deploy() {
         with_lock
         audit "app:deploy $DEPLOY_NAME ${branch:+branch=$branch} ${commit:+commit=$commit}"
     fi
+    if [[ "$(conf_get "$(app_conf_path "$DEPLOY_NAME")" TYPE 2> /dev/null || echo laravel)" == "docker" ]]; then
+        docker_app_deploy "$DEPLOY_NAME"
+        return 0
+    fi
     deploy_run "$DEPLOY_NAME" "$branch" "$commit"
 }
 
@@ -74,8 +78,10 @@ cmd_app_configure() {
     require_root
     app_exists "$DEPLOY_NAME" || die "app '$DEPLOY_NAME' does not exist"
     manifest="$(app_conf_path "$DEPLOY_NAME")"
-    with_lock
-    audit "app:configure $DEPLOY_NAME"
+    if ! dry_run; then
+        with_lock
+        audit "app:configure $DEPLOY_NAME"
+    fi
     for arg in "$@"; do
         case "$arg" in
             --name=*) ;;

@@ -282,7 +282,7 @@ package_version() {
 
 mandal_load_commands() {
     local file
-    for file in "${MANDAL_ROOT}"/lib/system.sh "${MANDAL_ROOT}"/lib/php.sh "${MANDAL_ROOT}"/lib/provision.sh "${MANDAL_ROOT}"/lib/app.sh "${MANDAL_ROOT}"/lib/deploy.sh "${MANDAL_ROOT}"/lib/backup.sh "${MANDAL_ROOT}"/lib/logs.sh "${MANDAL_ROOT}"/lib/updates.sh "${MANDAL_ROOT}"/lib/commands/*.sh; do
+    for file in "${MANDAL_ROOT}"/lib/system.sh "${MANDAL_ROOT}"/lib/php.sh "${MANDAL_ROOT}"/lib/provision.sh "${MANDAL_ROOT}"/lib/app.sh "${MANDAL_ROOT}"/lib/deploy.sh "${MANDAL_ROOT}"/lib/backup.sh "${MANDAL_ROOT}"/lib/logs.sh "${MANDAL_ROOT}"/lib/updates.sh "${MANDAL_ROOT}"/lib/docker.sh "${MANDAL_ROOT}"/lib/commands/*.sh; do
         # shellcheck disable=SC1090
         source "$file"
     done
