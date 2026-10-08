@@ -27,6 +27,10 @@
                             <x-filament::badge color="success" class="ml-2">HTTPS</x-filament::badge>
                         @endif
                     </dd>
+                    @if (! empty($app['panel']))
+                        <dt class="text-gray-500 dark:text-gray-400">Role</dt>
+                        <dd class="col-span-2"><x-filament::badge color="warning">Hosts this panel</x-filament::badge> <span class="ml-1 text-xs text-gray-500">It cannot be deleted from here, and the web firewall rules are protected.</span></dd>
+                    @endif
                     <dt class="text-gray-500 dark:text-gray-400">www</dt>
                     <dd class="col-span-2">{{ $app['www'] ?? 'redirect-to-naked' }}</dd>
                     <dt class="text-gray-500 dark:text-gray-400">PHP</dt>

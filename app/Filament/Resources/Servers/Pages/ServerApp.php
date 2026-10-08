@@ -130,7 +130,7 @@ class ServerApp extends Page
                 ->visible(fn (): bool => $this->webhook() !== null),
             $this->requestCertificateAction()->arguments(['name' => $this->appName])->visible(fn (): bool => empty($this->appData['ssl'])),
             $this->editEnvAction()->arguments(['name' => $this->appName]),
-            $this->deleteAppAction()->arguments(['name' => $this->appName]),
+            $this->deleteAppAction()->arguments(['name' => $this->appName])->visible(fn (): bool => empty($this->appData['panel'])),
         ];
     }
 }

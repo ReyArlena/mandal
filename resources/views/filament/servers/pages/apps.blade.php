@@ -31,6 +31,9 @@
                         @if (! empty($app['repo']))
                             <span class="font-mono text-xs text-gray-500">{{ $app['repo'] }}@{{ $app['branch'] ?? 'main' }}</span>
                         @endif
+                        @if (! empty($app['panel']))
+                            <x-filament::badge color="warning">Panel</x-filament::badge>
+                        @endif
                         @if (! empty($app['ssl']))
                             <x-filament::badge color="success">HTTPS</x-filament::badge>
                         @endif
@@ -42,7 +45,9 @@
                         @if (! empty($app['repo']))
                             {{ ($this->deployAppAction)(['name' => $app['name']])->link() }}
                         @endif
-                        {{ ($this->deleteAppAction)(['name' => $app['name']])->link() }}
+                        @if (empty($app['panel']))
+                            {{ ($this->deleteAppAction)(['name' => $app['name']])->link() }}
+                        @endif
                     </div>
                 </div>
             @empty

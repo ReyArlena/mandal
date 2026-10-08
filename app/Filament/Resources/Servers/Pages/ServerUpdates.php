@@ -81,6 +81,15 @@ class ServerUpdates extends Page
         $this->status = $result->json();
     }
 
+    public function hostsPanel(): bool
+    {
+        try {
+            return (bool) (app(MandalClient::class)->inventory($this->server())['mandal']['hosts_panel'] ?? false);
+        } catch (SshException) {
+            return false;
+        }
+    }
+
     public function cliOutdated(): bool
     {
         $installed = (string) (collect($this->status['components'] ?? [])->firstWhere('id', 'mandal')['installed'] ?? '');
@@ -124,7 +133,9 @@ class ServerUpdates extends Page
                 ->visible(fn (): bool => $this->error === null && ($this->status['reboot_required'] ?? false))
                 ->requiresConfirmation()
                 ->modalHeading('Reboot the server?')
-                ->modalDescription('Every app on this server will be unavailable for a minute or so. Queue workers are restarted by Supervisor afterwards.')
+                ->modalDescription(fn (): string => $this->hostsPanel()
+                    ? 'This server hosts the panel, so the panel itself goes offline for a minute or so along with every app. Queue workers are restarted by Supervisor afterwards.'
+                    : 'Every app on this server will be unavailable for a minute or so. Queue workers are restarted by Supervisor afterwards.')
                 ->modalSubmitActionLabel('Reboot now')
                 ->action(function (): void {
                     try {

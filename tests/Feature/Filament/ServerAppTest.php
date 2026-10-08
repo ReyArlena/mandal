@@ -97,3 +97,13 @@ it('reports a worker command failure', function () {
         ->callAction('removeWorker', arguments: ['name' => 'shop', 'worker' => 'x'])
         ->assertNotified('Could not remove the worker');
 });
+
+it('protects the app that hosts the panel', function () {
+    $inventory = json_decode(file_get_contents(base_path('tests/Fixtures/inventory.json')), true);
+    $inventory['apps'] = array_map(fn (array $app): array => $app['name'] === 'shop' ? $app + ['panel' => 'true'] : $app, $inventory['apps']);
+    $this->ssh->respondWithJson('inventory', $inventory);
+
+    livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'shop'])
+        ->assertSee('Hosts this panel')
+        ->assertActionHidden('deleteApp');
+});
