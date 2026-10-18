@@ -80,13 +80,29 @@ EOF
 prov_nginx() {
     step "nginx"
     apt_install nginx
-    write_file "$MANDAL_NGINX_DIR/conf.d/mandal.conf" 0644 <<'EOF'
+    local settings="" directive
+    for directive in "server_tokens off" "client_max_body_size 64m"; do
+        if nginx_conf_sets "${directive%% *}"; then
+            printf '+ nginx.conf already sets %s; leaving it there\n' "${directive%% *}"
+        else
+            settings+="${directive};"$'\n'
+        fi
+    done
+    settings="${settings%$'\n'}"
+    write_file "$MANDAL_NGINX_DIR/conf.d/mandal.conf" 0644 <<EOF
 # managed-by: mandal
-server_tokens off;
-client_max_body_size 64m;
+${settings}
 EOF
     nginx_default_server
     nginx_check_and_reload
+}
+
+# Whether nginx.conf itself sets a directive. nginx refuses a directive set
+# twice in the same block, so conf.d must not repeat it. Ubuntu 26.04 ships
+# "server_tokens build;", which is why every site mandal writes also sets
+# server_tokens itself.
+nginx_conf_sets() {
+    grep -Eqs "^[[:space:]]*$1[[:space:]]" "$MANDAL_NGINX_DIR/nginx.conf"
 }
 
 # A catch-all that drops requests for unknown host names. Ubuntu ships a

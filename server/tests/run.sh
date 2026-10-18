@@ -343,6 +343,15 @@ assert_eq "dry run completes on Ubuntu 26.04" "0" "$?"
 [[ "$resolute" == *"add-apt-repository"* ]] && fail "no PPA is added for an unsupported release" || pass
 [[ "$resolute" == *"docker.sources"* && "$resolute" == *"+ PHP version: 8.5"* ]] && pass || fail "the rest of provisioning runs on Ubuntu 26.04"
 
+ngx="${TMP}/nginx-resolute"
+mkdir -p "$ngx"
+printf 'http {\n\tserver_tokens build; # Recommended practice is to turn this off\n\t# client_max_body_size 1m;\n}\n' > "${ngx}/nginx.conf"
+MANDAL_NGINX_DIR="$ngx" nginx_conf_sets server_tokens && pass || fail "nginx_conf_sets finds a directive nginx.conf sets"
+MANDAL_NGINX_DIR="$ngx" nginx_conf_sets client_max_body_size && fail "nginx_conf_sets ignores commented-out directives" || pass
+ngx_dry="$(MANDAL_NGINX_DIR="$ngx" MANDAL_DRY_RUN=1 prov_nginx 2>&1)"
+[[ "$ngx_dry" == *"nginx.conf already sets server_tokens; leaving it there"* ]] && pass || fail "conf.d does not repeat a directive nginx.conf sets"
+[[ "$ngx_dry" == *"already sets client_max_body_size"* ]] && fail "conf.d still sets directives nginx.conf leaves out" || pass
+
 skip="$(MANDAL_DRY_RUN=1 MANDAL_SKIP_SSH_HARDENING=1 provision_apply 2>&1)"
 [[ "$skip" == *"skipped (--skip-ssh-hardening)"* ]] && pass || fail "ssh hardening can be skipped"
 
@@ -368,6 +377,7 @@ vhost="$(app_render_vhost shop 8.5 redirect-to-naked shop.example.com shop.examp
 [[ "$vhost" == *"root ${MANDAL_HOME_DIR}/shop/current/public;"* ]] && pass || fail "vhost roots at current/public"
 [[ "$vhost" == *"fastcgi_pass unix:/run/php/php8.5-fpm-shop.sock;"* ]] && pass || fail "vhost uses the app socket"
 [[ "$vhost" == *"access_log /var/log/nginx/shop-access.log;"* ]] && pass || fail "vhost has per-app logs"
+assert_eq "every server block in the vhost hides the nginx version" "2" "$(grep -c 'server_tokens off;' <<< "$vhost")"
 www_vhost="$(app_render_vhost shop 8.5 redirect-to-www shop.example.com)"
 [[ "$www_vhost" == *'return 301 $scheme://www.shop.example.com$request_uri;'* ]] && pass || fail "redirect-to-www sends the naked name to www"
 naked_vhost="$(app_render_vhost shop 8.5 naked-only shop.example.com)"
@@ -717,6 +727,7 @@ compose="$(docker_render_compose tool ghcr.io/org/tool:1.2 8080 20000)"
 [[ "$compose" == *'image: ghcr.io/org/tool:1.2'* && "$compose" == *'"127.0.0.1:20000:8080"'* && "$compose" == *'restart: unless-stopped'* ]] && pass || fail "compose binds the container to loopback"
 proxy="$(docker_render_proxy_vhost tool redirect-to-naked 20000 tool.example.com)"
 [[ "$proxy" == *"proxy_pass http://127.0.0.1:20000;"* && "$proxy" == *"server_name www.tool.example.com;"* && "$proxy" == *'proxy_set_header Upgrade $http_upgrade;'* ]] && pass || fail "proxy vhost forwards to the container and handles websockets"
+assert_eq "every server block in the proxy vhost hides the nginx version" "2" "$(grep -c 'server_tokens off;' <<< "$proxy")"
 assert_eq "the first docker port is the start of the range" "20000" "$(docker_next_port)"
 (validate_image 'evil; rm -rf /') 2> /dev/null && fail "validate_image rejects shell characters" || pass
 (validate_image ghcr.io/org/tool:1.2) && pass || fail "validate_image accepts registry paths and tags"

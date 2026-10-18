@@ -121,6 +121,7 @@ server {
     listen 80;
     listen [::]:80;
     server_name ${redirects};
+    server_tokens off;
     return 301 \$scheme://${target}\$request_uri;
 }
 
@@ -131,6 +132,7 @@ server {
     listen 80;
     listen [::]:80;
     server_name ${primary};
+    server_tokens off;
     root ${home}/current/public;
 
     index index.php;

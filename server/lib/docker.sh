@@ -76,6 +76,7 @@ server {
     listen 80;
     listen [::]:80;
     server_name ${redirects};
+    server_tokens off;
     return 301 \$scheme://${target}\$request_uri;
 }
 
@@ -86,6 +87,7 @@ server {
     listen 80;
     listen [::]:80;
     server_name ${primary};
+    server_tokens off;
 
     access_log /var/log/nginx/${name}-access.log;
     error_log /var/log/nginx/${name}-error.log;
