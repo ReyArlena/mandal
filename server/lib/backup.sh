@@ -52,7 +52,7 @@ validate_schedule() {
 }
 
 validate_db_name() {
-    [[ "$1" =~ ^[a-z0-9_]{1,64}$ ]] || die 2 "invalid database name '$1'"
+    [[ "$1" =~ ^[a-z0-9_]{1,64}$ || "$1" =~ ^[a-z][a-z0-9-]{1,31}-sqlite$ ]] || die 2 "invalid database name '$1'"
 }
 
 # backup_render_conf schedule keep_local keep_remote remote bucket path endpoint region
@@ -143,12 +143,45 @@ backup_prune_remote() {
     done
 }
 
+# Copy a SQLite file (the panel's own database) into the backup set under
+# the name <app>-sqlite, compressed like the dumps.
+backup_sqlite() {
+    local app="$1" source="$2" file
+    file="$MANDAL_BACKUP_DIR/${app}-sqlite/$(backup_file_name "${app}-sqlite")"
+    printf '+ copy %s -> %s\n' "$source" "$file"
+    dry_run && return 0
+    [[ -f "$source" ]] || return 1
+    mkdir -p "$(dirname "$file")"
+    chmod 0700 "$MANDAL_BACKUP_DIR" "$(dirname "$file")"
+    if has_cmd sqlite3; then
+        sqlite3 "$source" ".backup '${file%.zst}.tmp'" || { rm -f "${file%.zst}.tmp"; return 1; }
+    else
+        cp "$source" "${file%.zst}.tmp" || return 1
+    fi
+    zstd -q -T0 --rm "${file%.zst}.tmp" -o "$file" || { rm -f "${file%.zst}.tmp" "$file"; return 1; }
+    chmod 0600 "$file"
+}
+
 # backup_run [db]
 backup_run() {
     local only="${1:-}" keep_local keep_remote db file failed=0 count=0
     backup_configured || die "backups are not configured; run mandal backup:configure first"
     keep_local="$(backup_conf_get KEEP_LOCAL)"
     keep_remote="$(backup_conf_get KEEP_REMOTE)"
+    local app source
+    for app in $(panel_apps); do
+        [[ -z "$only" || "$only" == "${app}-sqlite" ]] || continue
+        count=$((count + 1))
+        source="$(app_home "$app")/shared/database.sqlite"
+        if backup_sqlite "$app" "$source" && backup_upload "${app}-sqlite" "$(find "$MANDAL_BACKUP_DIR/${app}-sqlite" -maxdepth 1 -type f -name '*.sql.zst' 2> /dev/null | sort | tail -n 1)"; then
+            backup_log "ok ${app}-sqlite"
+            backup_prune_local "${app}-sqlite" "${keep_local:-7}"
+            backup_prune_remote "${app}-sqlite" "${keep_remote:-30}"
+        else
+            backup_log "failed ${app}-sqlite"
+            failed=$((failed + 1))
+        fi
+    done
     for db in $(backup_databases); do
         [[ -z "$only" || "$db" == "$only" ]] || continue
         count=$((count + 1))
@@ -167,10 +200,10 @@ backup_run() {
     [[ "$failed" -eq 0 ]] || die "$failed backup(s) failed"
 }
 
-# JSON: local and remote backups per database.
+# JSON: local and remote backups per database (and the panel's sqlite copy).
 backup_list_json() {
     local only="${1:-}" db local_files remote_files
-    for db in $(backup_databases); do
+    for db in $(backup_databases) $(for app in $(panel_apps); do printf '%s-sqlite\n' "$app"; done); do
         [[ -z "$only" || "$db" == "$only" ]] || continue
         local_files="$(find "$MANDAL_BACKUP_DIR/$db" -maxdepth 1 -type f -name "${db}-*.sql.zst" -printf '%f\t%s\t%TY-%Tm-%TdT%TH:%TM:%TSZ\n' 2> /dev/null | sort | json_tsv file size modified | jq 'map(.size |= tonumber)')"
         remote_files='[]'

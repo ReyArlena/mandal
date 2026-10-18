@@ -47,7 +47,7 @@ mkdir -p "${MANDAL_APT_SOURCES_DIR}"
 # Only the fakes and a fixed set of real tools are on PATH, so whatever the
 # host has installed (bun, docker, nginx...) cannot leak into the results.
 mkdir -p "${TMP}/bin"
-for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch base64 sha256sum tar gzip getent stat flock curl seq printf mkdir cp rm ln env; do
+for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch base64 sha256sum tar gzip getent stat flock curl seq xxd printf mkdir cp rm ln env; do
     if path="$(command -v "$tool" 2> /dev/null)"; then
         ln -s "$path" "${TMP}/bin/${tool}"
     fi
@@ -526,7 +526,7 @@ printf 'SCHEDULE=0 3 * * *\nREMOTE=true\nS3_BUCKET=Bad Bucket\nS3_ENDPOINT=https
 (cmd_backup_configure --schedule='rm -rf' --dry-run) > /dev/null 2>&1 && fail "backup:configure validates the schedule" || pass
 
 # a configured server with existing local backups
-cmd_backup_configure --schedule='30 2 * * *' --keep-local=2 --keep-remote=5 --no-remote > /dev/null 2>&1
+(cmd_backup_configure --schedule='30 2 * * *' --keep-local=2 --keep-remote=5 --no-remote) > /dev/null 2>&1
 assert_json "backup status reflects the configuration" "$(backup_status_json)" '.schedule + "|" + (.keep_local|tostring) + "|" + (.remote.enabled|tostring)' "30 2 * * *|2|false"
 mkdir -p "${MANDAL_BACKUP_DIR}/shop"
 for ts in 20261020020000 20261021020000 20261022020000; do printf 'x' > "${MANDAL_BACKUP_DIR}/shop/shop-${ts}.sql.zst"; done
@@ -733,6 +733,37 @@ denv="$(cmd_app_env --name=tool --from="${TMP}/tool.env" --dry-run 2>&1)"
 [[ "$denv" == *"write ${MANDAL_DOCKER_DIR}/tool/.env (0600 root:root)"* ]] && pass || fail "app:env targets the docker app's env file" "$(printf '%s' "$denv" | tail -n 3)"
 assert_json "inventory marks docker apps with their port" "$(inv_apps)" 'map(select(.name == "tool")) | .[0] | .type + ":" + .port' "docker:20000"
 rm -f "${MANDAL_APPS_DIR}/tool.conf"
+
+# ---------------------------------------------------------------------------
+# panel keys
+# ---------------------------------------------------------------------------
+
+export MANDAL_SSH_USER=mandal
+mkdir -p "${MANDAL_HOME_DIR}/mandal/.ssh"
+key1="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ7VGvy2x0pt4Km9vJg5oY5Z4L0mB6x2F6F8pQ3n3Kp1 mandal-panel: first"
+printf '%s\n' "$key1" > "$(key_authorized_file)"
+[[ "$(key_fingerprint "$key1")" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]] && pass || fail "key_fingerprint looks like ssh-keygen output"
+assert_json "key:list reads labelled keys" "$(cmd_key_list)" '.[0].comment + "|" + .[0].type' "mandal-panel: first|ssh-ed25519"
+key2="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGVsc2VzaG9ydHNob3J0c2hvcnRzaG9ydHNob3J0c2hvcg== laptop"
+add="$(cmd_key_add --key="$key2" --name='Laptop panel' 2>&1)"
+assert_eq "key:add completes" "0" "$?"
+assert_eq "key:add appends a labelled line" "1" "$(grep -c 'mandal-panel: Laptop panel$' "$(key_authorized_file)")"
+assert_eq "key:add is idempotent" "This key is already allowed." "$(cmd_key_add --key="$key2" --name='Laptop panel' 2>&1)"
+(cmd_key_add --key='ssh-ed25519 not*base64 x' --name=a) > /dev/null 2>&1 && fail "key:add validates the key" || pass
+(cmd_key_add --key="$key2" --name='bad;name') > /dev/null 2>&1 && fail "key:add validates the name" || pass
+fp2="$(key_fingerprint "$key2")"
+(cmd_key_remove --fingerprint="$fp2") > /dev/null 2>&1
+assert_eq "key:remove drops the key" "0" "$(grep -c 'Laptop panel' "$(key_authorized_file)")"
+(cmd_key_remove --fingerprint="$(key_fingerprint "$key1")") > /dev/null 2>&1 && fail "key:remove refuses the last key" || pass
+rm -rf "${MANDAL_HOME_DIR}/mandal"
+
+# panel sqlite in backups
+printf 'TYPE=laravel\nPANEL=true\nDOMAIN=panel.example.com\nPHP=8.5\n' > "${MANDAL_APPS_DIR}/mandal-panel.conf"
+mkdir -p "${MANDAL_HOME_DIR}/mandal-panel/shared" && printf 'x' > "${MANDAL_HOME_DIR}/mandal-panel/shared/database.sqlite"
+sqlite_run="$(MANDAL_FAKE_DBS=$'mysql\nshop' MANDAL_DRY_RUN=1 backup_run 2>&1)"
+[[ "$sqlite_run" == *"copy ${MANDAL_HOME_DIR}/mandal-panel/shared/database.sqlite -> ${MANDAL_BACKUP_DIR}/mandal-panel-sqlite/mandal-panel-sqlite-"* && "$sqlite_run" == *"ok mandal-panel-sqlite"* ]] && pass || fail "backup:run copies the panel's sqlite file"
+assert_json "backup:list includes the panel sqlite set" "$(MANDAL_FAKE_DBS=$'mysql\nshop' backup_list_json)" 'map(.database) | join(",")' "shop,mandal-panel-sqlite"
+rm -f "${MANDAL_APPS_DIR}/mandal-panel.conf"; rm -rf "${MANDAL_HOME_DIR}/mandal-panel"
 
 MANDAL_OS_RELEASE="${FIXTURES}/os-release-debian" bash -c 'source "'"${MANDAL_ROOT}"'/lib/core.sh"; mandal_load_commands; load_all_drivers; is_root(){ return 0; }; MANDAL_DRY_RUN=1 provision_apply' > /dev/null 2>&1
 assert_eq "provisioning refuses an unsupported OS" "1" "$?"
