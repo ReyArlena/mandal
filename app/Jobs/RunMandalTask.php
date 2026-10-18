@@ -60,6 +60,7 @@ abstract class RunMandalTask implements ShouldBeUnique, ShouldQueue
                 $this->arguments(),
                 onOutput: fn (string $chunk) => $task->appendOutput($chunk),
                 timeoutSeconds: $this->timeout - 60,
+                mergeErrorOutput: true,
             );
         } catch (SshException $exception) {
             $task->appendOutput("\nerror: {$exception->getMessage()}\n");

@@ -24,7 +24,7 @@ it('runs provisioning with the chosen options and records the output', function 
 
     $task->refresh();
 
-    expect($this->ssh->commands)->toBe(['sudo -n /opt/mandal/bin/mandal provision --database=mariadb --cache=dragonfly --js=bun --php=8.4 --skip-ssh-hardening'])
+    expect($this->ssh->commands)->toBe(['sudo -n /opt/mandal/bin/mandal provision --database=mariadb --cache=dragonfly --js=bun --php=8.4 --skip-ssh-hardening 2>&1'])
         ->and($task->status)->toBe(TaskStatus::Succeeded)
         ->and($task->exit_code)->toBe(0)
         ->and($task->output)->toContain('Provisioning finished.')

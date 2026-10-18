@@ -68,14 +68,18 @@ class MandalClient
     /**
      * Run a mandal command and return the raw result.
      *
+     * With $mergeErrorOutput, the server sends stderr through stdout so
+     * warnings and errors stream in order with the rest of the output.
+     *
      * @param  (callable(string): void)|null  $onOutput
      */
-    public function run(Server $server, string $arguments, ?callable $onOutput = null, bool $asRoot = true, int $timeoutSeconds = 60): CommandResult
+    public function run(Server $server, string $arguments, ?callable $onOutput = null, bool $asRoot = true, int $timeoutSeconds = 60, bool $mergeErrorOutput = false): CommandResult
     {
         $connection = $this->ssh->connect($server);
+        $command = $this->command($arguments, $asRoot).($mergeErrorOutput ? ' 2>&1' : '');
 
         try {
-            return $connection->run($this->command($arguments, $asRoot), $onOutput, $timeoutSeconds);
+            return $connection->run($command, $onOutput, $timeoutSeconds);
         } finally {
             $connection->disconnect();
         }
