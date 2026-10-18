@@ -619,6 +619,27 @@ assert_json "laravel entries filter by text" "$(cmd_logs_read --source=laravel:s
 
 assert_json "deploy logs read the newest deployment" "$(cmd_logs_read --source=deploy:shop)" '.lines | join("|")' "deploy two|Deployed shop"
 assert_json "journal sources report absence without journalctl" "$(cmd_logs_read --source=journal:kernel)" '.exists' "false"
+printf 'TYPE=docker\nDOMAIN=tool.example.com\n' > "${MANDAL_ETC}/apps/tool.conf"
+assert_json "docker apps list their containers instead of Laravel logs" "$(logs_sources_json tool)" 'map(.id) | join(",")' "nginx:tool:access,nginx:tool:error,docker:tool"
+assert_json "docker sources report absence without docker" "$(cmd_logs_read --source=docker:tool)" '.exists' "false"
+mkdir -p "${TMP}/docker-bin" "${TMP}/srv/tool"
+touch "${TMP}/srv/tool/compose.yml"
+cat > "${TMP}/docker-bin/docker" <<'DOCKEREOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" > "${MANDAL_FAKE_DOCKER_ARGS}"
+printf 'app-1  | 2026-10-27T04:00:00.000000000Z listening on :80\napp-1  | 2026-10-27T04:00:01.000000000Z GET /health\n'
+DOCKEREOF
+chmod +x "${TMP}/docker-bin/docker"
+export MANDAL_FAKE_DOCKER_ARGS="${TMP}/docker-args"
+docker_read="$(PATH="${TMP}/docker-bin:${PATH}" MANDAL_DOCKER_DIR="${TMP}/srv" cmd_logs_read --source=docker:tool --lines=20)"
+assert_json "docker logs return the container output" "$docker_read" '.lines | length' "2"
+assert_eq "docker logs read the app's compose project" "compose --project-directory ${TMP}/srv/tool --project-name tool logs --no-color --timestamps --tail 20" "$(cat "$MANDAL_FAKE_DOCKER_ARGS")"
+assert_json "docker logs filter by text" "$(PATH="${TMP}/docker-bin:${PATH}" MANDAL_DOCKER_DIR="${TMP}/srv" cmd_logs_read --source=docker:tool --grep=HEALTH)" '.lines | length' "1"
+docker_cursor="$(jq -r .cursor <<< "$docker_read")"
+PATH="${TMP}/docker-bin:${PATH}" MANDAL_DOCKER_DIR="${TMP}/srv" cmd_logs_read --source=docker:tool --after="$docker_cursor" > /dev/null
+assert_eq "docker live tail asks only for output after the cursor" "compose --project-directory ${TMP}/srv/tool --project-name tool logs --no-color --timestamps --since ${docker_cursor}" "$(cat "$MANDAL_FAKE_DOCKER_ARGS")"
+rm -f "${MANDAL_ETC}/apps/tool.conf"
+
 (cmd_logs_read --source=nginx:shop:access --lines=99999) > /dev/null 2>&1 && fail "logs:read caps the line count" || pass
 (cmd_logs_read --source=nginx:shop:access --since=yesterday) > /dev/null 2>&1 && fail "logs:read validates --since" || pass
 

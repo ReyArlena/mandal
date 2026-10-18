@@ -48,7 +48,7 @@
                                 @endforeach
                             </x-filament::input.select>
                         </x-filament::input.wrapper>
-                    @elseif ($this->isJournal())
+                    @elseif ($this->filtersBySince())
                         <x-filament::input.wrapper>
                             <x-filament::input.select wire:model.live="since">
                                 @foreach (\App\Filament\Resources\Servers\Pages\ServerLogs::SINCE_OPTIONS as $value => $label)

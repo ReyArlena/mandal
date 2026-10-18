@@ -261,8 +261,11 @@ class ServerLogs extends Page
         return ($this->result['kind'] ?? '') === 'laravel';
     }
 
-    public function isJournal(): bool
+    /**
+     * Whether the current source can be limited to a recent time window.
+     */
+    public function filtersBySince(): bool
     {
-        return ($this->result['kind'] ?? '') === 'journal';
+        return in_array($this->result['kind'] ?? '', ['journal', 'docker'], true);
     }
 }

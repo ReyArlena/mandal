@@ -54,6 +54,20 @@ it('renders laravel entries with level filtering', function () {
     expect($this->ssh->ran('logs:read --source=laravel:shop --lines=200 --level=error'))->toBeTrue();
 });
 
+it('offers the time filter for container logs', function () {
+    $this->ssh->respondWithJson('logs:sources', [
+        ['id' => 'docker:tool', 'label' => 'tool containers', 'kind' => 'docker', 'target' => 'tool', 'app' => 'tool', 'scope' => 'app'],
+    ]);
+    $this->ssh->respondWithJson('logs:read --source=docker:tool', ['source' => 'docker:tool', 'kind' => 'docker', 'exists' => true, 'lines' => ['app-1  | 2026-10-27T04:00:00.000000000Z listening on :80'], 'cursor' => '2026-10-27T04:00:05.000000000Z', 'truncated' => false]);
+
+    livewire(ServerLogs::class, ['record' => $this->server->getRouteKey()])
+        ->assertSee('listening on :80')
+        ->assertSeeHtml('wire:model.live="since"')
+        ->set('since', '1h');
+
+    expect($this->ssh->ran('logs:read --source=docker:tool --lines=200 --since=1h'))->toBeTrue();
+});
+
 it('appends new lines while tailing', function () {
     $component = livewire(ServerLogs::class, ['record' => $this->server->getRouteKey()])
         ->set('source', 'nginx:shop:access')

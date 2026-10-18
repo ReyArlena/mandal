@@ -102,7 +102,7 @@ Ubuntu security updates and PHP patch releases install themselves (unattended-up
 
 ### Logs
 
-The **Logs** tab reads logs straight from the server: service journals (nginx, PHP-FPM, MariaDB, Dragonfly, Supervisor, Docker, fail2ban, SSH), the kernel and authentication journals, global nginx and PHP-FPM logs, fail2ban, package updates, and for each app its nginx access and error logs, Laravel log (one entry per message, stack traces attached, filterable by level), PHP slow log, worker logs and the latest deployment. Filter by text, limit the lines, and switch on **Tail** to follow a log live. Sources are addressed by name, never by path, so the panel can only read the logs listed.
+The **Logs** tab reads logs straight from the server: service journals (nginx, PHP-FPM, MariaDB, Dragonfly, Supervisor, Docker, fail2ban, SSH), the kernel and authentication journals, global nginx and PHP-FPM logs, fail2ban, package updates, and for each app its nginx access and error logs, Laravel log (one entry per message, stack traces attached, filterable by level), PHP slow log, worker logs and the latest deployment (Docker apps: nginx logs and the container output). Filter by text, limit the lines, and switch on **Tail** to follow a log live. Sources are addressed by name, never by path, so the panel can only read the logs listed.
 
 Once connected, the server's **Inventory** tab shows what is on it (services, PHP versions and pools, nginx sites, databases, Supervisor programs, certificates, firewall rules, Docker, and apps managed by Mandal). Nothing is stored in the panel; it is read from the server on each visit and cached for a few seconds.
 

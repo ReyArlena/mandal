@@ -12,7 +12,8 @@ MANDAL_LOGS_MAX_BYTES="${MANDAL_LOGS_MAX_BYTES:-524288}"
 MANDAL_LOGS_MAX_LINES=5000
 
 # Every source as TSV: id, label, kind, target, app, scope
-# kind: file (target is a path), journal (target is a unit, or "kernel"), laravel (target is a directory)
+# kind: file (target is a path), journal (target is a unit, or "kernel"),
+# laravel and deploys (target is a directory), docker (target is the app)
 logs_sources_tsv() {
     local unit dir version app name worker file
 
@@ -44,6 +45,10 @@ logs_sources_tsv() {
         version="$(conf_get "$file" PHP 2> /dev/null || true)"
         printf 'nginx:%s:access\t%s nginx access\tfile\t%s\t%s\tapp\n' "$app" "$app" "$MANDAL_NGINX_LOG_DIR/${app}-access.log" "$app"
         printf 'nginx:%s:error\t%s nginx error\tfile\t%s\t%s\tapp\n' "$app" "$app" "$MANDAL_NGINX_LOG_DIR/${app}-error.log" "$app"
+        if [[ "$(conf_get "$file" TYPE 2> /dev/null || true)" == docker ]]; then
+            printf 'docker:%s\t%s containers\tdocker\t%s\t%s\tapp\n' "$app" "$app" "$app" "$app"
+            continue
+        fi
         printf 'laravel:%s\t%s Laravel log\tlaravel\t%s\t%s\tapp\n' "$app" "$app" "$(app_home "$app")/shared/storage/logs" "$app"
         [[ -n "$version" ]] && printf 'php:%s:slow\t%s PHP slow requests\tfile\t%s\t%s\tapp\n' "$app" "$app" "$MANDAL_VAR_LOG/php${version}-fpm-${app}-slow.log" "$app"
         for name in "$MANDAL_SUPERVISOR_DIR/${app}"-*.conf; do
@@ -170,6 +175,32 @@ logs_read_deploys() {
     logs_read_file "$file" "$lines" "$pattern" "$after" | jq --arg file "$file" '. + {file: $file}'
 }
 
+# Docker apps: the compose project's container output. The cursor is the
+# time of the previous read, so a live tail asks only for what came after.
+logs_read_docker() {
+    local app="$1" lines="$2" pattern="$3" since="$4" after="$5" dir args=() output cursor
+    dir="$(docker_app_dir "$app")"
+    if ! has_cmd docker || [[ ! -f "$dir/compose.yml" ]]; then
+        jq -n '{exists: false, lines: [], cursor: "", truncated: false}'
+        return 0
+    fi
+    cursor="$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)"
+    args=(logs --no-color --timestamps)
+    if [[ "$after" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z$ ]]; then
+        args+=(--since "$after")
+    else
+        args+=(--tail "$lines")
+        [[ -n "$since" ]] && args+=(--since "$(date -u -d "$since" +%Y-%m-%dT%H:%M:%SZ)")
+    fi
+    output="$(docker compose --project-directory "$dir" --project-name "$app" "${args[@]}" 2>&1 | tail -n "$lines" | head -c "$MANDAL_LOGS_MAX_BYTES" || true)"
+    if [[ -n "$pattern" ]]; then
+        output="$(printf '%s\n' "$output" | { grep -i -F -- "$pattern" || true; })"
+    fi
+    printf '%s\n' "$output" | jq -R -s --arg cursor "$cursor" '
+        {exists: true, lines: (split("\n") | map(select(length > 0))), cursor: $cursor, truncated: false}
+    '
+}
+
 # logs_read id lines grep since level after
 logs_read() {
     local id="$1" lines="$2" pattern="$3" since="$4" level="$5" after="$6" row kind target
@@ -181,6 +212,7 @@ logs_read() {
         journal) logs_read_journal "$target" "$lines" "$pattern" "$since" "$after" ;;
         laravel) logs_read_laravel "$target" "$lines" "$pattern" "$level" "$after" ;;
         deploys) logs_read_deploys "$target" "$lines" "$pattern" "$after" ;;
+        docker) logs_read_docker "$target" "$lines" "$pattern" "$since" "$after" ;;
         *) die "unknown source kind '$kind'" ;;
     esac | jq --arg id "$id" --arg kind "$kind" '. + {source: $id, kind: $kind}'
 }
