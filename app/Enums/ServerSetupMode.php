@@ -23,7 +23,7 @@ enum ServerSetupMode: string implements HasDescription, HasLabel
     public function getDescription(): string
     {
         return match ($this) {
-            self::Fresh => 'A clean Ubuntu 24.04 server. Mandal creates its user, installs its CLI and provisions the stack.',
+            self::Fresh => 'A clean Ubuntu 24.04 or 26.04 server. Mandal creates its user, installs its CLI and provisions the stack.',
             self::Existing => 'A server another Mandal panel already manages. Only this panel\'s key is added; nothing is installed.',
             self::Attach => 'A server with an existing stack. Mandal installs its CLI only and shows what it finds.',
         };

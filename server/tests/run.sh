@@ -42,6 +42,7 @@ export MANDAL_UNATTENDED_LOG="${TMP}/log/unattended-upgrades.log"
 export MANDAL_APT_HISTORY="${TMP}/log/apt/history.log"
 export MANDAL_BOOT_DIR="${TMP}/boot"
 export MANDAL_RELEASE_UPGRADES_CACHE="${TMP}/release-upgrade"
+export MANDAL_PHP_PPA_URL="file://${FIXTURES}/ppa"
 mkdir -p "${MANDAL_APT_SOURCES_DIR}"
 
 # Only the fakes and a fixed set of real tools are on PATH, so whatever the
@@ -266,6 +267,9 @@ assert_json "check counts existing sites" "$check" '.existing.sites' "3"
 assert_json "check notes the enabled stock nginx site" "$check" '.notes | length' "1"
 assert_json "check does not mention cloud-init when absent" "$check" '.notes | map(select(test("cloud-init"))) | length' "0"
 
+check="$(MANDAL_OS_RELEASE="${FIXTURES}/os-release-resolute" provision_check)"
+assert_json "check accepts Ubuntu 26.04" "$check" '.os.supported' "true"
+
 check="$(MANDAL_OS_RELEASE="${FIXTURES}/os-release-debian" provision_check)"
 assert_json "check rejects other distributions" "$check" '.os.supported' "false"
 assert_json "check is not ok on an unsupported OS" "$check" '.ok' "false"
@@ -331,6 +335,13 @@ assert_eq "dry run leaves the system untouched" "" "$(ls "$MANDAL_APT_SOURCES_DI
 assert_eq "dry run writes no provision log" "0" "$(find "$MANDAL_LOG_DIR" -name 'provision-*.log' 2> /dev/null | wc -l)"
 ssh_pos="${dry%%==> SSH hardening*}"
 [[ "$ssh_pos" == *"==> Firewall"* && "$ssh_pos" == *"==> PHP"* ]] && pass || fail "SSH hardening runs after everything else"
+
+[[ "$dry" == *"add-apt-repository -y ppa:ondrej/php"* ]] && pass || fail "dry run adds the PHP PPA when it supports the release"
+resolute="$(MANDAL_OS_RELEASE="${FIXTURES}/os-release-resolute" MANDAL_DRY_RUN=1 provision_apply 2>&1)"
+assert_eq "dry run completes on Ubuntu 26.04" "0" "$?"
+[[ "$resolute" == *"PHP PPA has no packages for resolute yet"* ]] && pass || fail "the PHP PPA is skipped when it has no packages for the release"
+[[ "$resolute" == *"add-apt-repository"* ]] && fail "no PPA is added for an unsupported release" || pass
+[[ "$resolute" == *"docker.sources"* && "$resolute" == *"+ PHP version: 8.5"* ]] && pass || fail "the rest of provisioning runs on Ubuntu 26.04"
 
 skip="$(MANDAL_DRY_RUN=1 MANDAL_SKIP_SSH_HARDENING=1 provision_apply 2>&1)"
 [[ "$skip" == *"skipped (--skip-ssh-hardening)"* ]] && pass || fail "ssh hardening can be skipped"

@@ -8,7 +8,7 @@
 MANDAL_COMMANDS+=("provision|Provision the server, or inspect it first with --check|write")
 
 MANDAL_SUPPORTED_OS_ID="ubuntu"
-MANDAL_SUPPORTED_OS_VERSIONS=("24.04")
+MANDAL_SUPPORTED_OS_VERSIONS=("24.04" "26.04")
 
 cmd_provision() {
     local check=false arg
@@ -60,7 +60,7 @@ provision_apply() {
     report="$(provision_check)"
     os_supported="$(jq -r '.os.supported' <<< "$report")"
     conflicts="$(jq -r '.conflicts | map(.message) | join("\n")' <<< "$report")"
-    [[ "$os_supported" == true ]] || die "unsupported operating system: $(jq -r '.os.name' <<< "$report") (Ubuntu ${MANDAL_SUPPORTED_OS_VERSIONS[*]} is supported)"
+    [[ "$os_supported" == true ]] || die "unsupported operating system: $(jq -r '.os.name' <<< "$report") (supported: Ubuntu ${MANDAL_SUPPORTED_OS_VERSIONS[*]})"
     if [[ -n "$conflicts" ]]; then
         printf 'error: provisioning cannot continue:\n%s\n' "$conflicts" >&2
         exit 1

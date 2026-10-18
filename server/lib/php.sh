@@ -3,6 +3,7 @@
 # PHP versions: discovery through apt, installation and drop-in config.
 
 MANDAL_PHP_PPA="ppa:ondrej/php"
+MANDAL_PHP_PPA_URL="${MANDAL_PHP_PPA_URL:-https://ppa.launchpadcontent.net/ondrej/php/ubuntu}"
 
 # Extension packages every version must provide (php<ver>-<name>).
 MANDAL_PHP_EXTENSIONS=(fpm cli bcmath curl intl mbstring mysql xml zip gd redis sqlite3 readline)
@@ -14,9 +15,19 @@ php_ppa_present() {
     grep -rqs "ondrej/php" "$MANDAL_APT_SOURCES_DIR"/ 2> /dev/null
 }
 
+# The PPA publishes packages for a new Ubuntu release some time after the
+# release itself. Until then, the PHP that Ubuntu ships is used instead.
+php_ppa_supports_release() {
+    curl -fsSL -o /dev/null --retry 2 "${MANDAL_PHP_PPA_URL}/dists/$(os_codename)/Release" 2> /dev/null
+}
+
 php_add_ppa() {
     if php_ppa_present; then
         printf '+ PHP PPA already present\n'
+        return 0
+    fi
+    if ! php_ppa_supports_release; then
+        printf '+ the PHP PPA has no packages for %s yet; using the PHP packages Ubuntu ships\n' "$(os_codename)"
         return 0
     fi
     apt_install software-properties-common
