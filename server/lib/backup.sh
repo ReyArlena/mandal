@@ -205,7 +205,8 @@ backup_list_json() {
     local only="${1:-}" db local_files remote_files
     for db in $(backup_databases) $(for app in $(panel_apps); do printf '%s-sqlite\n' "$app"; done); do
         [[ -z "$only" || "$db" == "$only" ]] || continue
-        local_files="$(find "$MANDAL_BACKUP_DIR/$db" -maxdepth 1 -type f -name "${db}-*.sql.zst" -printf '%f\t%s\t%TY-%Tm-%TdT%TH:%TM:%TSZ\n' 2> /dev/null | sort | json_tsv file size modified | jq 'map(.size |= tonumber)')"
+        # A database that has never been backed up has no directory yet.
+        local_files="$({ find "$MANDAL_BACKUP_DIR/$db" -maxdepth 1 -type f -name "${db}-*.sql.zst" -printf '%f\t%s\t%TY-%Tm-%TdT%TH:%TM:%TSZ\n' 2> /dev/null || true; } | sort | json_tsv file size modified | jq 'map(.size |= tonumber)')"
         remote_files='[]'
         if backup_remote_enabled && ! dry_run; then
             remote_files="$({ rclone_cmd lsjson "$(backup_remote_target)/$db" 2> /dev/null || echo '[]'; } | jq 'map({file: .Name, size: .Size, modified: .ModTime})')"

@@ -551,6 +551,9 @@ printf 'SCHEDULE=0 3 * * *\nREMOTE=true\nS3_BUCKET=Bad Bucket\nS3_ENDPOINT=https
 assert_json "backup status reflects the configuration" "$(backup_status_json)" '.schedule + "|" + (.keep_local|tostring) + "|" + (.remote.enabled|tostring)' "30 2 * * *|2|false"
 mkdir -p "${MANDAL_BACKUP_DIR}/shop"
 for ts in 20261020020000 20261021020000 20261022020000; do printf 'x' > "${MANDAL_BACKUP_DIR}/shop/shop-${ts}.sql.zst"; done
+never_backed_up="$(set -eo pipefail; MANDAL_FAKE_DBS=$'mysql\nfresh' backup_list_json)"
+assert_eq "backup:list succeeds for a database with no backups yet" "0" "$?"
+assert_json "backup:list shows no files for a database never backed up" "$never_backed_up" '.[] | select(.database == "fresh") | .local | length' "0"
 assert_json "backup:list shows local files" "$(MANDAL_FAKE_DBS=$'mysql\nshop' backup_list_json)" '.[0].local | map(.file) | join(",")' "shop-20261020020000.sql.zst,shop-20261021020000.sql.zst,shop-20261022020000.sql.zst"
 MANDAL_DRY_RUN=1 backup_prune_local shop 2 > "${TMP}/prune.out"
 assert_eq "local pruning removes the oldest beyond the limit" "shop-20261020020000.sql.zst" "$(grep -oE 'shop-[0-9]+\.sql\.zst' "${TMP}/prune.out" | tr '\n' ' ' | sed 's/ $//')"
