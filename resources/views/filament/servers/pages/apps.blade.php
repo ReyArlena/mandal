@@ -32,7 +32,7 @@
                             <x-filament::badge color="info">PHP {{ $app['php'] }}</x-filament::badge>
                         @endif
                         @if (! empty($app['repo']))
-                            <span class="font-mono text-xs text-gray-500">{{ $app['repo'] }}@{{ $app['branch'] ?? 'main' }}</span>
+                            <span class="font-mono text-xs text-gray-500">{{ $app['repo'].'@'.($app['branch'] ?? 'main') }}</span>
                         @endif
                         @if (! empty($app['panel']))
                             <x-filament::badge color="warning">Panel</x-filament::badge>

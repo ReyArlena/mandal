@@ -29,6 +29,7 @@ it('lists the apps from the inventory', function () {
         ->assertOk()
         ->assertSee('shop')
         ->assertSee('shop.example.com')
+        ->assertSee('acme/shop@main')
         ->assertSee('api.example.com')
         ->assertSee('Deployed')
         ->assertSee('Not deployed');

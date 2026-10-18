@@ -44,7 +44,7 @@
                     <dt class="text-gray-500 dark:text-gray-400">PHP</dt>
                     <dd class="col-span-2">{{ $app['php'] ?? '' }}</dd>
                     <dt class="text-gray-500 dark:text-gray-400">Repository</dt>
-                    <dd class="col-span-2 font-mono">{{ ($app['repo'] ?? null) ?: 'none' }}@if (! empty($app['repo']))@{{ $app['branch'] ?? 'main' }} ({{ ($app['clone'] ?? 'ssh') === 'https' ? 'https' : 'deploy key' }})@endif</dd>
+                    <dd class="col-span-2 font-mono">{{ ($app['repo'] ?? null) ?: 'none' }}@if (! empty($app['repo'])){{ '@'.($app['branch'] ?? 'main') }} ({{ ($app['clone'] ?? 'ssh') === 'https' ? 'https' : 'deploy key' }})@endif</dd>
                     @if (! empty($app['repo']))
                         <dt class="text-gray-500 dark:text-gray-400">Auto deploy</dt>
                         <dd class="col-span-2">
