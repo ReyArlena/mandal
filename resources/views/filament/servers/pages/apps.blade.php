@@ -25,7 +25,10 @@
                         @endif
                     </div>
                     <div class="flex items-center gap-3">
-                        @if (! empty($app['php']))
+                        @if (($app['type'] ?? 'laravel') === 'docker')
+                            <x-filament::badge color="info">Docker</x-filament::badge>
+                            <span class="font-mono text-xs text-gray-500">{{ $app['image'] ?? '' }}</span>
+                        @elseif (! empty($app['php']))
                             <x-filament::badge color="info">PHP {{ $app['php'] }}</x-filament::badge>
                         @endif
                         @if (! empty($app['repo']))
@@ -37,13 +40,19 @@
                         @if (! empty($app['ssl']))
                             <x-filament::badge color="success">HTTPS</x-filament::badge>
                         @endif
-                        @if (! empty($app['current_release']))
-                            <x-filament::badge color="success">Deployed</x-filament::badge>
+                        @if (($app['type'] ?? 'laravel') === 'docker')
+                            @php $running = collect($app['containers'] ?? [])->where('state', 'running')->count(); @endphp
+                            <x-filament::badge :color="$running > 0 ? 'success' : 'gray'">{{ $running > 0 ? 'Running' : 'Stopped' }}</x-filament::badge>
+                            {{ ($this->deployAppAction)(['name' => $app['name']])->label('Pull and restart')->link() }}
                         @else
-                            <x-filament::badge color="gray">Not deployed</x-filament::badge>
-                        @endif
-                        @if (! empty($app['repo']))
-                            {{ ($this->deployAppAction)(['name' => $app['name']])->link() }}
+                            @if (! empty($app['current_release']))
+                                <x-filament::badge color="success">Deployed</x-filament::badge>
+                            @else
+                                <x-filament::badge color="gray">Not deployed</x-filament::badge>
+                            @endif
+                            @if (! empty($app['repo']))
+                                {{ ($this->deployAppAction)(['name' => $app['name']])->link() }}
+                            @endif
                         @endif
                         @if (empty($app['panel']))
                             {{ ($this->deleteAppAction)(['name' => $app['name']])->link() }}

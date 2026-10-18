@@ -33,6 +33,14 @@
                     @endif
                     <dt class="text-gray-500 dark:text-gray-400">www</dt>
                     <dd class="col-span-2">{{ $app['www'] ?? 'redirect-to-naked' }}</dd>
+                    @if ($this->isDocker())
+                        <dt class="text-gray-500 dark:text-gray-400">Image</dt>
+                        <dd class="col-span-2 font-mono">{{ $app['image'] ?? '' }}</dd>
+                        <dt class="text-gray-500 dark:text-gray-400">Port</dt>
+                        <dd class="col-span-2 font-mono">127.0.0.1:{{ $app['port'] ?? '' }} &rarr; {{ $app['container_port'] ?? '' }} in the container</dd>
+                        <dt class="text-gray-500 dark:text-gray-400">Project</dt>
+                        <dd class="col-span-2 font-mono">{{ $app['home'] ?? '' }}</dd>
+                    @else
                     <dt class="text-gray-500 dark:text-gray-400">PHP</dt>
                     <dd class="col-span-2">{{ $app['php'] ?? '' }}</dd>
                     <dt class="text-gray-500 dark:text-gray-400">Repository</dt>
@@ -58,6 +66,7 @@
                     <dd class="col-span-2 font-mono">{{ ($app['database'] ?? null) ?: 'none' }}</dd>
                     <dt class="text-gray-500 dark:text-gray-400">User / home</dt>
                     <dd class="col-span-2 font-mono">{{ $app['name'] }} / {{ $app['home'] ?? '' }}</dd>
+                    @endif
                     <dt class="text-gray-500 dark:text-gray-400">Created</dt>
                     <dd class="col-span-2">{{ $app['created_at'] ?? '' }}</dd>
                 </dl>
@@ -69,6 +78,21 @@
                 @endif
             </x-filament::section>
 
+            @if ($this->isDocker())
+            <x-filament::section heading="Containers">
+                @forelse ($app['containers'] ?? [] as $container)
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 py-2 text-sm last:border-0 dark:border-white/10">
+                        <span class="font-mono">{{ $container['name'] }}</span>
+                        <span class="flex items-center gap-3 text-xs text-gray-500">
+                            <span class="font-mono">{{ $container['image'] }}</span>
+                            <x-filament::badge :color="($container['state'] ?? '') === 'running' ? 'success' : 'danger'">{{ $container['status'] ?? $container['state'] ?? '' }}</x-filament::badge>
+                        </span>
+                    </div>
+                @empty
+                    <p class="text-sm text-gray-500">No containers are running for this app.</p>
+                @endforelse
+            </x-filament::section>
+            @else
             <x-filament::section heading="Releases" :description="($app['current_release'] ?? null) ? 'Current: ' . $app['current_release'] : 'Not deployed yet'">
                 @forelse ($this->releases as $release)
                     <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 py-2 text-sm last:border-0 dark:border-white/10">
@@ -94,6 +118,9 @@
                 @endforelse
             </x-filament::section>
 
+            @endif
+
+            @unless ($this->isDocker())
             <x-filament::section heading="Workers" description="Supervisor programs running artisan commands as the app user." class="lg:col-span-2">
                 <div class="mb-3 flex gap-2">
                     {{ ($this->addWorkerAction)(['name' => $app['name']]) }}
@@ -116,6 +143,7 @@
                     <p class="text-sm text-gray-500">No workers. Queue jobs will not be processed until one is added.</p>
                 @endforelse
             </x-filament::section>
+            @endunless
         </div>
     @endif
 </x-filament-panels::page>

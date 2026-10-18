@@ -44,6 +44,10 @@ class CreateApp extends RunMandalTask
             }
         }
 
+        if (($options['type'] ?? 'laravel') === 'docker') {
+            return implode(' ', [...$arguments, ...$this->dockerArguments($options)]);
+        }
+
         if (! empty($options['php']) && preg_match('/^\d+\.\d+$/', (string) $options['php'])) {
             $arguments[] = '--php='.$options['php'];
         }
@@ -68,6 +72,34 @@ class CreateApp extends RunMandalTask
     }
 
     /**
+     * @param  array<string, mixed>  $options
+     * @return list<string>
+     */
+    private function dockerArguments(array $options): array
+    {
+        $image = (string) ($options['image'] ?? '');
+        $port = (string) ($options['port'] ?? '');
+
+        if (! preg_match('#^[a-z0-9]([a-z0-9._/-]*[a-z0-9])?(:[A-Za-z0-9._-]{1,128})?(@sha256:[0-9a-f]{64})?$#', $image)) {
+            throw new InvalidArgumentException("Invalid image [{$image}].");
+        }
+
+        if (! preg_match('/^\d{1,5}$/', $port) || (int) $port < 1 || (int) $port > 65535) {
+            throw new InvalidArgumentException("Invalid container port [{$port}].");
+        }
+
+        $arguments = ['--type=docker', '--image='.$image, '--port='.$port];
+
+        foreach ((array) ($options['env'] ?? []) as $pair) {
+            if (is_string($pair) && preg_match('/^[A-Z][A-Z0-9_]*=[^\n]*$/', $pair)) {
+                $arguments[] = '--env='.escapeshellarg($pair);
+            }
+        }
+
+        return $arguments;
+    }
+
+    /**
      * Register the app's deploy key with GitHub when a token is available.
      */
     protected function succeeded(Server $server, CommandResult $result): void
@@ -75,7 +107,7 @@ class CreateApp extends RunMandalTask
         $options = $this->task->options ?? [];
         $repo = (string) ($options['repo'] ?? '');
 
-        if ($repo === '' || ! empty($options['https'])) {
+        if ($repo === '' || ! empty($options['https']) || ($options['type'] ?? 'laravel') === 'docker') {
             return;
         }
 

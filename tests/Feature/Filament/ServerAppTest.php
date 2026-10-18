@@ -107,3 +107,20 @@ it('protects the app that hosts the panel', function () {
         ->assertSee('Hosts this panel')
         ->assertActionHidden('deleteApp');
 });
+
+it('shows a docker app with its containers instead of releases', function () {
+    $inventory = json_decode(file_get_contents(base_path('tests/Fixtures/inventory.json')), true);
+    $inventory['apps'][] = ['name' => 'tool', 'type' => 'docker', 'domain' => 'tool.example.com', 'image' => 'ghcr.io/org/tool:1.2', 'port' => '20000', 'container_port' => '8080', 'home' => '/srv/docker/tool', 'containers' => [['name' => 'tool-app-1', 'image' => 'ghcr.io/org/tool:1.2', 'state' => 'running', 'status' => 'Up 2 hours']]];
+    $this->ssh->respondWithJson('inventory', $inventory);
+
+    livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'tool'])
+        ->assertOk()
+        ->assertSee('ghcr.io/org/tool:1.2')
+        ->assertSee('127.0.0.1:20000')
+        ->assertSee('tool-app-1')
+        ->assertSee('Up 2 hours')
+        ->assertDontSee('Workers')
+        ->assertActionVisible('deployApp');
+
+    expect($this->ssh->ran('app:releases --name=tool'))->toBeFalse();
+});

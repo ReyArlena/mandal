@@ -155,3 +155,34 @@ it('builds deploy and rollback arguments only from safe values', function () {
         ->and((new RollbackApp($rollback))->arguments())->toBe('app:rollback --name=shop --release=20261027110000')
         ->and((new RollbackApp($badRelease))->arguments())->toBe('app:rollback --name=shop');
 });
+
+it('queues a docker app with its image, port and environment', function () {
+    Queue::fake();
+
+    livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
+        ->callAction('createApp', data: [
+            'type' => 'docker',
+            'name' => 'tool',
+            'domain' => 'tool.example.com',
+            'www' => 'naked-only',
+            'aliases' => [],
+            'image' => 'ghcr.io/org/tool:1.2',
+            'port' => 8080,
+            'env' => "APP_KEY=abc\n\nDEBUG=0",
+        ])
+        ->assertHasNoActionErrors()
+        ->assertNotified('Creating tool');
+
+    expect((new CreateApp($this->server->tasks()->sole()))->arguments())
+        ->toBe("app:create --name=tool --domain=tool.example.com --www=naked-only --type=docker --image=ghcr.io/org/tool:1.2 --port=8080 --env='APP_KEY=abc' --env='DEBUG=0'");
+});
+
+it('rejects a docker app with a bad image or port', function () {
+    Queue::fake();
+
+    livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
+        ->callAction('createApp', data: ['type' => 'docker', 'name' => 'tool', 'domain' => 'tool.example.com', 'www' => 'naked-only', 'image' => 'evil; rm', 'port' => 99999])
+        ->assertHasActionErrors(['image', 'port']);
+
+    Queue::assertNothingPushed();
+});

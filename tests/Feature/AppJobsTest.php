@@ -58,3 +58,11 @@ it('runs the command and clears the inventory cache afterwards', function () {
         ->and($task->fresh()->output)->toContain('App blog created.')
         ->and(array_filter($ssh->commands, fn (string $c): bool => str_contains($c, 'inventory')))->toHaveCount(2);
 });
+
+it('drops unsafe docker environment pairs and refuses a bad image', function () {
+    $task = Task::factory()->create(['options' => ['type' => 'docker', 'name' => 'tool', 'domain' => 'tool.example.com', 'image' => 'nginx:1.27', 'port' => '80', 'env' => ['OK=1', 'bad key=2', '$(x)=3']]]);
+    $bad = Task::factory()->create(['options' => ['type' => 'docker', 'name' => 'tool', 'domain' => 'tool.example.com', 'image' => 'evil;rm', 'port' => '80']]);
+
+    expect((new CreateApp($task))->arguments())->toBe("app:create --name=tool --domain=tool.example.com --www=redirect-to-naked --type=docker --image=nginx:1.27 --port=80 --env='OK=1'")
+        ->and(fn () => (new CreateApp($bad))->arguments())->toThrow(InvalidArgumentException::class);
+});

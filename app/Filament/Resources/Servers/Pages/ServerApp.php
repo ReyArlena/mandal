@@ -91,6 +91,13 @@ class ServerApp extends Page
                 return;
             }
 
+            if ($this->isDocker()) {
+                $this->releases = [];
+                $this->workers = [];
+
+                return;
+            }
+
             $releases = $mandal->run($server, 'app:releases --name='.$this->appName, timeoutSeconds: 30);
             $this->releases = $releases->successful() ? array_reverse($releases->json()) : [];
 
@@ -99,6 +106,11 @@ class ServerApp extends Page
         } catch (SshException $exception) {
             $this->error = $exception->getMessage();
         }
+    }
+
+    public function isDocker(): bool
+    {
+        return ($this->appData['type'] ?? 'laravel') === 'docker';
     }
 
     public function getTitle(): string
@@ -121,7 +133,10 @@ class ServerApp extends Page
     protected function getHeaderActions(): array
     {
         return [
-            $this->deployAppAction()->arguments(['name' => $this->appName])->visible(fn (): bool => ! empty($this->appData['repo'])),
+            $this->deployAppAction()
+                ->arguments(['name' => $this->appName])
+                ->label(fn (): string => $this->isDocker() ? 'Pull and restart' : 'Deploy')
+                ->visible(fn (): bool => $this->isDocker() || ! empty($this->appData['repo'])),
             $this->enableAutoDeployAction()
                 ->arguments(['name' => $this->appName, 'repo' => (string) ($this->appData['repo'] ?? '')])
                 ->visible(fn (): bool => ! empty($this->appData['repo']) && $this->webhook() === null),

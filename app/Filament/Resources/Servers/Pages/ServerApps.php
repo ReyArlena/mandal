@@ -16,6 +16,7 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
@@ -123,10 +124,16 @@ class ServerApps extends Page
             ->label('New app')
             ->icon(Heroicon::OutlinedPlus)
             ->visible(fn (): bool => $this->error === null)
-            ->modalHeading('Create a Laravel app')
-            ->modalDescription('Creates the system user, PHP-FPM pool, nginx site, database and a production .env. Deploying the code comes next.')
+            ->modalHeading('Create an app')
+            ->modalDescription('A Laravel app gets a system user, PHP-FPM pool, nginx site, database and a production .env; deploying the code comes next. A Docker app runs an image behind nginx.')
             ->modalSubmitActionLabel('Create app')
             ->schema([
+                Select::make('type')
+                    ->options(['laravel' => 'Laravel app', 'docker' => 'Docker image'])
+                    ->default('laravel')
+                    ->required()
+                    ->live()
+                    ->selectablePlaceholder(false),
                 TextInput::make('name')
                     ->required()
                     ->regex(self::APP_NAME_PATTERN)
@@ -151,33 +158,74 @@ class ServerApps extends Page
                     ->label('PHP version')
                     ->options(array_combine($this->phpVersions, $this->phpVersions))
                     ->default($this->defaultPhp)
-                    ->required()
+                    ->requiredIf('type', 'laravel')
+                    ->visible(fn (callable $get): bool => $get('type') !== 'docker')
                     ->selectablePlaceholder(false),
                 TextInput::make('repo')
                     ->label('GitHub repository')
                     ->placeholder('owner/name')
-                    ->regex('#^[A-Za-z0-9_][A-Za-z0-9_.-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*$#'),
+                    ->regex('#^[A-Za-z0-9_][A-Za-z0-9_.-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*$#')
+                    ->visible(fn (callable $get): bool => $get('type') !== 'docker'),
                 TextInput::make('branch')
                     ->default('main')
-                    ->regex('#^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$#'),
+                    ->regex('#^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$#')
+                    ->visible(fn (callable $get): bool => $get('type') !== 'docker'),
                 Checkbox::make('https')
-                    ->label('Public repository: clone over HTTPS without a deploy key'),
+                    ->label('Public repository: clone over HTTPS without a deploy key')
+                    ->visible(fn (callable $get): bool => $get('type') !== 'docker'),
                 Checkbox::make('database')
                     ->label('Create a database and user')
-                    ->default(true),
+                    ->default(true)
+                    ->visible(fn (callable $get): bool => $get('type') !== 'docker'),
+                TextInput::make('image')
+                    ->label('Image')
+                    ->placeholder('ghcr.io/org/app:1.2')
+                    ->requiredIf('type', 'docker')
+                    ->regex('#^[a-z0-9]([a-z0-9._/-]*[a-z0-9])?(:[A-Za-z0-9._-]{1,128})?(@sha256:[0-9a-f]{64})?$#')
+                    ->visible(fn (callable $get): bool => $get('type') === 'docker'),
+                TextInput::make('port')
+                    ->label('Container port')
+                    ->numeric()
+                    ->integer()
+                    ->minValue(1)
+                    ->maxValue(65535)
+                    ->requiredIf('type', 'docker')
+                    ->helperText('The port the image listens on. nginx proxies to it; nothing is exposed directly.')
+                    ->visible(fn (callable $get): bool => $get('type') === 'docker'),
+                Textarea::make('env')
+                    ->label('Environment variables')
+                    ->rows(5)
+                    ->placeholder("KEY=value\nOTHER=value")
+                    ->visible(fn (callable $get): bool => $get('type') === 'docker'),
             ])
             ->action(function (array $data): void {
-                $this->queueTask(TaskType::CreateApp, CreateApp::class, [
+                $type = ($data['type'] ?? 'laravel') === 'docker' ? 'docker' : 'laravel';
+
+                $options = [
+                    'type' => $type,
                     'name' => $data['name'],
                     'domain' => $data['domain'],
                     'www' => $data['www'],
                     'aliases' => array_values($data['aliases'] ?? []),
-                    'php' => $data['php'],
-                    'repo' => $data['repo'] ?: null,
-                    'branch' => $data['branch'] ?: 'main',
-                    'https' => (bool) ($data['https'] ?? false),
-                    'database' => (bool) ($data['database'] ?? true),
-                ], "Creating {$data['name']}");
+                ];
+
+                if ($type === 'docker') {
+                    $options += [
+                        'image' => $data['image'],
+                        'port' => (string) $data['port'],
+                        'env' => array_values(array_filter(array_map('trim', preg_split('/\R/', (string) ($data['env'] ?? '')) ?: []))),
+                    ];
+                } else {
+                    $options += [
+                        'php' => $data['php'],
+                        'repo' => $data['repo'] ?: null,
+                        'branch' => $data['branch'] ?: 'main',
+                        'https' => (bool) ($data['https'] ?? false),
+                        'database' => (bool) ($data['database'] ?? true),
+                    ];
+                }
+
+                $this->queueTask(TaskType::CreateApp, CreateApp::class, $options, "Creating {$data['name']}");
             });
     }
 }
