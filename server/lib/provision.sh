@@ -71,7 +71,10 @@ prov_sysctl() {
 vm.swappiness = 10
 net.core.somaxconn = 1024
 EOF
-    run_cmd sysctl -q --system
+    # Only this file is applied: reloading every sysctl.d file also re-applies
+    # distribution defaults, and a key the kernel refuses (common in
+    # containers) would fail the whole step. Such keys apply at the next boot.
+    run_cmd sysctl -q -p /etc/sysctl.d/60-mandal.conf || warn "some kernel parameters could not be applied now; they apply at the next boot"
 }
 
 prov_nginx() {
