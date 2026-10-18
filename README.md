@@ -66,6 +66,10 @@ Each server gets its own SSH key pair when it is added; the private key is store
 
 4. Choose **Provision**. Mandal installs and hardens the stack in the background (nginx, PHP, Composer, MariaDB, Dragonfly, Bun, Supervisor, Certbot, Docker, firewall, fail2ban, automatic security updates) and shows the output live under the server's **Tasks** tab. A queue worker must be running for this (`php artisan queue:work`, or `composer run dev` locally).
 
+### Several panels, one server
+
+Everything Mandal knows about a server lives on the server, so any Mandal panel with an accepted key can manage it. To let a second panel in, add that panel's public key (shown on its server page) with **Grant access** on the first panel, or on the server with `sudo mandal key:add --name="Laptop panel" --key="ssh-ed25519 ..."`. Keys are labelled and can be removed again with `mandal key:remove`; the last key can never be removed.
+
 ### Apps
 
 The **Apps** tab creates Laravel apps on a provisioned server. Each app gets its own system user and home (`/home/<app>`), a PHP-FPM pool running as that user, an nginx site with per-app logs, a database and user, a production `.env` under `shared/`, the scheduler crontab, a deploy key and an editable `deploy.sh`. Add the deploy key to the GitHub repository (read-only is enough), then use **Deploy**: the branch is cloned into `releases/<timestamp>`, `deploy.sh` runs (Composer, Bun build, migrations, `optimize`), and the `current` symlink switches only when it succeeds. **Roll back** returns to the previous release, or to any release listed on the app's page.
