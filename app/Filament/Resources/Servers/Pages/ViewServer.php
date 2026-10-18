@@ -21,6 +21,7 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
@@ -37,6 +38,7 @@ class ViewServer extends ViewRecord
             $this->setupCommandAction(),
             $this->testConnectionAction(),
             $this->provisionAction(),
+            $this->grantAccessAction(),
             $this->updateCliAction(),
             EditAction::make(),
             DeleteAction::make(),
@@ -140,6 +142,52 @@ class ViewServer extends ViewRecord
             })
             ->modalSubmitAction(false)
             ->modalCancelActionLabel('Close');
+    }
+
+    /**
+     * Lets another Mandal panel manage this server by adding its public key.
+     */
+    private function grantAccessAction(): Action
+    {
+        return Action::make('grantAccess')
+            ->label('Grant access')
+            ->icon(Heroicon::OutlinedKey)
+            ->color('gray')
+            ->visible(fn (Server $record): bool => $record->connected_at !== null)
+            ->modalHeading('Allow another panel to manage this server')
+            ->modalDescription('Paste the public key shown on the other panel\'s server page. It is added to the mandal user\'s authorized keys with the label, so it can be removed again later.')
+            ->modalSubmitActionLabel('Allow')
+            ->schema([
+                TextInput::make('name')
+                    ->label('Label')
+                    ->required()
+                    ->regex('/^[A-Za-z0-9 _.()-]{1,64}$/')
+                    ->placeholder('Laptop panel'),
+                Textarea::make('key')
+                    ->label('Public key')
+                    ->required()
+                    ->rows(3)
+                    ->regex('#^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)) [A-Za-z0-9+/=]+( .*)?$#'),
+            ])
+            ->action(function (Server $record, array $data, MandalClient $mandal): void {
+                $key = implode(' ', array_slice(preg_split('/\s+/', trim((string) $data['key'])) ?: [], 0, 2));
+
+                try {
+                    $result = $mandal->run($record, 'key:add --name='.escapeshellarg((string) $data['name']).' --key='.escapeshellarg($key), timeoutSeconds: 30);
+                } catch (SshException $exception) {
+                    Notification::make()->title('Could not add the key')->body($exception->getMessage())->danger()->send();
+
+                    return;
+                }
+
+                if ($result->failed()) {
+                    Notification::make()->title('Could not add the key')->body(trim($result->errorOutput ?: $result->output))->danger()->send();
+
+                    return;
+                }
+
+                Notification::make()->title('Access granted')->body(trim($result->output))->success()->send();
+            });
     }
 
     /**

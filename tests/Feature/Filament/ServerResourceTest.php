@@ -119,3 +119,25 @@ it('reports a failed connection without pinning anything', function () {
 
     expect($server->fresh()->host_key)->toBeNull();
 });
+
+it('grants another panel access through key:add', function () {
+    $server = Server::factory()->withPinnedHostKey()->create();
+    $this->ssh->respondTo('key:add', "Added key SHA256:abc for \"Laptop panel\".\n");
+
+    livewire(ViewServer::class, ['record' => $server->getRouteKey()])
+        ->callAction('grantAccess', data: ['name' => 'Laptop panel', 'key' => "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ7VGvy2x0pt4Km9vJg5oY5Z4L0mB6x2F6F8pQ3n3Kp1 some comment here\n"])
+        ->assertHasNoActionErrors()
+        ->assertNotified('Access granted');
+
+    expect($this->ssh->ran("key:add --name='Laptop panel' --key='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ7VGvy2x0pt4Km9vJg5oY5Z4L0mB6x2F6F8pQ3n3Kp1'"))->toBeTrue();
+});
+
+it('rejects a malformed key when granting access', function () {
+    $server = Server::factory()->withPinnedHostKey()->create();
+
+    livewire(ViewServer::class, ['record' => $server->getRouteKey()])
+        ->callAction('grantAccess', data: ['name' => 'x', 'key' => 'not a key'])
+        ->assertHasActionErrors(['key']);
+
+    expect($this->ssh->ran('key:add'))->toBeFalse();
+});
