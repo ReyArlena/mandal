@@ -80,6 +80,10 @@ Under **Settings**, connect a fine-grained GitHub personal access token with rep
 
 To deploy on every push, set the panel's **Public URL** in Settings (it must be reachable from the internet over HTTPS), then use **Enable auto deploy** on the app. Mandal adds a webhook to the repository and asks GitHub to send a test delivery; if that delivery does not reach the panel, the webhook is removed again and the reason is shown. Only pushes to the app's configured branch deploy. Manual deploys always work, so a panel that runs on your own machine simply does without auto deploy.
 
+### Docker apps
+
+Choose **Docker image** in the New app form for anything that is not Laravel: give it an image, the port the container listens on and any environment variables. Mandal writes a compose project to `/srv/docker/<app>`, binds the container to `127.0.0.1` on a port it picks (Docker publishes straight past the firewall, so nothing is exposed directly) and puts an nginx site in front with websocket support. **Pull and restart** fetches the latest image; SSL and the environment editor work as for Laravel apps.
+
 ### Backups
 
 The **Backups** tab sets a nightly schedule for dumping every database on the server (`mariadb-dump` compressed with zstd), how many copies to keep locally and remotely, and optionally an S3-compatible bucket (AWS S3, Backblaze B2, Cloudflare R2, Wasabi, MinIO, Hetzner and others) to upload to. Credentials are written to `/etc/mandal/rclone.conf` on the server, readable only by root; the panel never stores them. Any backup can be restored into a fresh database next to the live one for checking.
