@@ -295,6 +295,9 @@ prov_firewall() {
     else
         run_cmd ufw --force enable
     fi
+    # A freshly installed ufw has its boot unit enabled but not started, so
+    # systemd (and the inventory) would report the firewall as inactive.
+    service_enable_now ufw
 }
 
 # Applied last: by the time this runs the panel has already signed in with
