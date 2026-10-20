@@ -6,3 +6,5 @@ services:
   - dragonfly:
       preset: dragonfly
   - mailpit
+workers:
+  - queue
