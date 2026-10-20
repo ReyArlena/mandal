@@ -28,6 +28,7 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('')
             ->brandName(config('app.name'))
+            ->brandLogo(fn () => view('filament.brand-logo'))
             ->login()
             ->profile()
             ->multiFactorAuthentication([
