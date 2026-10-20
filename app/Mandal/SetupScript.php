@@ -22,7 +22,7 @@ class SetupScript
         return <<<BASH
         #!/usr/bin/env bash
         #
-        # Mandal server setup. Run as root on a fresh Ubuntu 24.04 or 26.04 server.
+        # Mandal server setup. Run as root on a fresh Ubuntu 26.04 server.
         #
         # Creates the SSH user Mandal connects as, installs the panel's public key
         # and the mandal CLI, and lets that user run only the CLI through sudo.

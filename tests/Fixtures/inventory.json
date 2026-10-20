@@ -13,8 +13,8 @@
     "hostname": "web-1",
     "os": {
       "id": "ubuntu",
-      "version": "24.04",
-      "name": "Ubuntu 24.04.3 LTS"
+      "version": "26.04",
+      "name": "Ubuntu 26.04.1 LTS"
     },
     "kernel": "7.3.0-5-cachyos",
     "arch": "x86_64",

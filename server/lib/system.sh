@@ -157,7 +157,7 @@ swap_present() {
 }
 
 os_codename() {
-    conf_get "$MANDAL_OS_RELEASE" VERSION_CODENAME 2> /dev/null || conf_get "$MANDAL_OS_RELEASE" UBUNTU_CODENAME 2> /dev/null || echo noble
+    conf_get "$MANDAL_OS_RELEASE" VERSION_CODENAME 2> /dev/null || conf_get "$MANDAL_OS_RELEASE" UBUNTU_CODENAME 2> /dev/null || echo resolute
 }
 
 cpu_arch() {

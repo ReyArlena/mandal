@@ -4,9 +4,9 @@ if [[ "$*" == *"--just-print"* ]]; then
   cat <<'OUT'
 Reading package lists...
 Building dependency tree...
-Inst nginx [1.24.0-2ubuntu7.19] (1.24.0-2ubuntu7.20 Ubuntu:24.04/noble-security [amd64])
-Inst curl [8.5.0-2ubuntu10.1] (8.5.0-2ubuntu10.2 Ubuntu:24.04/noble-updates [amd64])
-Conf nginx (1.24.0-2ubuntu7.20 Ubuntu:24.04/noble-security [amd64])
+Inst nginx [1.24.0-2ubuntu7.19] (1.24.0-2ubuntu7.20 Ubuntu:26.04/resolute-security [amd64])
+Inst curl [8.5.0-2ubuntu10.1] (8.5.0-2ubuntu10.2 Ubuntu:26.04/resolute-updates [amd64])
+Conf nginx (1.24.0-2ubuntu7.20 Ubuntu:26.04/resolute-security [amd64])
 OUT
 fi
 exit 0

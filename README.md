@@ -60,7 +60,7 @@ Each server gets its own SSH key pair when it is added; the private key is store
 
 ### Adding a new server
 
-1. Add the server in the panel with its address. Mandal supports Ubuntu 24.04 and 26.04 LTS.
+1. Add the server in the panel with its address. Mandal supports Ubuntu 26.04 LTS.
 2. Open the server and choose **Setup command**. Run the command shown on the server as root. It creates the `mandal` user, installs the panel's public key and the `mandal` CLI, and allows that user to run only the CLI through sudo. Nothing else on the server is touched.
 3. Choose **Test connection**, check the host key fingerprint it shows against `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server, and confirm.
 

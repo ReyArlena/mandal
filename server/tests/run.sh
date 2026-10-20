@@ -217,7 +217,7 @@ assert_json "apps without a home have no release" "$apps" '.[] | select(.name ==
 
 system="$(inv_system)"
 assert_json "system reads the OS id" "$system" '.os.id' "ubuntu"
-assert_json "system reads the OS version" "$system" '.os.version' "24.04"
+assert_json "system reads the OS version" "$system" '.os.version' "26.04"
 assert_json "system reads reboot-required" "$system" '.reboot_required' "true"
 assert_json "system reads reboot packages" "$system" '.reboot_packages | join(",")' "linux-image-generic,libc6"
 
@@ -241,7 +241,7 @@ assert_json "inventory reports the absent cache honestly" "$inventory" '.cache.i
 # ---------------------------------------------------------------------------
 
 check="$(provision_check)"
-assert_json "check accepts Ubuntu 24.04" "$check" '.os.supported' "true"
+assert_json "check accepts Ubuntu 26.04" "$check" '.os.supported' "true"
 assert_json "check has no conflicts on a clean fixture" "$check" '.conflicts | length' "0"
 # db_list under pipefail: only system schemas present, then one user database
 set -o pipefail
@@ -267,8 +267,8 @@ assert_json "check counts existing sites" "$check" '.existing.sites' "3"
 assert_json "check notes the enabled stock nginx site" "$check" '.notes | length' "1"
 assert_json "check does not mention cloud-init when absent" "$check" '.notes | map(select(test("cloud-init"))) | length' "0"
 
-check="$(MANDAL_OS_RELEASE="${FIXTURES}/os-release-resolute" provision_check)"
-assert_json "check accepts Ubuntu 26.04" "$check" '.os.supported' "true"
+check="$(MANDAL_OS_RELEASE="${FIXTURES}/os-release-noble" provision_check)"
+assert_json "check rejects Ubuntu 24.04" "$check" '.os.supported' "false"
 
 check="$(MANDAL_OS_RELEASE="${FIXTURES}/os-release-debian" provision_check)"
 assert_json "check rejects other distributions" "$check" '.os.supported' "false"
@@ -337,11 +337,11 @@ ssh_pos="${dry%%==> SSH hardening*}"
 [[ "$ssh_pos" == *"==> Firewall"* && "$ssh_pos" == *"==> PHP"* ]] && pass || fail "SSH hardening runs after everything else"
 
 [[ "$dry" == *"add-apt-repository -y ppa:ondrej/php"* ]] && pass || fail "dry run adds the PHP PPA when it supports the release"
-resolute="$(MANDAL_OS_RELEASE="${FIXTURES}/os-release-resolute" MANDAL_DRY_RUN=1 provision_apply 2>&1)"
-assert_eq "dry run completes on Ubuntu 26.04" "0" "$?"
-[[ "$resolute" == *"PHP PPA has no packages for resolute yet"* ]] && pass || fail "the PHP PPA is skipped when it has no packages for the release"
-[[ "$resolute" == *"add-apt-repository"* ]] && fail "no PPA is added for an unsupported release" || pass
-[[ "$resolute" == *"docker.sources"* && "$resolute" == *"+ PHP version: 8.5"* ]] && pass || fail "the rest of provisioning runs on Ubuntu 26.04"
+no_ppa="$(MANDAL_PHP_PPA_URL="file://${TMP}/no-ppa" MANDAL_DRY_RUN=1 provision_apply 2>&1)"
+assert_eq "dry run completes without the PHP PPA" "0" "$?"
+[[ "$no_ppa" == *"PHP PPA has no packages for resolute yet"* ]] && pass || fail "the PHP PPA is skipped when it has no packages for the release"
+[[ "$no_ppa" == *"add-apt-repository"* ]] && fail "no PPA is added for an unsupported release" || pass
+[[ "$no_ppa" == *"docker.sources"* && "$no_ppa" == *"+ PHP version: 8.5"* ]] && pass || fail "the rest of provisioning runs without the PHP PPA"
 
 ngx="${TMP}/nginx-resolute"
 mkdir -p "$ngx"
@@ -653,7 +653,7 @@ printf '{"tag_name":"bun-v1.3.13"}' > "$MANDAL_UPDATES_CACHE/github-oven-sh-bun.
 printf '{"stable":[{"path":"/download/2.9.7/composer.phar","version":"2.9.7"}]}' > "$MANDAL_UPDATES_CACHE/composer-latest.txt"
 touch "$MANDAL_BOOT_DIR/vmlinuz-6.8.0-100-generic" "$MANDAL_BOOT_DIR/vmlinuz-6.8.0-147-generic"
 printf '2026-10-27 06:00:01,123 INFO Starting unattended upgrades script\n2026-10-27 06:00:09,456 INFO All upgrades installed\n' > "$MANDAL_UNATTENDED_LOG"
-printf 'Latest release: 26.04 LTS\n' > "$MANDAL_RELEASE_UPGRADES_CACHE"
+printf 'Latest release: 28.04 LTS\n' > "$MANDAL_RELEASE_UPGRADES_CACHE"
 
 assert_eq "updates_newer compares versions" "true false false" "$(updates_newer 1.2.3 1.10.0) $(updates_newer 2.0.0 1.9.9) $(updates_newer '' 1.0)"
 pending="$(updates_pending_tsv)"
@@ -668,7 +668,7 @@ assert_json "status strips the bun tag prefix" "$status" '.components[] | select
 assert_json "status reads the composer release" "$status" '.components[] | select(.id == "composer") | .latest' "2.9.7"
 assert_json "status reports the last unattended run" "$status" '.unattended.status + "|" + .unattended.last' "ok|2026-10-27 06:00:09"
 assert_json "status reads apt history newest first" "$status" '.history[0].action + " " + .history[0].packages' "Upgrade nginx:amd64 (1.24.0-1, 1.24.0-2)"
-assert_json "status mentions a newer LTS" "$status" '.release_upgrade' "26.04 LTS"
+assert_json "status mentions a newer LTS" "$status" '.release_upgrade' "28.04 LTS"
 assert_json "status carries the reboot flag" "$status" '.reboot_required' "true"
 
 apply="$(cmd_updates_apply --security --dry-run 2>&1)"

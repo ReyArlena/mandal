@@ -22,7 +22,7 @@ it('shows what the CLI reports about the server', function () {
 
     livewire(ServerInventory::class, ['record' => $server->getRouteKey()])
         ->assertOk()
-        ->assertSee('Ubuntu 24.04.3 LTS')
+        ->assertSee('Ubuntu 26.04.1 LTS')
         ->assertSee('shop.example.com')
         ->assertSee('shop-worker')
         ->assertSee('allow 443/tcp')

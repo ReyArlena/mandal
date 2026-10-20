@@ -26,7 +26,7 @@ beforeEach(function () {
     $inventory['mandal']['build'] = app(CliArchive::class)->hash();
     $this->ssh->respondWithJson('inventory', $inventory);
     $this->ssh->respondWithJson('updates:status', [
-        'os' => ['id' => 'ubuntu', 'version' => '24.04', 'name' => 'Ubuntu 24.04.5 LTS'],
+        'os' => ['id' => 'ubuntu', 'version' => '26.04', 'name' => 'Ubuntu 26.04.1 LTS'],
         'uptime_seconds' => 90000,
         'reboot_required' => true,
         'reboot_packages' => ['linux-image-generic'],
@@ -43,7 +43,7 @@ beforeEach(function () {
         ],
         'unattended' => ['last' => '2026-10-27 06:00:09', 'status' => 'ok'],
         'history' => [['at' => '2026-10-27  02:30:01', 'action' => 'Upgrade', 'packages' => 'nginx:amd64 (1.24.0-1, 1.24.0-2)']],
-        'release_upgrade' => '26.04 LTS',
+        'release_upgrade' => '28.04 LTS',
     ]);
 });
 
@@ -56,7 +56,7 @@ it('shows the update status', function () {
         ->assertSee('1 security, 1 other')
         ->assertSee('Held back: linux-image-generic')
         ->assertSee('2.1.0')
-        ->assertSee('26.04 LTS')
+        ->assertSee('28.04 LTS')
         ->assertActionVisible('installSecurity')
         ->assertActionVisible('reboot');
 });
