@@ -3,15 +3,22 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Catppuccin;
+use App\Filament\Pages\Settings;
+use App\Filament\ServerNavigation;
+use Filament\Actions\Action;
 use Filament\Auth\MultiFactor\App\AppAuthentication;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
+use Filament\Navigation\NavigationBuilder;
 use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
+use Filament\Support\Icons\Heroicon;
+use Filament\View\PanelsRenderHook;
 use Filament\Widgets\AccountWidget;
+use Illuminate\Contracts\View\View;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
@@ -31,6 +38,14 @@ class AdminPanelProvider extends PanelProvider
             ->brandLogo(fn () => view('filament.brand-logo'))
             ->login()
             ->profile()
+            ->userMenuItems([
+                Action::make('settings')
+                    ->label('Settings')
+                    ->icon(Heroicon::OutlinedCog6Tooth)
+                    ->url(fn (): string => Settings::getUrl()),
+            ])
+            ->navigation(fn (NavigationBuilder $builder): NavigationBuilder => ServerNavigation::build($builder))
+            ->renderHook(PanelsRenderHook::TOPBAR_LOGO_AFTER, fn (): View => view('filament.server-switcher'))
             ->multiFactorAuthentication([
                 AppAuthentication::make()->recoverable(),
             ], isRequired: true)

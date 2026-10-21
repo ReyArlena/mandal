@@ -28,17 +28,9 @@ class ServersTable
                     ->label('Mode')
                     ->badge(),
                 TextColumn::make('status')
-                    ->state(fn (Server $record): string => match (true) {
-                        $record->isProvisioned() => 'Provisioned',
-                        $record->connected_at !== null => 'Connected',
-                        default => 'Not connected',
-                    })
+                    ->state(fn (Server $record): string => $record->status())
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'Provisioned' => 'success',
-                        'Connected' => 'info',
-                        default => 'gray',
-                    }),
+                    ->color(fn (Server $record): string => $record->statusColor()),
                 TextColumn::make('connected_at')
                     ->label('Last connected')
                     ->since()

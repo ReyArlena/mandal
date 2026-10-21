@@ -21,8 +21,6 @@ use App\Filament\Resources\Servers\Schemas\ServerInfolist;
 use App\Filament\Resources\Servers\Tables\ServersTable;
 use App\Models\Server;
 use BackedEnum;
-use Filament\Pages\Enums\SubNavigationPosition;
-use Filament\Resources\Pages\Page;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -35,8 +33,6 @@ class ServerResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedServerStack;
 
     protected static ?string $recordTitleAttribute = 'name';
-
-    protected static ?SubNavigationPosition $subNavigationPosition = SubNavigationPosition::Top;
 
     public static function form(Schema $schema): Schema
     {
@@ -51,22 +47,6 @@ class ServerResource extends Resource
     public static function table(Table $table): Table
     {
         return ServersTable::configure($table);
-    }
-
-    public static function getRecordSubNavigation(Page $page): array
-    {
-        return $page->generateNavigationItems([
-            ViewServer::class,
-            ServerApps::class,
-            ServerInventory::class,
-            ServerPhp::class,
-            ServerFirewall::class,
-            ServerBackups::class,
-            ServerLogs::class,
-            ServerUpdates::class,
-            ServerTasks::class,
-            EditServer::class,
-        ]);
     }
 
     public static function getPages(): array

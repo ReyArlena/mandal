@@ -91,6 +91,30 @@ class Server extends Model
     }
 
     /**
+     * A one-word summary of how far setup has got.
+     */
+    public function status(): string
+    {
+        return match (true) {
+            $this->isProvisioned() => 'Provisioned',
+            $this->connected_at !== null => 'Connected',
+            default => 'Not connected',
+        };
+    }
+
+    /**
+     * The Filament color that goes with status().
+     */
+    public function statusColor(): string
+    {
+        return match ($this->status()) {
+            'Provisioned' => 'success',
+            'Connected' => 'info',
+            default => 'gray',
+        };
+    }
+
+    /**
      * Issue a new single-use setup token and return its plain value.
      *
      * Only the hash is stored, so the plain token must be shown to the
