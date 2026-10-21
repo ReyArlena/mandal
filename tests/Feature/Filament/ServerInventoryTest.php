@@ -30,6 +30,21 @@ it('shows what the CLI reports about the server', function () {
         ->assertSee('PHP 8.5');
 });
 
+it('labels sites mandal writes for the server itself', function () {
+    $server = Server::factory()->withPinnedHostKey()->create();
+    $this->inventory['php']['pools'] = [];
+    $this->inventory['nginx']['sites'] = [[
+        'managed_app' => null, 'managed' => 'server', 'server_names' => [], 'ports' => [80], 'root' => '', 'redirects' => 0, 'ssl' => false,
+        'name' => 'mandal-default', 'file' => '/etc/nginx/sites-available/mandal-default', 'enabled' => true,
+    ]];
+    $this->ssh->respondWithJson('inventory', $this->inventory);
+
+    livewire(ServerInventory::class, ['record' => $server->getRouteKey()])
+        ->assertOk()
+        ->assertSee('mandal-default')
+        ->assertDontSee('unmanaged');
+});
+
 it('explains when the server has never been connected', function () {
     $server = Server::factory()->create();
 

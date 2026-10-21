@@ -152,6 +152,10 @@ nginx="$(inv_nginx)"
 assert_json "nginx lists every site" "$nginx" '.sites | length' "3"
 assert_json "nginx reads the managed marker" "$nginx" '.sites[] | select(.name == "shop.conf") | .managed_app' "shop"
 assert_json "nginx marks foreign sites unmanaged" "$nginx" '.sites[] | select(.name == "legacy") | .managed_app' "null"
+assert_json "nginx marks app sites as managed by an app" "$nginx" '.sites[] | select(.name == "shop.conf") | .managed' "app"
+assert_json "nginx leaves foreign sites without a manager" "$nginx" '.sites[] | select(.name == "legacy") | .managed' "null"
+printf '# managed-by: mandal\nserver {\n    listen 80 default_server;\n    server_name _;\n    return 444;\n}\n' > "${TMP}/mandal-default"
+assert_eq "nginx marks mandal's own sites as managed by the server" "	server" "$(nginx_site_tsv "${TMP}/mandal-default" | cut -f1,2)"
 assert_json "nginx collects server names across blocks" "$nginx" '.sites[] | select(.name == "shop.conf") | .server_names | join(",")' "shop.example.com,www.shop.example.com"
 assert_json "nginx collects listen ports" "$nginx" '.sites[] | select(.name == "shop.conf") | .ports | join(",")' "80,443"
 assert_json "nginx counts redirects" "$nginx" '.sites[] | select(.name == "shop.conf") | .redirects' "2"
@@ -173,6 +177,8 @@ assert_json "php reads the pool socket" "$php" '.pools[] | select(.name == "shop
 assert_json "php tags the pool version" "$php" '.pools[] | select(.name == "shop") | .php' "8.5"
 assert_json "php reads the managed marker" "$php" '.pools[] | select(.name == "shop") | .managed_app' "shop"
 assert_json "php marks the stock pool unmanaged" "$php" '.pools[] | select(.name == "www" and .php == "8.3") | .managed_app' "null"
+assert_json "php marks app pools as managed by an app" "$php" '.pools[] | select(.name == "shop") | .managed' "app"
+assert_json "php leaves the stock pool without a manager" "$php" '.pools[] | select(.name == "www" and .php == "8.3") | .managed' "null"
 
 # ---------------------------------------------------------------------------
 # inventory: supervisor

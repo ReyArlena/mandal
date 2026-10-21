@@ -138,17 +138,19 @@ php_default_version() {
     fi
 }
 
-# Parse every pool file of a PHP version into TSV: name, user, listen, pm, managed app, file
+# Parse every pool file of a PHP version into TSV: name, user, listen, pm,
+# managed app, managed (app, server or empty), file
 php_pools_tsv() {
     local version="$1" file
     for file in "$MANDAL_PHP_DIR/$version/fpm/pool.d"/*.conf; do
         [[ -f "$file" ]] || continue
         awk -v file="$file" '
             function flush() {
-                if (name != "") printf "%s\t%s\t%s\t%s\t%s\t%s\n", name, user, listen, pm, managed, file
+                if (name != "") printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", name, user, listen, pm, managed, (managed != "" ? "app" : (marked ? "server" : "")), file
                 name = ""; user = ""; listen = ""; pm = ""
             }
             /^[[:space:]]*[#;][[:space:]]*managed-by:[[:space:]]*mandal/ {
+                marked = 1
                 if (match($0, /app=[A-Za-z0-9._-]+/)) managed = substr($0, RSTART + 4, RLENGTH - 4)
             }
             /^[[:space:]]*\[[^]]+\][[:space:]]*$/ {
@@ -173,7 +175,7 @@ inv_php() {
         versions+=("$version")
     done
     for version in "${versions[@]}"; do
-        pool_json="$(php_pools_tsv "$version" | json_tsv name user listen pm managed_app file | jq --arg version "$version" 'map(. + {php: $version} | .managed_app |= (if . == "" then null else . end))')"
+        pool_json="$(php_pools_tsv "$version" | json_tsv name user listen pm managed_app managed file | jq --arg version "$version" 'map(. + {php: $version} | .managed_app |= (if . == "" then null else . end) | .managed |= (if . == "" then null else . end))')"
         pools="$(jq -n --argjson a "$pools" --argjson b "$pool_json" '$a + $b')"
     done
     jq -n \
@@ -187,10 +189,13 @@ inv_php() {
 # nginx
 # ---------------------------------------------------------------------------
 
-# Parse one vhost file into TSV: managed app, server names, listen ports, root, redirects, has ssl
+# Parse one vhost file into TSV: managed app, managed (app, server or empty),
+# server names, listen ports, root, redirects, has ssl. A marker without an
+# app is a site mandal writes for the server itself, such as mandal-default.
 nginx_site_tsv() {
     awk '
         /^[[:space:]]*[#;][[:space:]]*managed-by:[[:space:]]*mandal/ {
+            marked = 1
             if (match($0, /app=[A-Za-z0-9._-]+/)) managed = substr($0, RSTART + 4, RLENGTH - 4)
         }
         /^[[:space:]]*server_name[[:space:]]/ {
@@ -206,7 +211,7 @@ nginx_site_tsv() {
         }
         /^[[:space:]]*root[[:space:]]/ { sub(/;.*$/, ""); root = $2 }
         /^[[:space:]]*return[[:space:]]+30[1278]/ { redirects++ }
-        END { printf "%s\t%s\t%s\t%s\t%d\t%s\n", managed, names, listens, root, redirects, (ssl == "true" ? "true" : "false") }
+        END { printf "%s\t%s\t%s\t%s\t%s\t%d\t%s\n", managed, (managed != "" ? "app" : (marked ? "server" : "")), names, listens, root, redirects, (ssl == "true" ? "true" : "false") }
     ' "$1"
 }
 
@@ -224,12 +229,13 @@ inv_nginx() {
         name="$(basename "$file")"
         enabled=false
         [[ -e "$MANDAL_NGINX_DIR/sites-enabled/$name" ]] && enabled=true
-        row="$(nginx_site_tsv "$file" | json_tsv managed_app server_names ports root redirects ssl | jq --arg name "$name" --arg file "$file" --argjson enabled "$enabled" '
+        row="$(nginx_site_tsv "$file" | json_tsv managed_app managed server_names ports root redirects ssl | jq --arg name "$name" --arg file "$file" --argjson enabled "$enabled" '
             .[0] | . + {
                 name: $name,
                 file: $file,
                 enabled: $enabled,
                 managed_app: (if .managed_app == "" then null else .managed_app end),
+                managed: (if .managed == "" then null else .managed end),
                 server_names: (.server_names | split(" ") | map(select(length > 0))),
                 ports: (.ports | split(" ") | map(select(length > 0) | tonumber)),
                 redirects: (.redirects | tonumber),

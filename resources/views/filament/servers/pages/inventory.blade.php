@@ -125,7 +125,7 @@
                                     <td class="py-1 pr-3 font-mono">{{ $pool['name'] }}</td>
                                     <td class="py-1 pr-3">{{ $pool['php'] }}</td>
                                     <td class="py-1 pr-3 font-mono">{{ $pool['user'] }}</td>
-                                    <td class="py-1">{{ $pool['managed_app'] ?? 'unmanaged' }}</td>
+                                    <td class="py-1">{{ $pool['managed_app'] ?? (($pool['managed'] ?? null) === 'server' ? 'Mandal' : 'unmanaged') }}</td>
                                 </tr>
                             @endforeach
                         </tbody>
@@ -145,7 +145,13 @@
                                 <x-filament::badge color="success">SSL</x-filament::badge>
                             @endif
                             <x-filament::badge :color="($site['enabled'] ?? false) ? 'success' : 'gray'">{{ ($site['enabled'] ?? false) ? 'Enabled' : 'Disabled' }}</x-filament::badge>
-                            <x-filament::badge :color="($site['managed_app'] ?? null) ? 'info' : 'gray'">{{ $site['managed_app'] ?? 'unmanaged' }}</x-filament::badge>
+                            @if ($site['managed_app'] ?? null)
+                                <x-filament::badge color="info">{{ $site['managed_app'] }}</x-filament::badge>
+                            @elseif (($site['managed'] ?? null) === 'server')
+                                <x-filament::badge color="primary">Mandal</x-filament::badge>
+                            @else
+                                <x-filament::badge color="gray">unmanaged</x-filament::badge>
+                            @endif
                         </div>
                     </div>
                 @empty

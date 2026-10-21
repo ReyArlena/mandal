@@ -110,7 +110,8 @@
         "pm": "dynamic",
         "managed_app": null,
         "file": "/etc/php/8.3/fpm/pool.d/www.conf",
-        "php": "8.3"
+        "php": "8.3",
+        "managed": null
       },
       {
         "name": "shop",
@@ -119,7 +120,8 @@
         "pm": "ondemand",
         "managed_app": "shop",
         "file": "/etc/php/8.5/fpm/pool.d/shop.conf",
-        "php": "8.5"
+        "php": "8.5",
+        "managed": "app"
       },
       {
         "name": "www",
@@ -128,7 +130,8 @@
         "pm": "dynamic",
         "managed_app": null,
         "file": "/etc/php/8.5/fpm/pool.d/www.conf",
-        "php": "8.5"
+        "php": "8.5",
+        "managed": null
       }
     ]
   },
@@ -148,7 +151,8 @@
         "ssl": false,
         "name": "default",
         "file": "/etc/nginx/sites-available/default",
-        "enabled": true
+        "enabled": true,
+        "managed": null
       },
       {
         "managed_app": null,
@@ -163,7 +167,8 @@
         "ssl": false,
         "name": "legacy",
         "file": "/etc/nginx/sites-available/legacy",
-        "enabled": false
+        "enabled": false,
+        "managed": null
       },
       {
         "managed_app": "shop",
@@ -180,7 +185,8 @@
         "ssl": true,
         "name": "shop.conf",
         "file": "/etc/nginx/sites-available/shop.conf",
-        "enabled": true
+        "enabled": true,
+        "managed": "app"
       }
     ]
   },
