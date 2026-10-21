@@ -96,6 +96,15 @@ it('asks to choose a server outside one', function () {
     expect(view('filament.server-switcher')->render())->toContain('Choose a server');
 });
 
+it('carries the switcher in the sidebar drawer on small screens only', function () {
+    openPage("/servers/{$this->web->getKey()}/logs");
+
+    expect(view('filament.server-switcher', ['placement' => 'sidebar'])->render())
+        ->toContain('lg:hidden')
+        ->toContain('web-1')
+        ->and(view('filament.server-switcher')->render())->not->toContain('lg:hidden');
+});
+
 it('offers settings in the user menu instead of the sidebar', function () {
     expect(Filament::getPanel('admin')->getUserMenuItems())->toHaveKey('settings');
 });

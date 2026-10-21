@@ -5,10 +5,15 @@
 
     $current = ServerNavigation::currentServer();
     $servers = ServerNavigation::servers();
+    // The top bar hides its logo area below the lg breakpoint, so the
+    // sidebar drawer carries the switcher on small screens instead.
+    $inSidebar = ($placement ?? 'topbar') === 'sidebar';
 @endphp
 
-<div class="ms-3 flex items-center gap-x-3">
-    <span class="text-gray-300 dark:text-gray-600" aria-hidden="true">/</span>
+<div @class(['flex items-center gap-x-3', 'ms-3' => ! $inSidebar, 'mb-4 lg:hidden' => $inSidebar])>
+    @unless ($inSidebar)
+        <span class="text-gray-300 dark:text-gray-600" aria-hidden="true">/</span>
+    @endunless
 
     <x-filament::dropdown placement="bottom-start" teleport>
         <x-slot name="trigger">

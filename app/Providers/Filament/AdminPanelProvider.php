@@ -46,6 +46,7 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->navigation(fn (NavigationBuilder $builder): NavigationBuilder => ServerNavigation::build($builder))
             ->renderHook(PanelsRenderHook::TOPBAR_LOGO_AFTER, fn (): View => view('filament.server-switcher'))
+            ->renderHook(PanelsRenderHook::SIDEBAR_NAV_START, fn (): View => view('filament.server-switcher', ['placement' => 'sidebar']))
             ->multiFactorAuthentication([
                 AppAuthentication::make()->recoverable(),
             ], isRequired: true)
