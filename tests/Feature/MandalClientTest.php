@@ -52,3 +52,26 @@ it('rejects output that is not JSON', function () {
 
     expect(fn () => $this->client->inventory($this->server))->toThrow(SshException::class, 'Expected JSON');
 });
+
+it('removes an uploaded file after the command runs', function () {
+    $this->ssh->respondTo('printf %s "$HOME"', '/home/mandal');
+    $this->ssh->respondTo('app:env', "Updated.\n");
+
+    $this->client->runWithUpload($this->server, 'app:env --name=shop', "APP_KEY=secret\n", '.env');
+
+    $remote = array_key_first($this->ssh->uploads);
+
+    expect($this->ssh->commands)->toContain('rm -f -- '.escapeshellarg($remote));
+});
+
+it('removes an uploaded file even when the command is refused', function () {
+    $this->ssh->respondTo('printf %s "$HOME"', '/home/mandal');
+    $this->ssh->respondTo('backup:configure', '', exitCode: 2, errorOutput: "error: invalid S3 endpoint\n");
+
+    $result = $this->client->runWithUpload($this->server, 'backup:configure', "S3_SECRET=secret\n", '.conf');
+
+    $remote = array_key_first($this->ssh->uploads);
+
+    expect($result->failed())->toBeTrue()
+        ->and(end($this->ssh->commands))->toBe('rm -f -- '.escapeshellarg($remote));
+});

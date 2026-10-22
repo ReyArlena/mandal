@@ -104,6 +104,9 @@ class MandalClient
 
             return $connection->run($this->command($arguments.' --from='.escapeshellarg($path), asRoot: true), $onOutput, $timeoutSeconds);
         } finally {
+            // The file can hold secrets. The CLI removes it once used, but not
+            // when it refuses the command, so it is always removed here too.
+            rescue(fn () => $connection->run('rm -f -- '.escapeshellarg($remote), timeoutSeconds: 15), report: false);
             $connection->disconnect();
         }
     }

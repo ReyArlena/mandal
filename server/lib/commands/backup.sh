@@ -35,6 +35,8 @@ cmd_backup_configure() {
         region="$(conf_get "$from" S3_REGION 2> /dev/null || echo auto)"
         key="$(conf_get "$from" S3_KEY 2> /dev/null || true)"
         secret="$(conf_get "$from" S3_SECRET 2> /dev/null || true)"
+        # Removed straight away, so a refused configuration leaves no secrets behind.
+        dry_run || rm -f "$from"
     fi
     validate_schedule "$schedule"
     [[ "$keep_local" =~ ^[0-9]{1,3}$ ]] || die 2 "--keep-local must be a number"
@@ -70,7 +72,6 @@ cmd_backup_configure() {
     fi
     write_file "$MANDAL_BACKUP_CRON" 0644 < <(backup_render_cron "$schedule")
     run_cmd install -d -m 0700 "$MANDAL_BACKUP_DIR"
-    dry_run || rm -f "$from"
     printf '\nBackups run at "%s", keeping %s local and %s remote copies%s.\n' "$schedule" "$keep_local" "$keep_remote" "$([[ "$remote" == "true" ]] && echo " in $bucket" || echo " (no remote)")"
 }
 
