@@ -54,7 +54,14 @@ cmd_panel_install() {
     validate_branch "$branch"
     require_root
     load_all_drivers
-    [[ -z "$(panel_apps)" ]] || die "this server already hosts the panel as app '$(panel_apps | awk 'NR == 1')'"
+    local existing
+    existing="$(panel_apps | awk 'NR == 1')"
+    if [[ "$existing" == "$name" ]]; then
+        # install.sh runs this on every run, so an installed panel is not an error.
+        printf 'Panel app %s already exists; nothing to do.\n' "$name"
+        return 0
+    fi
+    [[ -z "$existing" ]] || die "this server already hosts the panel as app '$existing'"
     app_exists "$name" && die "app '$name' already exists"
     if [[ -z "$php" ]]; then
         php="$(php_default_version)"

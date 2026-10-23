@@ -802,7 +802,10 @@ assert_json "inventory reports the panel app" "$(inv_mandal)" '(.hosts_panel|tos
 forced="$(MANDAL_FORCE_PANEL=1 cmd_app_delete --name=mandal-panel --dry-run 2>&1)"
 [[ "$forced" == *"App mandal-panel removed."* ]] && pass || fail "app:delete can be forced on the panel app"
 (cmd_firewall_delete --number=6 --dry-run) > /dev/null 2>&1 && fail "firewall:delete protects 443 while hosting the panel" || pass
-(cmd_panel_install --domain=x.example.com --repo=acme/mandal --dry-run) > /dev/null 2>&1 && fail "panel:install refuses a second panel app" || pass
+(cmd_panel_install --name=other --domain=x.example.com --repo=acme/mandal --dry-run) > /dev/null 2>&1 && fail "panel:install refuses a second panel app under another name" || pass
+again="$(cmd_panel_install --name=mandal-panel --domain=panel.example.com --repo=acme/mandal --dry-run 2>&1)"
+assert_eq "panel:install succeeds when the panel app already exists" "0" "$?"
+[[ "$again" == *"already exists; nothing to do"* && "$again" != *"Creating the panel app"* ]] && pass || fail "panel:install leaves an existing panel app alone"
 rm -f "${MANDAL_APPS_DIR}/mandal-panel.conf"
 
 # ---------------------------------------------------------------------------
