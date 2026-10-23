@@ -4,7 +4,7 @@ namespace App\Filament;
 
 use App\Filament\Resources\Servers\Pages\EditServer;
 use App\Filament\Resources\Servers\Pages\ServerApps;
-use App\Filament\Resources\Servers\Pages\ServerBackups;
+use App\Filament\Resources\Servers\Pages\ServerDatabases;
 use App\Filament\Resources\Servers\Pages\ServerFirewall;
 use App\Filament\Resources\Servers\Pages\ServerInventory;
 use App\Filament\Resources\Servers\Pages\ServerLogs;
@@ -40,7 +40,7 @@ class ServerNavigation
         'inventory' => ServerInventory::class,
         'php' => ServerPhp::class,
         'firewall' => ServerFirewall::class,
-        'backups' => ServerBackups::class,
+        'databases' => ServerDatabases::class,
         'logs' => ServerLogs::class,
         'updates' => ServerUpdates::class,
         'tasks' => ServerTasks::class,
@@ -54,8 +54,17 @@ class ServerNavigation
      */
     private const array CHILD_PAGES = [
         'app' => 'apps',
+        'backups' => 'databases',
         'task' => 'tasks',
     ];
+
+    /**
+     * Child pages that exist on every server (tabs of a section), so the
+     * switcher can stay on them instead of going back to the section.
+     *
+     * @var list<string>
+     */
+    private const array SERVER_WIDE_CHILD_PAGES = ['backups'];
 
     public static function build(NavigationBuilder $builder): NavigationBuilder
     {
@@ -93,13 +102,20 @@ class ServerNavigation
     }
 
     /**
-     * Where switching to a server leads: the same section, or its overview.
+     * Where switching to a server leads: the same page or section, or its overview.
      */
     public static function switchUrl(Server $server): string
     {
+        $page = static::currentPage();
         $section = static::currentSection();
 
-        return ServerResource::getUrl(array_key_exists($section ?? '', self::SECTIONS) ? $section : 'view', ['record' => $server]);
+        $target = match (true) {
+            in_array($page, self::SERVER_WIDE_CHILD_PAGES, true) => $page,
+            array_key_exists($section ?? '', self::SECTIONS) => $section,
+            default => 'view',
+        };
+
+        return ServerResource::getUrl($target, ['record' => $server]);
     }
 
     /**

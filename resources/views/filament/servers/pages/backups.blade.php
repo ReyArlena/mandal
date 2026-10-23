@@ -4,6 +4,8 @@
 @endphp
 
 <x-filament-panels::page>
+    @include('filament.servers.partials.database-tabs', ['server' => $this->getRecord(), 'active' => 'backups'])
+
     @if ($this->error)
         <x-filament::section>
             <div class="flex items-start gap-3">

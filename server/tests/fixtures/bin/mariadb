@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# Fake mariadb client. MANDAL_FAKE_DBS overrides the database list.
+# Fake mariadb client. MANDAL_FAKE_DBS overrides the database list,
+# MANDAL_FAKE_SCHEMAS the sizes, MANDAL_FAKE_USERS and MANDAL_FAKE_GRANTS
+# the users and their database grants.
 query="${@: -1}"
 case "$query" in
   "SHOW DATABASES") printf '%s\n' "${MANDAL_FAKE_DBS:-$'information_schema\nmysql\nperformance_schema\nsys'}" ;;
-  "SELECT user, host"*) printf 'shop\tlocalhost\n' ;;
+  "SELECT s.schema_name"*) printf '%s\n' "${MANDAL_FAKE_SCHEMAS:-$'information_schema\t0\t79\nmysql\t2048\t31\nreports\t16384\t3\nshop\t49152\t12'}" ;;
+  "SELECT user, host, db"*) printf '%s\n' "${MANDAL_FAKE_GRANTS:-$'shop\tlocalhost\tshop\nreporter\tlocalhost\treports\nreporter\tlocalhost\tshop\\_archive'}" ;;
+  "SELECT user, host"*) printf '%s\n' "${MANDAL_FAKE_USERS:-shop	localhost}" ;;
 esac

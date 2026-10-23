@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Servers\Pages;
 
 use App\Enums\TaskType;
+use App\Filament\Resources\Servers\Concerns\FormatsBytes;
 use App\Filament\Resources\Servers\ServerResource;
 use App\Jobs\RestoreBackup;
 use App\Jobs\RunBackup;
@@ -26,6 +27,7 @@ use Filament\Support\Icons\Heroicon;
  */
 class ServerBackups extends Page
 {
+    use FormatsBytes;
     use InteractsWithRecord;
 
     protected static string $resource = ServerResource::class;
@@ -248,20 +250,5 @@ class ServerBackups extends Page
         Notification::make()->title($title)->body('Follow the progress on the task page.')->success()->send();
 
         $this->redirect(ServerResource::getUrl('task', ['record' => $server, 'task' => $task]));
-    }
-
-    public function bytes(int|float|null $bytes): string
-    {
-        $bytes = (float) ($bytes ?? 0);
-
-        foreach (['B', 'KB', 'MB', 'GB'] as $unit) {
-            if ($bytes < 1024 || $unit === 'GB') {
-                return rtrim(rtrim(number_format($bytes, $unit === 'B' ? 0 : 1, '.', ''), '0'), '.').' '.$unit;
-            }
-
-            $bytes /= 1024;
-        }
-
-        return '0 B';
     }
 }

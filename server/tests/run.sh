@@ -650,6 +650,63 @@ rm -f "${MANDAL_ETC}/apps/tool.conf"
 (cmd_logs_read --source=nginx:shop:access --since=yesterday) > /dev/null 2>&1 && fail "logs:read validates --since" || pass
 
 # ---------------------------------------------------------------------------
+# databases
+# ---------------------------------------------------------------------------
+
+export MANDAL_FAKE_USERS=$'shop\tlocalhost\nreporter\tlocalhost\nremote\t10.0.0.5'
+dbl="$(cmd_db_list)"
+assert_json "db:list leaves out system schemas" "$dbl" '.databases | map(.name) | join(",")' "reports,shop"
+assert_json "db:list reports sizes and table counts" "$dbl" '.databases[] | select(.name == "shop") | "\(.size) \(.tables)"' "49152 12"
+assert_json "db:list marks the database an app uses" "$dbl" '.databases | map("\(.name)=\(.app)") | join(",")' "reports=null,shop=shop"
+assert_json "db:list lists each user's databases" "$dbl" '.users[] | select(.user == "reporter") | .databases | join(",")' "reports,shop_archive"
+assert_json "db:list marks the app's user" "$dbl" '.users | map("\(.user)=\(.app)") | join(",")' "shop=shop,reporter=null,remote=null"
+assert_json "db:list includes the server status" "$dbl" '.driver' "mariadb"
+
+pw="${TMP}/db-password.conf"
+printf 'PASSWORD=Str0ng-and-long-enough\n' > "$pw"
+out="$(cmd_db_user_create --name=analyst --database=reports --from="$pw" --dry-run 2>&1)"
+[[ "$out" == *"CREATE USER 'analyst'@'localhost' IDENTIFIED BY '***'"* && "$out" == *"GRANT ALL PRIVILEGES ON \`reports\`.* TO 'analyst'@'localhost'"* ]] && pass || fail "db:user:create creates a local user with access to its databases"
+[[ "$out" != *"Str0ng-and-long-enough"* ]] && pass || fail "db:user:create never prints the password"
+printf 'PASSWORD=short\n' > "$pw"
+(cmd_db_user_create --name=analyst --from="$pw" --dry-run) > /dev/null 2>&1 && fail "db:user:create rejects a weak password" || pass
+printf "PASSWORD=quote'inside-the-password\n" > "$pw"
+(cmd_db_user_create --name=analyst --from="$pw" --dry-run) > /dev/null 2>&1 && fail "db:user:create rejects quotes in the password" || pass
+(cmd_db_user_create --name=analyst --password=x --dry-run) > /dev/null 2>&1 && fail "db:user:create never takes the password as an argument" || pass
+printf 'PASSWORD=Str0ng-and-long-enough\n' > "$pw"
+(cmd_db_user_create --name=reporter --from="$pw" --dry-run) > /dev/null 2>&1 && fail "db:user:create refuses an existing user" || pass
+(cmd_db_user_create --name=root --from="$pw" --dry-run) > /dev/null 2>&1 && fail "db:user:create refuses system users" || pass
+(cmd_db_user_create --name=analyst --database=missing --from="$pw" --dry-run) > /dev/null 2>&1 && fail "db:user:create refuses unknown databases" || pass
+
+out="$(cmd_db_create --name=metrics --user=reporter --dry-run 2>&1)"
+[[ "$out" == *"CREATE DATABASE \`metrics\` CHARACTER SET utf8mb4"* && "$out" == *"GRANT ALL PRIVILEGES ON \`metrics\`.* TO 'reporter'@'localhost'"* ]] && pass || fail "db:create creates the database and grants the users"
+(cmd_db_create --name=shop --dry-run) > /dev/null 2>&1 && fail "db:create refuses an existing database" || pass
+(cmd_db_create --name=mysql --dry-run) > /dev/null 2>&1 && fail "db:create refuses system schemas" || pass
+(cmd_db_create --name='bad;name' --dry-run) > /dev/null 2>&1 && fail "db:create validates the name" || pass
+
+out="$(cmd_db_access --name=reports --user=shop --dry-run 2>&1)"
+[[ "$out" == *"GRANT ALL PRIVILEGES ON \`reports\`.* TO 'shop'@'localhost'"* && "$out" == *"REVOKE ALL PRIVILEGES ON \`reports\`.* FROM 'reporter'@'localhost'"* ]] && pass || fail "db:access grants new users and revokes the rest"
+(cmd_db_access --name=shop --user=reporter --dry-run) > /dev/null 2>&1 && fail "db:access keeps the app user on its database" || pass
+
+out="$(cmd_db_user_update --name=reporter --database=reports --database=shop --dry-run 2>&1)"
+[[ "$out" == *"GRANT ALL PRIVILEGES ON \`shop\`.* TO 'reporter'@'localhost'"* && "$out" == *"REVOKE ALL PRIVILEGES ON \`shop_archive\`.* FROM 'reporter'@'localhost'"* && "$out" != *"ALTER USER"* ]] && pass || fail "db:user:update sets exactly the databases given"
+out="$(cmd_db_user_update --name=reporter --database=reports --from="$pw" --dry-run 2>&1)"
+[[ "$out" == *"ALTER USER 'reporter'@'localhost' IDENTIFIED BY '***'"* ]] && pass || fail "db:user:update changes the password from a file"
+(cmd_db_user_update --name=shop --database=shop --from="$pw" --dry-run) > /dev/null 2>&1 && fail "db:user:update leaves an app user's password to the app" || pass
+(cmd_db_user_update --name=shop --database=reports --dry-run) > /dev/null 2>&1 && fail "db:user:update keeps an app user on its database" || pass
+out="$(cmd_db_user_update --name=shop --database=shop --database=reports --dry-run 2>&1)"
+[[ "$out" == *"GRANT ALL PRIVILEGES ON \`reports\`.* TO 'shop'@'localhost'"* ]] && pass || fail "db:user:update can give an app user more databases"
+
+out="$(cmd_db_delete --name=reports --dry-run 2>&1)"
+[[ "$out" == *"DROP DATABASE \`reports\`"* ]] && pass || fail "db:delete drops the database"
+[[ "$out" == *"REVOKE ALL PRIVILEGES ON \`reports\`.* FROM 'reporter'@'localhost'"* ]] && pass || fail "db:delete removes the grants MariaDB would keep"
+(cmd_db_delete --name=shop --dry-run) > /dev/null 2>&1 && fail "db:delete refuses a database an app uses" || pass
+(cmd_db_delete --name=missing --dry-run) > /dev/null 2>&1 && fail "db:delete refuses an unknown database" || pass
+out="$(cmd_db_user_delete --name=reporter --dry-run 2>&1)"
+[[ "$out" == *"DROP USER 'reporter'@'localhost'"* ]] && pass || fail "db:user:delete drops the user"
+(cmd_db_user_delete --name=shop --dry-run) > /dev/null 2>&1 && fail "db:user:delete refuses an app's user" || pass
+unset MANDAL_FAKE_USERS
+
+# ---------------------------------------------------------------------------
 # updates
 # ---------------------------------------------------------------------------
 

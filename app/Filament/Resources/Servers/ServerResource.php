@@ -8,6 +8,7 @@ use App\Filament\Resources\Servers\Pages\ListServers;
 use App\Filament\Resources\Servers\Pages\ServerApp;
 use App\Filament\Resources\Servers\Pages\ServerApps;
 use App\Filament\Resources\Servers\Pages\ServerBackups;
+use App\Filament\Resources\Servers\Pages\ServerDatabases;
 use App\Filament\Resources\Servers\Pages\ServerFirewall;
 use App\Filament\Resources\Servers\Pages\ServerInventory;
 use App\Filament\Resources\Servers\Pages\ServerLogs;
@@ -60,6 +61,7 @@ class ServerResource extends Resource
             'inventory' => ServerInventory::route('/{record}/inventory'),
             'php' => ServerPhp::route('/{record}/php'),
             'firewall' => ServerFirewall::route('/{record}/firewall'),
+            'databases' => ServerDatabases::route('/{record}/databases'),
             'backups' => ServerBackups::route('/{record}/backups'),
             'logs' => ServerLogs::route('/{record}/logs'),
             'updates' => ServerUpdates::route('/{record}/updates'),

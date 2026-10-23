@@ -45,7 +45,7 @@ it('lists the server sections in the sidebar inside a server', function () {
     $items = sidebarItems();
 
     expect(collect($items)->map(fn (NavigationItem $item): string => (string) $item->getLabel())->all())
-        ->toBe(['View', 'Apps', 'Inventory', 'PHP', 'Firewall', 'Backups', 'Logs', 'Updates', 'Tasks', 'Edit'])
+        ->toBe(['View', 'Apps', 'Inventory', 'PHP', 'Firewall', 'Databases', 'Logs', 'Updates', 'Tasks', 'Edit'])
         ->and(collect($items)->filter(fn (NavigationItem $item): bool => $item->isActive())->map(fn (NavigationItem $item): string => (string) $item->getLabel())->values()->all())->toBe(['PHP'])
         ->and($items[3]->getUrl())->toEndWith("/servers/{$this->web->getKey()}/php");
 });
@@ -56,6 +56,9 @@ it('keeps the parent section active on app and task pages', function () {
 
     openPage("/servers/{$this->web->getKey()}/tasks/1");
     expect(ServerNavigation::currentSection())->toBe('tasks');
+
+    openPage("/servers/{$this->web->getKey()}/backups");
+    expect(ServerNavigation::currentSection())->toBe('databases');
 });
 
 it('lists the servers in the sidebar outside a server', function () {
@@ -72,6 +75,9 @@ it('switches to the same section of another server', function () {
 
     openPage("/servers/{$this->web->getKey()}/apps/shop");
     expect(ServerNavigation::switchUrl($this->db))->toEndWith("/servers/{$this->db->getKey()}/apps");
+
+    openPage("/servers/{$this->web->getKey()}/backups");
+    expect(ServerNavigation::switchUrl($this->db))->toEndWith("/servers/{$this->db->getKey()}/backups");
 
     openPage('/');
     expect(ServerNavigation::switchUrl($this->db))->toEndWith("/servers/{$this->db->getKey()}");

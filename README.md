@@ -56,7 +56,7 @@ Mandal holds credentials for every server it manages, so treat it as the most se
 
 ## Servers
 
-The server switcher next to the logo moves between servers and keeps you on the same page. Inside a server, the sidebar lists its pages (overview, Apps, Inventory, PHP, Firewall, Backups, Logs, Updates, Tasks, Edit); elsewhere it lists the servers. Panel settings and your profile are in the user menu.
+The server switcher next to the logo moves between servers and keeps you on the same page. Inside a server, the sidebar lists its pages (overview, Apps, Inventory, PHP, Firewall, Databases, Logs, Updates, Tasks, Edit); elsewhere it lists the servers. Panel settings and your profile are in the user menu.
 
 Each server gets its own SSH key pair when it is added; the private key is stored encrypted with your `APP_KEY`. The first time Mandal connects, it shows the server's host key fingerprint for you to confirm, then pins it. If that key ever changes, Mandal refuses to connect until you accept the new one.
 
@@ -89,6 +89,10 @@ To deploy on every push, set the panel's **Public URL** in Settings (it must be 
 ### Docker apps
 
 Choose **Docker image** in the New app form for anything that is not Laravel: give it an image, the port the container listens on and any environment variables. Mandal writes a compose project to `/srv/docker/<app>`, binds the container to `127.0.0.1` on a port it picks (Docker publishes straight past the firewall, so nothing is exposed directly) and puts an nginx site in front with websocket support. **Pull and restart** fetches the latest image; SSL and the environment editor work as for Laravel apps.
+
+### Databases
+
+The **Databases** page lists every database with its size and the users who can use it, and every database user with their databases. Create databases and users, choose which users can use a database (from either side), change a user's password and delete what no app uses. Users sign in from the server itself (MariaDB listens on 127.0.0.1) and get all privileges on their databases. Passwords are uploaded as a file and never appear in commands or logs. An app's own database and user cannot be deleted here, the app always keeps access to its database, and its password stays in the app's `.env`. Backups are the second tab on the same page.
 
 ### Backups
 

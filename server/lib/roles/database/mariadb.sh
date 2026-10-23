@@ -88,3 +88,58 @@ db_secure() {
     db_sql "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%'"
     db_sql "FLUSH PRIVILEGES"
 }
+
+# Users that belong to MariaDB itself and are never listed or changed.
+MANDAL_DB_SYSTEM_USERS="'root', 'mariadb.sys', 'mysql', 'debian-sys-maint', 'healthcheck'"
+
+# JSON: {databases: [{name, size, tables}], users: [{user, host, databases}]}
+# Each user's databases are the ones it has a database-level grant on.
+db_overview() {
+    local client databases users grants
+    if ! client="$(db_client)" || [[ "$(unit_state mariadb)" != "active" ]]; then
+        echo '{"databases": [], "users": []}'
+        return 0
+    fi
+    databases="$({ "$client" -N -B -e "SELECT s.schema_name, COALESCE(SUM(t.data_length + t.index_length), 0), COUNT(t.table_name) FROM information_schema.schemata s LEFT JOIN information_schema.tables t ON t.table_schema = s.schema_name GROUP BY s.schema_name ORDER BY s.schema_name" 2> /dev/null || true; } \
+        | { grep -vE "^(${MANDAL_DB_SYSTEM_SCHEMAS})	" || true; } \
+        | json_tsv name size tables | jq 'map(.size |= tonumber | .tables |= tonumber)')"
+    users="$({ "$client" -N -B -e "SELECT user, host FROM mysql.user WHERE user NOT IN (${MANDAL_DB_SYSTEM_USERS}) AND user <> '' ORDER BY user, host" 2> /dev/null || true; } | json_tsv user host)"
+    # Grants made on a literal name may still store "_" escaped as "\_".
+    grants="$({ "$client" -N -B -e "SELECT user, host, db FROM mysql.db WHERE user NOT IN (${MANDAL_DB_SYSTEM_USERS}) ORDER BY db" 2> /dev/null || true; } | sed 's/\\_/_/g' | json_tsv user host db)"
+    jq -n --argjson databases "$databases" --argjson users "$users" --argjson grants "$grants" '{
+        databases: $databases,
+        users: ($users | map(. as $u | . + {databases: ($grants | map(select(.user == $u.user and .host == $u.host) | .db) | unique)}))
+    }'
+}
+
+db_create() {
+    db_sql "CREATE DATABASE \`$1\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+}
+
+db_drop() {
+    db_sql "DROP DATABASE \`$1\`"
+}
+
+# db_user_create user password
+db_user_create() {
+    db_sql "CREATE USER '$1'@'localhost' IDENTIFIED BY '$2'"
+}
+
+# db_user_password user password
+db_user_password() {
+    db_sql "ALTER USER '$1'@'localhost' IDENTIFIED BY '$2'"
+}
+
+db_user_drop() {
+    db_sql "DROP USER '$1'@'localhost'"
+}
+
+# db_grant database user
+db_grant() {
+    db_sql "GRANT ALL PRIVILEGES ON \`$1\`.* TO '$2'@'localhost'"
+}
+
+# db_revoke database user
+db_revoke() {
+    db_sql "REVOKE ALL PRIVILEGES ON \`$1\`.* FROM '$2'@'localhost'"
+}
