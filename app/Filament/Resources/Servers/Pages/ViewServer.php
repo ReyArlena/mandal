@@ -119,8 +119,7 @@ class ViewServer extends ViewRecord
     }
 
     /**
-     * Issues a fresh setup token and shows the one-line command to run on
-     * the server as root.
+     * Shows the one-line command to run on the server as root.
      */
     private function setupCommandAction(): Action
     {
@@ -130,16 +129,7 @@ class ViewServer extends ViewRecord
             ->color('gray')
             ->visible(fn (Server $record): bool => $record->connected_at === null && $record->setup_mode !== ServerSetupMode::Existing)
             ->modalHeading('Set up the server')
-            ->modalContent(function (Server $record): View {
-                $token = $record->issueSetupToken();
-                $scriptUrl = route('setup.script', ['server' => $record, 'token' => $token]);
-
-                return view('filament.servers.setup-command', [
-                    'server' => $record,
-                    'scriptUrl' => $scriptUrl,
-                    'command' => "curl -fsSL {$scriptUrl} | bash",
-                ]);
-            })
+            ->modalContent(fn (Server $record): View => view('filament.servers.setup-command', ['server' => $record]))
             ->modalSubmitAction(false)
             ->modalCancelActionLabel('Close');
     }
@@ -286,7 +276,6 @@ class ViewServer extends ViewRecord
                 }
 
                 $record->forceFill(['connected_at' => now()])->save();
-                $record->clearSetupToken();
                 $mandal->forgetInventory($record);
 
                 Notification::make()

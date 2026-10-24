@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Servers: create, edit and delete servers, each with its own Ed25519 key pair (private key encrypted at rest).
 - SSH connections pin the server's host key after the fingerprint is confirmed and refuse to connect if it changes.
 - "Test connection" action on a server, and a server list showing connection status.
-- One-line setup command for new servers: a token-protected script that creates the SSH user, installs the panel's key and the CLI, and limits sudo to the CLI.
+- One-line setup command for new servers: `setup.sh` from the latest GitHub release creates the SSH user, installs the panel's key and the CLI, and limits sudo to the CLI. The server never has to reach the panel, and the script can be run again safely.
 - Inventory page per server showing system, services, PHP, sites, databases, workers, certificates, firewall, Docker and apps, read live from the server.
 - Provisioning from the panel: a "Provision" action queues `mandal provision` with the chosen drivers, and a Tasks page per server shows each run with live output.
 - Apps: `mandal app:create` and `app:delete` set up a Laravel app with its own system user, PHP-FPM pool, nginx site (www redirect modes and aliases), database, production `.env`, scheduler crontab, deploy key and deploy script. An Apps page in the panel lists apps and queues these as tasks.

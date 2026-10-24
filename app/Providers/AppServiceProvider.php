@@ -24,7 +24,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        RateLimiter::for('setup', fn (Request $request): Limit => Limit::perMinute(10)->by($request->ip()));
         RateLimiter::for('webhooks', fn (Request $request): Limit => Limit::perMinute(30)->by($request->route('token') ?? $request->ip()));
     }
 }

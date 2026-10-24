@@ -21,8 +21,6 @@ return new class extends Migration
             $table->text('private_key');
             $table->text('public_key');
             $table->text('host_key')->nullable();
-            $table->string('setup_token', 64)->nullable();
-            $table->timestamp('setup_token_expires_at')->nullable();
             $table->timestamp('connected_at')->nullable();
             $table->timestamp('provisioned_at')->nullable();
             $table->timestamps();

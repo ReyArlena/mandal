@@ -63,7 +63,7 @@ Each server gets its own SSH key pair when it is added; the private key is store
 ### Adding a new server
 
 1. Add the server in the panel with its address. Mandal supports Ubuntu 26.04 LTS.
-2. Open the server and choose **Setup command**. Run the command shown on the server as root. It creates the `mandal` user, installs the panel's public key and the `mandal` CLI, and allows that user to run only the CLI through sudo. Nothing else on the server is touched.
+2. Open the server and choose **Setup command**. Run the command shown on the server as root. It fetches `setup.sh` from the latest GitHub release, creates the `mandal` user, installs the panel's public key and the `mandal` CLI, and allows that user to run only the CLI through sudo. Nothing else on the server is touched, and the command can be run again safely. The server only needs to reach GitHub, never the panel, so a panel on your own machine works too.
 3. Choose **Test connection**, check the host key fingerprint it shows against `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server, and confirm.
 
 4. Choose **Provision**. Mandal installs and hardens the stack in the background (nginx, PHP, Composer, MariaDB, Dragonfly, Bun, Supervisor, Certbot, Docker, firewall, fail2ban, automatic security updates) and shows the output live under the server's **Tasks** page. A queue worker must be running for this (`php artisan queue:work`, or `composer run dev` locally).
@@ -111,8 +111,6 @@ Ubuntu security updates and PHP patch releases install themselves (unattended-up
 The **Logs** page reads logs straight from the server: service journals (nginx, PHP-FPM, MariaDB, Dragonfly, Supervisor, Docker, fail2ban, SSH), the kernel and authentication journals, global nginx and PHP-FPM logs, fail2ban, package updates, and for each app its nginx access and error logs, Laravel log (one entry per message, stack traces attached, filterable by level), PHP slow log, worker logs and the latest deployment (Docker apps: nginx logs and the container output). Filter by text, limit the lines, and switch on **Tail** to follow a log live. Sources are addressed by name, never by path, so the panel can only read the logs listed.
 
 Once connected, the server's **Inventory** page shows what is on it (services, PHP versions and pools, nginx sites, databases, Supervisor programs, certificates, firewall rules, Docker, and apps managed by Mandal). Nothing is stored in the panel; it is read from the server on each visit and cached for a few seconds.
-
-The setup link expires after 24 hours and stops working after the first successful connection. The server needs to reach the panel to download the script and the CLI, so a panel that only runs on your own machine cannot use the one-line command; open the script from the dialog instead.
 
 ## Server CLI
 

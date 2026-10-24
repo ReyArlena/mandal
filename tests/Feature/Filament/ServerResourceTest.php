@@ -66,25 +66,16 @@ it('shows the public key and the unconfirmed host key state', function () {
         ->assertSee('Not confirmed yet');
 });
 
-it('shows a one-line setup command backed by a fresh token', function () {
+it('shows the one-line setup command', function () {
     $server = Server::factory()->create();
 
     livewire(ViewServer::class, ['record' => $server->getRouteKey()])
         ->mountAction('setupCommand')
         ->assertActionMounted('setupCommand');
 
-    $server->refresh();
+    $html = view('filament.servers.setup-command', ['server' => $server])->render();
 
-    expect($server->setup_token)->not->toBeNull()
-        ->and($server->setup_token_expires_at)->not->toBeNull();
-
-    $html = view('filament.servers.setup-command', [
-        'server' => $server,
-        'scriptUrl' => $url = route('setup.script', ['server' => $server, 'token' => 'token']),
-        'command' => "curl -fsSL {$url} | bash",
-    ])->render();
-
-    expect($html)->toContain("curl -fsSL {$url} | bash")
+    expect($html)->toContain(e($server->setupCommand()))
         ->toContain($server->ssh_user);
 });
 

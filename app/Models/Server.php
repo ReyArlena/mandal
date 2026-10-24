@@ -11,20 +11,13 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 
 #[Fillable(['name', 'host', 'port', 'ssh_user', 'setup_mode'])]
-#[Hidden(['private_key', 'setup_token'])]
+#[Hidden(['private_key'])]
 class Server extends Model
 {
     /** @use HasFactory<ServerFactory> */
     use HasFactory;
-
-    /**
-     * How long a freshly issued setup token stays valid.
-     */
-    public const int SETUP_TOKEN_HOURS = 24;
 
     protected static function booted(): void
     {
@@ -49,8 +42,6 @@ class Server extends Model
             'port' => 'integer',
             'setup_mode' => ServerSetupMode::class,
             'private_key' => 'encrypted',
-            'setup_token' => 'hashed',
-            'setup_token_expires_at' => 'datetime',
             'connected_at' => 'datetime',
             'provisioned_at' => 'datetime',
         ];
@@ -115,41 +106,15 @@ class Server extends Model
     }
 
     /**
-     * Issue a new single-use setup token and return its plain value.
-     *
-     * Only the hash is stored, so the plain token must be shown to the
-     * user straight away.
+     * The command that sets the server up for this panel: it fetches
+     * setup.sh from the latest release and passes it this panel's key.
      */
-    public function issueSetupToken(): string
+    public function setupCommand(): string
     {
-        $token = Str::random(48);
+        $repository = (string) config('mandal.repository');
+        $key = escapeshellarg(KeyPair::normalize($this->public_key).' mandal-panel');
+        $user = escapeshellarg($this->ssh_user);
 
-        $this->forceFill([
-            'setup_token' => $token,
-            'setup_token_expires_at' => now()->addHours(self::SETUP_TOKEN_HOURS),
-        ])->save();
-
-        return $token;
-    }
-
-    public function setupTokenMatches(string $token): bool
-    {
-        if ($this->setup_token === null || $this->setup_token_expires_at === null) {
-            return false;
-        }
-
-        if ($this->setup_token_expires_at->isPast()) {
-            return false;
-        }
-
-        return Hash::check($token, $this->setup_token);
-    }
-
-    public function clearSetupToken(): void
-    {
-        $this->forceFill([
-            'setup_token' => null,
-            'setup_token_expires_at' => null,
-        ])->save();
+        return "curl -fsSL https://github.com/{$repository}/releases/latest/download/setup.sh | sudo bash -s -- --user={$user} --key={$key}";
     }
 }

@@ -17,30 +17,19 @@ it('stores the private key encrypted and never serialises it', function () {
     $stored = DB::table('servers')->where('id', $server->id)->value('private_key');
 
     expect($stored)->not->toContain('BEGIN OPENSSH')
-        ->and($server->toArray())->not->toHaveKeys(['private_key', 'setup_token']);
+        ->and($server->toArray())->not->toHaveKey('private_key');
 });
 
-it('issues a setup token that can be verified once and expires', function () {
-    $server = Server::factory()->create();
+it('builds a setup command that fetches setup.sh from the latest release with the panel key', function () {
+    config(['mandal.repository' => 'acme/mandal']);
+    $server = Server::factory()->create(['ssh_user' => 'deploy']);
+    $keyBlob = explode(' ', $server->public_key)[1];
 
-    $token = $server->issueSetupToken();
-
-    expect($token)->toHaveLength(48)
-        ->and($server->setupTokenMatches($token))->toBeTrue()
-        ->and($server->setupTokenMatches('wrong'))->toBeFalse();
-
-    $this->travel(Server::SETUP_TOKEN_HOURS + 1)->hours();
-
-    expect($server->setupTokenMatches($token))->toBeFalse();
-});
-
-it('rejects a setup token after it has been cleared', function () {
-    $server = Server::factory()->create();
-    $token = $server->issueSetupToken();
-
-    $server->clearSetupToken();
-
-    expect($server->setupTokenMatches($token))->toBeFalse();
+    expect($server->setupCommand())
+        ->toStartWith('curl -fsSL https://github.com/acme/mandal/releases/latest/download/setup.sh | sudo bash -s -- ')
+        ->toContain("--user='deploy'")
+        ->toContain("--key='ssh-ed25519 {$keyBlob} mandal-panel'")
+        ->not->toContain('BEGIN OPENSSH PRIVATE KEY');
 });
 
 it('reports the fingerprint of a pinned host key', function () {
