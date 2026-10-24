@@ -100,7 +100,10 @@ class CliArchive
             throw new RuntimeException("The server CLI source directory is missing: {$source}");
         }
 
-        return (new Finder)->files()->in($source)->notPath('tests')->ignoreDotFiles(true)->sortByName();
+        // Only bin/ and lib/ ship: the scripts at the top of server/ are
+        // fetched from GitHub releases, and the CLI hashes bin/ and lib/ to
+        // compare its build with this archive.
+        return (new Finder)->files()->in($source)->depth('>= 1')->notPath('tests')->ignoreDotFiles(true)->sortByName();
     }
 
     private function cacheDirectory(): string

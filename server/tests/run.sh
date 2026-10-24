@@ -48,7 +48,7 @@ mkdir -p "${MANDAL_APT_SOURCES_DIR}"
 # Only the fakes and a fixed set of real tools are on PATH, so whatever the
 # host has installed (bun, docker, nginx...) cannot leak into the results.
 mkdir -p "${TMP}/bin"
-for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch base64 sha256sum tar gzip getent stat flock curl seq xxd printf mkdir cp rm ln env; do
+for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch base64 sha256sum tar gzip getent stat flock curl seq xxd printf mkdir cp rm ln env install; do
     if path="$(command -v "$tool" 2> /dev/null)"; then
         ln -s "$path" "${TMP}/bin/${tool}"
     fi
@@ -807,6 +807,77 @@ again="$(cmd_panel_install --name=mandal-panel --domain=panel.example.com --repo
 assert_eq "panel:install succeeds when the panel app already exists" "0" "$?"
 [[ "$again" == *"already exists; nothing to do"* && "$again" != *"Creating the panel app"* ]] && pass || fail "panel:install leaves an existing panel app alone"
 rm -f "${MANDAL_APPS_DIR}/mandal-panel.conf"
+
+# ---------------------------------------------------------------------------
+# setup.sh
+# ---------------------------------------------------------------------------
+
+# The script insists on root and shells out to useradd, chown and visudo, so
+# it runs here with stand-ins for those, every path moved under $TMP and
+# the CLI taken from this checkout instead of a release.
+setup_bin="${TMP}/setup-bin"
+mkdir -p "$setup_bin"
+real_id="$(command -v id)"
+printf '#!/usr/bin/env bash\n[[ "$1" == "-u" && $# -eq 1 ]] && { echo 0; exit 0; }\nexec %s "$@"\n' "$real_id" > "${setup_bin}/id"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "%s/useradd.log"\n' "$TMP" > "${setup_bin}/useradd"
+printf '#!/usr/bin/env bash\nexit 0\n' > "${setup_bin}/chown"
+printf '#!/usr/bin/env bash\nexit 0\n' > "${setup_bin}/visudo"
+chmod +x "${setup_bin}"/*
+setup_key="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ7VGvy2x0pt4Km9vJg5oY5Z4L0mB6x2F6F8pQ3n3Kp1 mandal-panel"
+setup_user="$("$real_id" -un)"
+setup_root="${TMP}/setup"
+run_setup() {
+    PATH="${setup_bin}:${PATH}" MANDAL_HOME_DIR="${setup_root}/home" MANDAL_INSTALL_DIR="${setup_root}/opt/mandal" MANDAL_BIN_LINK="${setup_root}/bin/mandal" MANDAL_SUDOERS_FILE="${setup_root}/sudoers.d/mandal" \
+        bash "${MANDAL_ROOT}/setup.sh" --source="${MANDAL_ROOT}/.." "$@" 2>&1
+}
+
+plan="$(run_setup --key="$setup_key" --user=fresh --dry-run)"
+assert_eq "setup.sh dry run completes" "0" "$?"
+for marker in "useradd --create-home --home-dir ${setup_root}/home/fresh --shell /bin/bash --user-group fresh" "append to ${setup_root}/home/fresh/.ssh/authorized_keys: ${setup_key}" "install ${MANDAL_ROOT}/.. ($(mandal_version)) -> ${setup_root}/opt/mandal" "write ${setup_root}/sudoers.d/mandal: fresh ALL=(root) NOPASSWD: ${setup_root}/opt/mandal/bin/mandal" "Dry run finished"; do
+    [[ "$plan" == *"$marker"* ]] && pass || fail "setup.sh dry run mentions: $marker"
+done
+[[ ! -e "${setup_root}" ]] && pass || fail "setup.sh dry run changes nothing"
+
+mkdir -p "${setup_root}/bin" # stands in for /usr/local/bin
+first="$(run_setup --key="$setup_key" --user="$setup_user")"
+assert_eq "setup.sh completes" "0" "$?"
+[[ "$first" == *"user ${setup_user} already exists"* ]] && pass || fail "setup.sh keeps an existing user"
+[[ ! -f "${TMP}/useradd.log" ]] && pass || fail "setup.sh does not call useradd for an existing user"
+assert_eq "setup.sh installs the panel key" "$setup_key" "$(cat "${setup_root}/home/${setup_user}/.ssh/authorized_keys")"
+assert_eq "setup.sh installs the CLI version" "$(mandal_version)" "$(cat "${setup_root}/opt/mandal/VERSION")"
+[[ -x "${setup_root}/opt/mandal/bin/mandal" && -f "${setup_root}/opt/mandal/lib/core.sh" ]] && pass || fail "setup.sh installs the CLI files"
+[[ ! -e "${setup_root}/opt/mandal/tests" ]] && pass || fail "setup.sh leaves the CLI tests out"
+assert_eq "setup.sh links the CLI" "${setup_root}/opt/mandal/bin/mandal" "$(readlink "${setup_root}/bin/mandal")"
+assert_eq "setup.sh writes the sudo rule" "${setup_user} ALL=(root) NOPASSWD: ${setup_root}/opt/mandal/bin/mandal" "$(cat "${setup_root}/sudoers.d/mandal")"
+[[ "$first" == *"Done. mandal $(mandal_version) is installed"* ]] && pass || fail "setup.sh reports what it installed"
+
+second="$(run_setup --key="$setup_key" --user="$setup_user")"
+assert_eq "setup.sh runs again without error" "0" "$?"
+for marker in "key already allowed" "mandal $(mandal_version) already installed" "sudoers.d/mandal unchanged"; do
+    [[ "$second" == *"$marker"* ]] && pass || fail "setup.sh second run mentions: $marker"
+done
+assert_eq "setup.sh adds the key only once" "1" "$(wc -l < "${setup_root}/home/${setup_user}/.ssh/authorized_keys")"
+
+printf '99.0.0\n' > "${setup_root}/opt/mandal/VERSION"
+newer="$(run_setup --key="$setup_key" --user="$setup_user")"
+[[ "$newer" == *"mandal 99.0.0 already installed"* ]] && pass || fail "setup.sh keeps a newer CLI"
+assert_eq "setup.sh leaves the newer CLI in place" "99.0.0" "$(cat "${setup_root}/opt/mandal/VERSION")"
+forced="$(run_setup --key="$setup_key" --user="$setup_user" --force)"
+[[ "$forced" == *"install ${MANDAL_ROOT}/.."* ]] && pass || fail "setup.sh --force replaces a newer CLI"
+assert_eq "setup.sh --force installs the requested version" "$(mandal_version)" "$(cat "${setup_root}/opt/mandal/VERSION")"
+printf '0.0.1\n' > "${setup_root}/opt/mandal/VERSION"
+older="$(run_setup --key="$setup_key" --user="$setup_user")"
+[[ "$older" == *"install ${MANDAL_ROOT}/.."* ]] && pass || fail "setup.sh replaces an older CLI"
+assert_eq "setup.sh upgrades an older CLI" "$(mandal_version)" "$(cat "${setup_root}/opt/mandal/VERSION")"
+
+(run_setup --user="$setup_user" --dry-run) > /dev/null 2>&1 && fail "setup.sh requires --key" || pass
+(run_setup --key="not a key" --dry-run) > /dev/null 2>&1 && fail "setup.sh rejects a malformed key" || pass
+(run_setup --key="$setup_key" --user="Bad User" --dry-run) > /dev/null 2>&1 && fail "setup.sh rejects a bad user name" || pass
+(run_setup --key="$setup_key" --version=latest --dry-run) > /dev/null 2>&1 && fail "setup.sh rejects a version that is not a tag" || pass
+(run_setup --key="$setup_key" --repo='../etc' --dry-run) > /dev/null 2>&1 && fail "setup.sh rejects a bad repository" || pass
+(run_setup --key="$setup_key" --bogus --dry-run) > /dev/null 2>&1 && fail "setup.sh rejects unknown options" || pass
+(MANDAL_HOME_DIR="$TMP" bash "${MANDAL_ROOT}/setup.sh" --key="$setup_key" --source="$TMP" --dry-run) > /dev/null 2>&1 && fail "setup.sh rejects a source without the CLI" || pass
+rm -rf "$setup_root"
 
 # ---------------------------------------------------------------------------
 # docker apps
