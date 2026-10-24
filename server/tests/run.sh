@@ -880,6 +880,112 @@ assert_eq "setup.sh upgrades an older CLI" "$(mandal_version)" "$(cat "${setup_r
 rm -rf "$setup_root"
 
 # ---------------------------------------------------------------------------
+# install.sh
+# ---------------------------------------------------------------------------
+
+# The installer drives the CLI and artisan; both are replaced by fakes that
+# log their calls and leave behind the state the real commands would, so
+# the script's decisions (what to run, what to skip) can be checked.
+install_root="${TMP}/install"
+install_bin="${TMP}/install-bin"
+mkdir -p "$install_bin" "${install_root}/etc/apps" "${install_root}/bin" "${install_root}/certs"
+cp "${setup_bin}/id" "${setup_bin}/chown" "$install_bin/"
+cat > "${install_bin}/mandal" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$INSTALL_LOG/mandal.log"
+manifest="$MANDAL_ETC/apps/mandal-panel.conf"
+case "$1" in
+    cli:update) tar -xzOf "${2#--from=}" ./VERSION > "$MANDAL_INSTALL_DIR/VERSION" ;;
+    provision) printf 'PROVISIONED_AT=2026-10-27T10:00:00Z\n' >> "$MANDAL_ETC/server.conf" ;;
+    panel:install)
+        if [[ -f "$manifest" ]]; then echo "Panel app mandal-panel already exists; nothing to do."; exit 0; fi
+        for arg in "$@"; do case "$arg" in --domain=*) d="${arg#*=}" ;; --repo=*) r="${arg#*=}" ;; --branch=*) b="${arg#*=}" ;; esac; done
+        printf 'TYPE=laravel\nPANEL=true\nDOMAIN=%s\nPHP=8.5\nREPO=%s\nBRANCH=%s\nCLONE=https\n' "$d" "$r" "$b" > "$manifest"
+        ;;
+    app:configure)
+        for arg in "$@"; do case "$arg" in --branch=*) sed -i "s|^BRANCH=.*|BRANCH=${arg#*=}|" "$manifest" ;; --repo=*) sed -i "s|^REPO=.*|REPO=${arg#*=}|" "$manifest" ;; esac; done
+        ;;
+    app:deploy)
+        mkdir -p "$MANDAL_HOME_DIR/mandal-panel/current"
+        grep '^BRANCH=' "$manifest" | cut -d= -f2 | sed 's/^v//' > "$MANDAL_HOME_DIR/mandal-panel/current/VERSION"
+        ;;
+    app:ssl)
+        [[ "${FAKE_SSL_FAILS:-0}" == 1 ]] && { echo "error: panel.example.com does not point at this server" >&2; exit 1; }
+        mkdir -p "$MANDAL_LETSENCRYPT_DIR/panel.example.com" && touch "$MANDAL_LETSENCRYPT_DIR/panel.example.com/fullchain.pem"
+        ;;
+esac
+EOF
+cat > "${install_bin}/sudo" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$INSTALL_LOG/sudo.log"
+if [[ "$*" == *"mandal:register-host"* ]]; then
+    [[ "$*" == *"--verify"* ]] && touch "$INSTALL_LOG/connected"
+    connected=false; [[ -f "$INSTALL_LOG/connected" ]] && connected=true
+    printf '{"id":1,"name":"panel-host","public_key":"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ7VGvy2x0pt4Km9vJg5oY5Z4L0mB6x2F6F8pQ3n3Kp1 mandal panel (panel-host)","connected":%s}\n' "$connected"
+fi
+EOF
+chmod +x "${install_bin}"/*
+run_install() {
+    PATH="${install_bin}:${PATH}" INSTALL_LOG="$install_root" MANDAL_ETC="${install_root}/etc" MANDAL_HOME_DIR="${install_root}/home" MANDAL_INSTALL_DIR="${install_root}/opt/mandal" MANDAL_BIN="${install_bin}/mandal" MANDAL_BIN_LINK="${install_root}/bin/mandal" MANDAL_LETSENCRYPT_DIR="${install_root}/certs" MANDAL_HOST_KEY_FILE="${install_root}/host_key.pub" \
+        bash "${MANDAL_ROOT}/install.sh" --source="${MANDAL_ROOT}/.." "$@" 2>&1
+}
+mandal_calls() { cut -d' ' -f1 "${install_root}/mandal.log" | tr '\n' ' ' | sed 's/ $//'; }
+clear_logs() { rm -f "${install_root}/mandal.log" "${install_root}/sudo.log"; }
+
+(run_install) > /dev/null 2>&1 && fail "install.sh requires --domain the first time" || pass
+(run_install --domain='bad domain') > /dev/null 2>&1 && fail "install.sh rejects a bad domain" || pass
+(run_install --domain=panel.example.com --bogus) > /dev/null 2>&1 && fail "install.sh rejects unknown options" || pass
+(run_install --domain=panel.example.com --version=latest) > /dev/null 2>&1 && fail "install.sh rejects a version that is not a tag" || pass
+
+fresh="$(run_install --domain=panel.example.com --email=ops@example.com)"
+assert_eq "install.sh completes on a fresh server" "0" "$?"
+assert_eq "install.sh runs every step in order" "provision panel:install app:deploy app:ssl key:add" "$(mandal_calls)"
+[[ "$(grep -c . "${install_root}/mandal.log")" -eq 5 ]] && pass || fail "install.sh runs each CLI step once"
+grep -q "panel:install --name=mandal-panel --domain=panel.example.com --repo=ReyArlena/mandal --branch=v$(mandal_version) --https" "${install_root}/mandal.log" && pass || fail "install.sh pins the panel app to the release tag"
+grep -q "app:ssl --name=mandal-panel --email=ops@example.com" "${install_root}/mandal.log" && pass || fail "install.sh passes the email to app:ssl"
+grep -q "key:add --name=Hosted panel --key=ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ7VGvy2x0pt4Km9vJg5oY5Z4L0mB6x2F6F8pQ3n3Kp1 mandal panel (panel-host)" "${install_root}/mandal.log" && pass || fail "install.sh allows the panel's own key"
+artisan_calls() { awk '{for (i = 1; i <= NF; i++) if ($i ~ /artisan$/) c = $(i + 1); if ($0 ~ /--verify/) c = c " --verify"; print c}' "${install_root}/sudo.log" | tr '\n' '|' | sed 's/|$//'; }
+assert_eq "install.sh seeds the first user and registers the host twice" "db:seed|mandal:register-host|mandal:register-host --verify" "$(artisan_calls)"
+grep -q "^-u mandal-panel -H /usr/bin/php8.5 ${install_root}/home/mandal-panel/current/artisan db:seed" "${install_root}/sudo.log" && pass || fail "install.sh runs artisan as the app user with the app's PHP"
+assert_eq "install.sh installs the CLI" "$(mandal_version)" "$(cat "${install_root}/opt/mandal/VERSION")"
+assert_eq "install.sh links the CLI" "${install_root}/opt/mandal/bin/mandal" "$(readlink "${install_root}/bin/mandal")"
+[[ "$fresh" == *"Mandal $(mandal_version) is installed at https://panel.example.com"* ]] && pass || fail "install.sh reports where the panel is"
+
+clear_logs
+again="$(run_install)"
+assert_eq "install.sh runs again without --domain" "0" "$?"
+assert_eq "install.sh skips what is done" "panel:install key:add" "$(mandal_calls)"
+for marker in "mandal $(mandal_version) already installed" "already provisioned on 2026-10-27T10:00:00Z" "mandal $(mandal_version) already deployed" "certificate for panel.example.com already present" "already connected"; do
+    [[ "$again" == *"$marker"* ]] && pass || fail "install.sh second run mentions: $marker"
+done
+[[ "$(grep -c 'register-host' "${install_root}/sudo.log")" -eq 1 ]] && pass || fail "install.sh does not verify a connected host again"
+(run_install --domain=other.example.com) > /dev/null 2>&1 && fail "install.sh refuses to move the panel to another domain" || pass
+
+clear_logs
+printf '0.0.9\n' > "${install_root}/opt/mandal/VERSION"
+printf '0.0.9\n' > "${install_root}/home/mandal-panel/current/VERSION"
+sed -i 's/^BRANCH=.*/BRANCH=v0.0.9/' "${install_root}/etc/apps/mandal-panel.conf"
+update="$(run_install)"
+assert_eq "install.sh updates an older install" "0" "$?"
+assert_eq "install.sh updates the CLI first, then the panel" "cli:update panel:install app:configure app:deploy key:add" "$(mandal_calls)"
+grep -q "app:configure --name=mandal-panel --repo=ReyArlena/mandal --branch=v$(mandal_version) --https" "${install_root}/mandal.log" && pass || fail "install.sh moves the panel app to the new tag"
+assert_eq "install.sh updates the CLI through cli:update" "$(mandal_version)" "$(cat "${install_root}/opt/mandal/VERSION")"
+assert_eq "install.sh deploys the new release" "$(mandal_version)" "$(cat "${install_root}/home/mandal-panel/current/VERSION")"
+
+clear_logs
+rm -rf "${install_root}/certs/panel.example.com"
+failed_ssl="$(FAKE_SSL_FAILS=1 run_install)"
+assert_eq "install.sh carries on when the certificate cannot be issued" "0" "$?"
+[[ "$failed_ssl" == *"warning: no certificate yet. Point panel.example.com at this server and run this script again."* ]] && pass || fail "install.sh explains a missing certificate"
+clear_logs
+skipped_ssl="$(run_install --skip-ssl)"
+[[ "$skipped_ssl" == *"skipped (--skip-ssl)"* && "$(mandal_calls)" != *"app:ssl"* ]] && pass || fail "install.sh honours --skip-ssl"
+
+printf 'TYPE=laravel\nDOMAIN=x.example.com\nPHP=8.5\n' > "${install_root}/etc/apps/mandal-panel.conf"
+(run_install) > /dev/null 2>&1 && fail "install.sh refuses an app of the same name that is not the panel" || pass
+rm -rf "$install_root" "$install_bin"
+
+# ---------------------------------------------------------------------------
 # docker apps
 # ---------------------------------------------------------------------------
 

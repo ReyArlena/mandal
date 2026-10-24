@@ -32,16 +32,17 @@ There is no public registration page. Additional users are created from within t
 
 ## Hosting the panel on a managed server
 
-The panel can live on one of the servers it manages. Provision the server from a local copy of the panel first, then on the server run:
+The usual way to run Mandal is on a server it manages. Point a domain at a fresh Ubuntu 26.04 server, then run as root:
 
 ```bash
-sudo mandal panel:install --domain=panel.example.com --repo=<owner>/<repo>   # add --https for a public repository
-sudo mandal app:deploy --name=mandal-panel
-sudo mandal app:ssl --name=mandal-panel
-sudo -u mandal-panel -H php /home/mandal-panel/current/artisan db:seed      # first user
+curl -fsSL https://github.com/ReyArlena/mandal/releases/latest/download/install.sh | sudo bash -s -- --domain=panel.example.com
 ```
 
-The panel app is flagged on the server: it cannot be deleted from the panel, the HTTP and HTTPS firewall rules stay protected, and the panel's SQLite database lives under `shared/` so deploys keep it. Add the server to the hosted panel afterwards with "Connect to an existing Mandal server" so it can manage itself. Keep a backup of `shared/database.sqlite` together with the `APP_KEY` from `shared/.env`.
+`install.sh` installs the `mandal` CLI from the latest release, provisions the server with the default drivers, creates the panel as a protected app, deploys it from the release tag, requests a Let's Encrypt certificate, creates the first user and registers the server in the panel so it manages itself. Pass `--email=` for the certificate contact, `--version=` to pin a release, or `--skip-ssl` to leave the certificate for later. To choose other drivers, run `mandal provision` by hand before the script; it skips provisioning when it has been done.
+
+Every step is skipped when it is already done, so the script resumes after an interruption, and running it again on an installed server updates it: the CLI first, then the panel from the newer release. The panel app is flagged on the server: it cannot be deleted from the panel, the HTTP and HTTPS firewall rules stay protected, and the panel's SQLite database lives under `shared/` so deploys keep it. Keep a backup of `shared/database.sqlite` together with the `APP_KEY` from `shared/.env`.
+
+The pieces can also be run by hand: `mandal panel:install`, `app:deploy` and `app:ssl` on the server, `php artisan db:seed` as the app user for the first user, and `php artisan mandal:register-host` to add the server to its own panel.
 
 ## Running in production
 
