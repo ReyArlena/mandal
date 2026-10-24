@@ -1,0 +1,59 @@
+# Cut a release with:
+#   git tag v0.1.0 && git push origin v0.1.0
+# The tag must match the VERSION file. The release carries setup.sh and
+# install.sh, which servers fetch from .../releases/latest/download/, and
+# clones the CLI and the panel from the tag itself.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag matches VERSION
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          tag="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$version tag=$tag"
+          [ "$version" = "$tag" ] || { echo "The tag must be v$version"; exit 1; }
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          extensions: mbstring, intl, sqlite3, pdo_sqlite, curl, zip, gd, bcmath
+          coverage: none
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies and build assets
+        run: |
+          composer install --no-interaction --prefer-dist --no-progress
+          bun install --frozen-lockfile
+          bun run build
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Panel tests
+        run: php artisan test --exclude-testsuite=Browser
+
+      - name: CLI tests
+        run: |
+          shellcheck -x server/bin/mandal server/lib/*.sh server/lib/commands/*.sh server/lib/roles/*/*.sh server/setup.sh server/install.sh server/tests/run.sh
+          bash server/tests/run.sh
+
+      - name: Create the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            server/setup.sh
+            server/install.sh
+          generate_release_notes: true
