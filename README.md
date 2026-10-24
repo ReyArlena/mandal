@@ -64,7 +64,7 @@ Each server gets its own SSH key pair when it is added; the private key is store
 
 1. Add the server in the panel with its address. Mandal supports Ubuntu 26.04 LTS.
 2. Open the server and choose **Setup command**. Run the command shown on the server as root. It fetches `setup.sh` from the latest GitHub release, creates the `mandal` user, installs the panel's public key and the `mandal` CLI, and allows that user to run only the CLI through sudo. Nothing else on the server is touched, and the command can be run again safely. The server only needs to reach GitHub, never the panel, so a panel on your own machine works too.
-3. Choose **Test connection**, check the host key fingerprint it shows against `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server, and confirm.
+3. Choose **Test connection**, check the host key fingerprint it shows against `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server, and confirm. If the CLI the release installed differs from the one this panel ships, the panel queues an update to its own build straight away.
 
 4. Choose **Provision**. Mandal installs and hardens the stack in the background (nginx, PHP, Composer, MariaDB, Dragonfly, Bun, Supervisor, Certbot, Docker, firewall, fail2ban, automatic security updates) and shows the output live under the server's **Tasks** page. A queue worker must be running for this (`php artisan queue:work`, or `composer run dev` locally).
 

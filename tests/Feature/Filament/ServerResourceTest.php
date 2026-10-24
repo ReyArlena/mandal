@@ -1,13 +1,18 @@
 <?php
 
 use App\Enums\ServerSetupMode;
+use App\Enums\TaskType;
 use App\Filament\Resources\Servers\Pages\CreateServer;
 use App\Filament\Resources\Servers\Pages\ListServers;
 use App\Filament\Resources\Servers\Pages\ViewServer;
+use App\Jobs\UpdateCli;
+use App\Mandal\CliArchive;
 use App\Models\Server;
+use App\Models\Task;
 use App\Models\User;
 use App\Ssh\SshClient;
 use App\Ssh\SshException;
+use Illuminate\Support\Facades\Queue;
 use Tests\Support\FakeSshClient;
 
 use function Pest\Livewire\livewire;
@@ -98,6 +103,40 @@ it('pins the host key and records the connection when the test succeeds', functi
 
     expect($server->host_key)->toBe(FakeSshClient::HOST_KEY)
         ->and($server->connected_at)->not->toBeNull();
+});
+
+it('installs the panel CLI build after the first successful connection', function () {
+    Queue::fake();
+    $server = Server::factory()->create();
+    $this->ssh->respondTo('echo mandal-ok', 'mandal-ok');
+    $this->ssh->respondWithJson('version --json', ['version' => '0.0.1', 'build' => 'release00001']);
+
+    livewire(ViewServer::class, ['record' => $server->getRouteKey()])
+        ->callAction('testConnection')
+        ->assertNotified("Connected to {$server->name}");
+
+    expect($server->tasks()->sole()->type)->toBe(TaskType::UpdateCli);
+    Queue::assertPushed(UpdateCli::class);
+});
+
+it('leaves the CLI alone when it matches, on later connections, and on servers managed elsewhere', function () {
+    Queue::fake();
+    $this->ssh->respondTo('echo mandal-ok', 'mandal-ok');
+
+    $this->ssh->respondWithJson('version --json', ['version' => '0.1.0', 'build' => app(CliArchive::class)->hash()]);
+    $matching = Server::factory()->create();
+    livewire(ViewServer::class, ['record' => $matching->getRouteKey()])->callAction('testConnection');
+
+    $this->ssh->respondWithJson('version --json', ['version' => '0.0.1', 'build' => 'release00001']);
+    $reconnecting = Server::factory()->withPinnedHostKey()->create();
+    livewire(ViewServer::class, ['record' => $reconnecting->getRouteKey()])->callAction('testConnection');
+
+    $existing = Server::factory()->create(['setup_mode' => ServerSetupMode::Existing]);
+    livewire(ViewServer::class, ['record' => $existing->getRouteKey()])->callAction('testConnection');
+
+    expect(Task::query()->count())->toBe(0)
+        ->and($existing->fresh()->connected_at)->not->toBeNull();
+    Queue::assertNothingPushed();
 });
 
 it('reports a failed connection without pinning anything', function () {

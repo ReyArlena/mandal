@@ -13,6 +13,7 @@ use App\Jobs\UpdateCli;
 use App\Mandal\CliArchive;
 use App\Mandal\MandalClient;
 use App\Models\Server;
+use App\Models\Task;
 use App\Ssh\KeyPair;
 use App\Ssh\SshClient;
 use App\Ssh\SshException;
@@ -212,18 +213,44 @@ class ViewServer extends ViewRecord
                     return;
                 }
 
-                $task = $record->tasks()->create([
-                    'type' => TaskType::UpdateCli,
-                    'user_id' => auth()->id(),
-                    'options' => [],
-                ]);
-
-                UpdateCli::dispatch($task);
+                $task = $this->queueCliUpdate($record);
 
                 Notification::make()->title('CLI update started')->success()->send();
 
                 $this->redirect(ServerResource::getUrl('task', ['record' => $record, 'task' => $task]));
             });
+    }
+
+    private function queueCliUpdate(Server $record): Task
+    {
+        $task = $record->tasks()->create([
+            'type' => TaskType::UpdateCli,
+            'user_id' => auth()->id(),
+            'options' => [],
+        ]);
+
+        UpdateCli::dispatch($task);
+
+        return $task;
+    }
+
+    /**
+     * Whether the CLI setup.sh installed from a release differs from the
+     * build this panel ships. A server another panel manages keeps that
+     * panel's build, and a server whose CLI does not answer cannot be
+     * updated through it anyway.
+     */
+    private function cliDiffersFromPanel(Server $record, MandalClient $mandal, CliArchive $archive): bool
+    {
+        if ($record->setup_mode === ServerSetupMode::Existing || $record->hasActiveTask()) {
+            return false;
+        }
+
+        try {
+            return ($mandal->version($record)['build'] ?? null) !== $archive->hash();
+        } catch (SshException) {
+            return false;
+        }
     }
 
     /**
@@ -249,7 +276,7 @@ class ViewServer extends ViewRecord
                     .'then confirm to pin it. Mandal will refuse to connect if it ever changes.';
             })
             ->modalSubmitActionLabel('Trust this host key')
-            ->action(function (Server $record, SshClient $ssh, MandalClient $mandal): void {
+            ->action(function (Server $record, SshClient $ssh, MandalClient $mandal, CliArchive $archive): void {
                 try {
                     $connection = $ssh->connect($record, trustUnknownHostKey: true);
                     $result = $connection->run('echo mandal-ok', timeoutSeconds: 15);
@@ -275,13 +302,20 @@ class ViewServer extends ViewRecord
                     return;
                 }
 
+                $firstConnection = $record->connected_at === null;
                 $record->forceFill(['connected_at' => now()])->save();
                 $mandal->forgetInventory($record);
 
-                Notification::make()
-                    ->title("Connected to {$record->name}")
-                    ->success()
-                    ->send();
+                $notification = Notification::make()->title("Connected to {$record->name}")->success();
+
+                // setup.sh installs the CLI from a release; from here on this
+                // panel's own build is the one the server should run.
+                if ($firstConnection && $this->cliDiffersFromPanel($record, $mandal, $archive)) {
+                    $this->queueCliUpdate($record);
+                    $notification->body("Installing this panel's build of the CLI (mandal {$archive->version()}). Follow it under Tasks.");
+                }
+
+                $notification->send();
 
                 $this->refreshFormData(['connected_at', 'host_key']);
             });
