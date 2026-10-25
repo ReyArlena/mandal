@@ -51,7 +51,9 @@
                     Bind a port to <span class="font-mono">127.0.0.1</span> in the compose file and put nginx in front unless it is meant to be public.
                 </p>
             </div>
-            @if (! ($firewall['docker']['active'] ?? false))
+            @if (! array_key_exists('docker', $firewall))
+                <p class="text-sm text-gray-500">The CLI on this server does not report Docker yet; update it from the server page.</p>
+            @elseif (! ($firewall['docker']['active'] ?? false))
                 <p class="text-sm text-gray-500">Docker is not running.</p>
             @else
                 <table class="w-full text-left text-sm">

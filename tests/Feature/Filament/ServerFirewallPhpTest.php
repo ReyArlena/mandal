@@ -52,6 +52,14 @@ it('shows the firewall rules and the ports Docker publishes past them', function
         ->assertSee('ufw rule cannot block it');
 });
 
+it('asks for a CLI update when firewall:list predates the Docker section', function () {
+    $this->ssh->respondWithJson('firewall:list', ['installed' => true, 'status' => 'active', 'default_incoming' => 'deny', 'default_outgoing' => 'allow', 'rules' => []]);
+
+    livewire(ServerFirewall::class, ['record' => $this->server->getRouteKey()])
+        ->assertSee('does not report Docker yet')
+        ->assertDontSee('Docker is not running');
+});
+
 it('adds and deletes rules through the CLI', function () {
     $this->ssh->respondTo('firewall:allow', "Allowed 8443/tcp.\n");
     $this->ssh->respondTo('firewall:delete', "Deleted rule 2.\n");
