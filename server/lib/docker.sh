@@ -181,22 +181,43 @@ docker_app_create() {
 # docker_app_replace_compose name compose_file: validates the new file and
 # recreates the containers; the previous file is kept when it is invalid.
 docker_app_replace_compose() {
-    local name="$1" compose="$2" dir manifest proxy port previous
+    local name="$1" compose="$2" dir manifest proxy port previous loopback new_port=""
     dir="$(docker_app_dir "$name")"
     manifest="$(app_conf_path "$name")"
     proxy="$(conf_get "$manifest" PROXY 2> /dev/null || echo false)"
     port="$(conf_get "$manifest" PORT 2> /dev/null || true)"
     previous="$(cat "$dir/compose.yml" 2> /dev/null || true)"
     write_file "$dir/compose.yml" 0640 < "$compose"
+
+    # When the port nginx proxies to has moved and the new file publishes
+    # exactly one loopback port, nginx follows it. With several, the user
+    # has to say which.
+    if [[ "$proxy" == true ]] && ! dry_run; then
+        loopback="$(docker_app_ports_json "$name" | jq -r '[.[] | select(.host_ip == "127.0.0.1") | .published] | unique | .[]')"
+        if [[ -n "$loopback" ]] && ! grep -qx "$port" <<< "$loopback"; then
+            if [[ "$(wc -l <<< "$loopback")" -eq 1 ]]; then
+                new_port="$loopback"
+            else
+                [[ -z "$previous" ]] || printf '%s\n' "$previous" > "$dir/compose.yml"
+                die "the compose file no longer publishes 127.0.0.1:$port for nginx and publishes several loopback ports ($(tr '\n' ' ' <<< "$loopback" | sed 's/ $//')); the previous compose file was kept. Please change the port using the Upstream port button, then apply the file again."
+            fi
+        fi
+    fi
+
     if ! dry_run && [[ -n "$previous" ]]; then
-        if ! (docker_check_project "$name" "$proxy" "$port"); then
+        if ! (docker_check_project "$name" "$proxy" "${new_port:-$port}"); then
             printf '%s\n' "$previous" > "$dir/compose.yml"
             die "the previous compose file was kept"
         fi
     else
-        docker_check_project "$name" "$proxy" "$port"
+        docker_check_project "$name" "$proxy" "${new_port:-$port}"
     fi
     docker_compose "$name" up -d --remove-orphans
+    if [[ -n "$new_port" ]]; then
+        step "Following the proxied port"
+        docker_change_proxy_port "$name" "$new_port"
+        printf 'nginx now proxies %s to 127.0.0.1:%s.\n' "$name" "$new_port"
+    fi
 }
 
 # docker_change_proxy_port name port: points nginx at another loopback port

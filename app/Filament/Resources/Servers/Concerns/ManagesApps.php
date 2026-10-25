@@ -164,7 +164,7 @@ trait ManagesApps
             ->label('Compose file')
             ->icon(Heroicon::OutlinedCube)
             ->modalHeading(fn (array $arguments): string => "{$arguments['name']} compose.yml")
-            ->modalDescription('Checked with `docker compose config` and applied with `docker compose up -d`, which recreates the containers that changed. An invalid file is refused and the current one kept. Ports published here bypass the firewall.')
+            ->modalDescription('Checked with `docker compose config` and applied with `docker compose up -d`, which recreates the containers that changed. An invalid file is refused and the current one kept. Ports published here bypass the firewall. If the loopback port nginx proxies to moves, Mandal follows it when only one is published; otherwise please change it using the Upstream port button first.')
             ->modalWidth(Width::ThreeExtraLarge)
             ->modalSubmitActionLabel('Save and apply')
             ->fillForm(function (array $arguments): array {
