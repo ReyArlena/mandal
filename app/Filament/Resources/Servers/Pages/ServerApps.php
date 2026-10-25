@@ -176,7 +176,7 @@ class ServerApps extends Page
                     ->requiredIf('type', 'docker')
                     ->maxLength(262144)
                     ->extraInputAttributes(['class' => 'font-mono text-sm', 'spellcheck' => 'false'])
-                    ->helperText('Saved as compose.yml in /srv/docker/<name> and run as root, so it can do anything on the server. Ports in it are published by Docker straight past the firewall; bind to 127.0.0.1 unless a port is meant to be public.')
+                    ->helperText('Saved as compose.yml in /srv/docker/<name> and run as root through Docker, like any compose project. Ports here bypass ufw; bind to 127.0.0.1 unless a port should be public.')
                     ->visible(fn (callable $get): bool => $get('type') === 'docker'),
                 Checkbox::make('proxy')
                     ->label('Serve a domain through nginx')
