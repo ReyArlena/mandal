@@ -5,7 +5,7 @@
 MANDAL_COMMANDS+=("app:deploy|Deploy an app from its repository (zero downtime)|write")
 MANDAL_COMMANDS+=("app:rollback|Switch an app back to an earlier release|write")
 MANDAL_COMMANDS+=("app:releases|List an app's releases as JSON|read")
-MANDAL_COMMANDS+=("app:configure|Change an app's repository, branch or releases to keep|write")
+MANDAL_COMMANDS+=("app:configure|Change an app's repository, branch, releases to keep, or a Docker app's proxied port|write")
 
 deploy_parse_name() {
     local arg
@@ -95,6 +95,7 @@ cmd_app_configure() {
                 ;;
             --https) conf_set "$manifest" CLONE https ;;
             --ssh) conf_set "$manifest" CLONE ssh ;;
+            --port=*) docker_change_proxy_port "$DEPLOY_NAME" "${arg#*=}" ;;
             --keep-releases=*)
                 [[ "${arg#*=}" =~ ^[1-9][0-9]?$ ]] || die 2 "--keep-releases must be between 1 and 99"
                 conf_set "$manifest" KEEP_RELEASES "${arg#*=}"

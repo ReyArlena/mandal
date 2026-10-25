@@ -105,6 +105,26 @@ it('prefills the compose editor from the server and applies it through an upload
         ->and($this->ssh->ran("app:compose --name=tool --from='/home/mandal/.mandal/"))->toBeTrue();
 });
 
+it('changes the port nginx proxies a docker app to', function () {
+    $inventory = $this->inventory;
+    $inventory['apps'][] = ['name' => 'tool', 'type' => 'docker', 'proxy' => true, 'port' => '20000', 'domain' => 'tool.example.com', 'home' => '/srv/docker/tool', 'ports' => [], 'containers' => []];
+    $inventory['apps'][] = ['name' => 'game', 'type' => 'docker', 'proxy' => false, 'port' => '', 'home' => '/srv/docker/game', 'ports' => [], 'containers' => []];
+    $this->ssh->respondWithJson('inventory', $inventory);
+    $this->ssh->respondTo('app:configure --name=tool --port=20001', "Updated /etc/mandal/apps/tool.conf.\n");
+
+    livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'tool'])
+        ->mountAction('changeProxyPort', arguments: ['name' => 'tool', 'port' => '20000'])
+        ->assertActionDataSet(['port' => '20000'])
+        ->setActionData(['port' => 20001])
+        ->callMountedAction()
+        ->assertNotified('nginx now proxies tool to 127.0.0.1:20001');
+
+    expect($this->ssh->ran('app:configure --name=tool --port=20001'))->toBeTrue();
+
+    livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'game'])
+        ->assertActionHidden('changeProxyPort');
+});
+
 it('offers a CLI update only when the server build differs', function () {
     $hash = app(CliArchive::class)->hash();
 

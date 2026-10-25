@@ -1065,7 +1065,24 @@ assert_eq "app:compose refuses an invalid file" "1" "$?"
 [[ -f "${TMP}/new-compose.yml" ]] && pass || fail "app:compose leaves the upload for the panel to remove when it refuses it"
 printf 'TYPE=laravel\n' > "${MANDAL_APPS_DIR}/notdocker.conf"
 (cmd_app_compose --name=notdocker) > /dev/null 2>&1 && fail "app:compose refuses a Laravel app" || pass
+(cmd_app_configure --name=notdocker --port=20001 --dry-run) > /dev/null 2>&1 && fail "app:configure --port refuses a Laravel app" || pass
 rm -f "${MANDAL_APPS_DIR}/notdocker.conf"
+
+mkdir -p "${MANDAL_NGINX_DIR}/sites-available"
+docker_render_proxy_vhost tool redirect-to-naked 20000 tool.example.com > "${MANDAL_NGINX_DIR}/sites-available/tool.conf"
+printf '    ssl_certificate /etc/letsencrypt/live/tool.example.com/fullchain.pem; # managed by Certbot\n' >> "${MANDAL_NGINX_DIR}/sites-available/tool.conf"
+(PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_COMPOSE_PORTS='[{"host_ip":"127.0.0.1","published":"20001","target":8080}]' cmd_app_configure --name=tool --port=20001) > /dev/null 2>&1
+assert_eq "app:configure --port completes" "0" "$?"
+assert_eq "app:configure --port updates the manifest" "20001" "$(conf_get "${MANDAL_APPS_DIR}/tool.conf" PORT)"
+grep -q 'proxy_pass http://127.0.0.1:20001;' "${MANDAL_NGINX_DIR}/sites-available/tool.conf" && pass || fail "app:configure --port rewrites proxy_pass"
+grep -q 'managed by Certbot' "${MANDAL_NGINX_DIR}/sites-available/tool.conf" && pass || fail "app:configure --port keeps certbot's lines"
+(PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_COMPOSE_PORTS='[{"host_ip":"127.0.0.1","published":"20001","target":8080}]' cmd_app_configure --name=tool --port=20002) > /dev/null 2>&1 && fail "app:configure --port refuses a port the compose file does not publish" || pass
+assert_eq "a refused port leaves the manifest alone" "20001" "$(conf_get "${MANDAL_APPS_DIR}/tool.conf" PORT)"
+(cmd_app_configure --name=tool --port=99999 --dry-run) > /dev/null 2>&1 && fail "app:configure --port validates the port" || pass
+printf 'TYPE=docker\nPROXY=false\n' > "${MANDAL_APPS_DIR}/game.conf"
+(cmd_app_configure --name=game --port=20001 --dry-run) > /dev/null 2>&1 && fail "app:configure --port refuses an app without the proxy" || pass
+rm -f "${MANDAL_APPS_DIR}/game.conf" "${MANDAL_NGINX_DIR}/sites-available/tool.conf"
+printf 'TYPE=docker\nDOMAIN=tool.example.com\nWWW=redirect-to-naked\nPROXY=true\nPORT=20000\n' > "${MANDAL_APPS_DIR}/tool.conf"
 ddeploy="$(cmd_app_deploy --name=tool --dry-run 2>&1)"
 [[ "$ddeploy" == *"--project-name tool pull"* && "$ddeploy" == *"up -d --remove-orphans"* && "$ddeploy" != *"git clone"* ]] && pass || fail "docker app:deploy pulls and recreates instead of cloning"
 ddelete="$(cmd_app_delete --name=tool --dry-run 2>&1)"

@@ -154,6 +154,7 @@ class ServerApp extends Page
                 ->visible(fn (): bool => $this->webhook() !== null),
             $this->requestCertificateAction()->arguments(['name' => $this->appName])->visible(fn (): bool => empty($this->appData['ssl']) && $this->hasDomain()),
             $this->editComposeAction()->arguments(['name' => $this->appName])->visible(fn (): bool => $this->isDocker()),
+            $this->changeProxyPortAction()->arguments(['name' => $this->appName, 'port' => (string) ($this->appData['port'] ?? '')])->visible(fn (): bool => $this->isDocker() && ! empty($this->appData['proxy'])),
             $this->editEnvAction()->arguments(['name' => $this->appName]),
             $this->deleteAppAction()->arguments(['name' => $this->appName])->visible(fn (): bool => empty($this->appData['panel'])),
         ];

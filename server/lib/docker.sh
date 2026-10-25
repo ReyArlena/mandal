@@ -199,6 +199,29 @@ docker_app_replace_compose() {
     docker_compose "$name" up -d --remove-orphans
 }
 
+# docker_change_proxy_port name port: points nginx at another loopback port
+# the compose file publishes. Only the proxy_pass line changes, so what
+# certbot added to the vhost stays.
+docker_change_proxy_port() {
+    local name="$1" port="$2" manifest vhost old
+    manifest="$(app_conf_path "$name")"
+    [[ "$(conf_get "$manifest" TYPE 2> /dev/null || echo laravel)" == "docker" ]] || die 2 "--port only applies to Docker apps"
+    [[ "$(conf_get "$manifest" PROXY 2> /dev/null || echo false)" == "true" ]] || die 2 "app '$name' is not served through nginx"
+    validate_proxy_port "$port"
+    old="$(conf_get "$manifest" PORT 2> /dev/null || true)"
+    vhost="$MANDAL_NGINX_DIR/sites-available/${name}.conf"
+    [[ -f "$vhost" ]] || dry_run || die "no nginx site for app '$name'"
+    docker_check_project "$name" true "$port"
+    conf_set "$manifest" PORT "$port"
+    printf '+ proxy_pass 127.0.0.1:%s -> 127.0.0.1:%s in %s\n' "${old:-?}" "$port" "$vhost"
+    if ! dry_run; then
+        backup_file "$vhost"
+        sed -i "s|proxy_pass http://127.0.0.1:${old};|proxy_pass http://127.0.0.1:${port};|" "$vhost"
+        grep -q "proxy_pass http://127.0.0.1:${port};" "$vhost" || die "could not find the proxy_pass line in $vhost"
+    fi
+    nginx_check_and_reload
+}
+
 docker_app_deploy() {
     local name="$1"
     step "Pulling the latest images for $name"

@@ -123,6 +123,41 @@ trait ManagesApps
             });
     }
 
+    public function changeProxyPortAction(): Action
+    {
+        return Action::make('changeProxyPort')
+            ->label('Upstream port')
+            ->icon(Heroicon::OutlinedArrowsRightLeft)
+            ->color('gray')
+            ->modalHeading(fn (array $arguments): string => "Change the port nginx proxies {$arguments['name']} to")
+            ->modalDescription('The compose file must already publish the new port on 127.0.0.1. Only the proxy target changes; the certificate and the rest of the site stay.')
+            ->modalSubmitActionLabel('Change port')
+            ->fillForm(fn (array $arguments): array => ['port' => $arguments['port'] ?? null])
+            ->schema([
+                TextInput::make('port')
+                    ->label('Port on 127.0.0.1')
+                    ->numeric()
+                    ->integer()
+                    ->minValue(1)
+                    ->maxValue(65535)
+                    ->required(),
+            ])
+            ->action(function (array $arguments, array $data): void {
+                $name = $this->appName($arguments);
+                $port = (int) $data['port'];
+
+                if ($name === null || $port < 1 || $port > 65535) {
+                    return;
+                }
+
+                $this->runSynchronously(
+                    fn (MandalClient $mandal) => $mandal->run($this->server(), "app:configure --name={$name} --port={$port}", timeoutSeconds: 60),
+                    "nginx now proxies {$name} to 127.0.0.1:{$port}",
+                    'Could not change the port',
+                );
+            });
+    }
+
     public function editComposeAction(): Action
     {
         return Action::make('editCompose')
