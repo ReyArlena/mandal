@@ -259,10 +259,10 @@ EOF
     service_restart fail2ban
 }
 
-prov_unattended_upgrades() {
-    step "Automatic security updates"
-    apt_install unattended-upgrades
-    write_file /etc/apt/apt.conf.d/52-mandal 0644 <<'EOF'
+# Ubuntu security updates, PHP from the PPA and the Docker engine (its
+# repository's Release file carries Origin: Docker) install themselves.
+unattended_render_config() {
+    cat <<'EOF'
 // managed-by: mandal
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
@@ -272,10 +272,17 @@ Unattended-Upgrade::Origins-Pattern {
     "origin=UbuntuESMApps,archive=${distro_codename}-apps-security";
     "origin=UbuntuESM,archive=${distro_codename}-infra-security";
     "origin=LP-PPA-ondrej-php";
+    "origin=Docker";
 };
 Unattended-Upgrade::Automatic-Reboot "false";
 Unattended-Upgrade::Remove-Unused-Dependencies "true";
 EOF
+}
+
+prov_unattended_upgrades() {
+    step "Automatic security updates"
+    apt_install unattended-upgrades
+    write_file /etc/apt/apt.conf.d/52-mandal 0644 < <(unattended_render_config)
     service_enable_now unattended-upgrades
 }
 

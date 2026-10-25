@@ -337,6 +337,9 @@ for marker in "==> Base packages" "==> Swap" "fallocate -l 2048M /swapfile" "sys
     if [[ "$dry" == *"$marker"* ]]; then pass; else fail "dry run mentions: $marker"; fi
 done
 [[ "$dry" == *"ufw --force enable"* ]] && fail "dry run does not re-enable an active ufw" || pass
+unattended="$(unattended_render_config)"
+[[ "$unattended" == *'"origin=Ubuntu,archive=${distro_codename}-security";'* && "$unattended" == *'"origin=LP-PPA-ondrej-php";'* && "$unattended" == *'"origin=Docker";'* ]] && pass || fail "automatic updates cover Ubuntu security, the PHP PPA and Docker"
+[[ "$unattended" == *'Automatic-Reboot "false"'* ]] && pass || fail "automatic updates never reboot"
 assert_eq "dry run leaves the system untouched" "" "$(ls "$MANDAL_APT_SOURCES_DIR")"
 assert_eq "dry run writes no provision log" "0" "$(find "$MANDAL_LOG_DIR" -name 'provision-*.log' 2> /dev/null | wc -l)"
 ssh_pos="${dry%%==> SSH hardening*}"
