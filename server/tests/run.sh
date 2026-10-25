@@ -1017,7 +1017,7 @@ printf 'services:\n  app:\n    image: ghcr.io/org/tool:1.2\n    ports:\n      - 
 
 dcreate="$(cmd_app_create --name=tool --type=docker --from="$compose_file" --proxy --port=20000 --domain=tool.example.com --env=APP_KEY=abc --env=DEBUG=0 --dry-run 2>&1)"
 assert_eq "docker app:create dry run completes" "0" "$?"
-for marker in "write ${MANDAL_DOCKER_DIR}/tool/compose.yml (0640" "write ${MANDAL_DOCKER_DIR}/tool/.env (0600" "write ${MANDAL_NGINX_DIR}/conf.d/mandal-upgrade.conf" "write ${MANDAL_NGINX_DIR}/sites-available/tool.conf" "docker compose --project-directory ${MANDAL_DOCKER_DIR}/tool --project-name tool pull --quiet" "--project-name tool up -d --remove-orphans" "Docker app tool created; nginx serves tool.example.com from 127.0.0.1:20000."; do
+for marker in "write ${MANDAL_DOCKER_DIR}/tool/compose.yml (0640" "write ${MANDAL_DOCKER_DIR}/tool/.env (0600" "write ${MANDAL_NGINX_DIR}/conf.d/mandal-upgrade.conf" "write ${MANDAL_NGINX_DIR}/sites-available/tool.conf" "docker compose --progress plain --project-directory ${MANDAL_DOCKER_DIR}/tool --project-name tool pull" "--project-name tool up -d --remove-orphans" "Docker app tool created; nginx serves tool.example.com from 127.0.0.1:20000."; do
     if [[ "$dcreate" == *"$marker"* ]]; then pass; else fail "docker app:create mentions: $marker"; fi
 done
 [[ "$dcreate" != *"useradd"* && "$dcreate" != *"CREATE DATABASE"* ]] && pass || fail "docker app:create creates no user or database"
@@ -1067,7 +1067,7 @@ printf 'TYPE=laravel\n' > "${MANDAL_APPS_DIR}/notdocker.conf"
 (cmd_app_compose --name=notdocker) > /dev/null 2>&1 && fail "app:compose refuses a Laravel app" || pass
 rm -f "${MANDAL_APPS_DIR}/notdocker.conf"
 ddeploy="$(cmd_app_deploy --name=tool --dry-run 2>&1)"
-[[ "$ddeploy" == *"--project-name tool pull --quiet"* && "$ddeploy" == *"up -d --remove-orphans"* && "$ddeploy" != *"git clone"* ]] && pass || fail "docker app:deploy pulls and recreates instead of cloning"
+[[ "$ddeploy" == *"--project-name tool pull"* && "$ddeploy" == *"up -d --remove-orphans"* && "$ddeploy" != *"git clone"* ]] && pass || fail "docker app:deploy pulls and recreates instead of cloning"
 ddelete="$(cmd_app_delete --name=tool --dry-run 2>&1)"
 [[ "$ddelete" == *"down --volumes --remove-orphans"* && "$ddelete" == *"rm -rf ${MANDAL_DOCKER_DIR}/tool"* && "$ddelete" == *"rm -f ${MANDAL_NGINX_DIR}/sites-enabled/tool.conf"* ]] && pass || fail "docker app:delete removes containers, volumes, files and the vhost"
 dkeep="$(cmd_app_delete --name=tool --keep-files --dry-run 2>&1)"

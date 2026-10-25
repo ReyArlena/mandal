@@ -90,10 +90,13 @@ map $http_upgrade $connection_upgrade {
 EOF
 }
 
+# Commands that change the project. Progress is printed as plain lines so
+# a long image pull shows what it is doing over SSH instead of a redrawn
+# terminal display or nothing at all.
 docker_compose() {
     local name="$1"
     shift
-    run_cmd docker compose --project-directory "$(docker_app_dir "$name")" --project-name "$name" "$@"
+    run_cmd docker compose --progress plain --project-directory "$(docker_app_dir "$name")" --project-name "$name" "$@"
 }
 
 # The resolved compose configuration as JSON, or an error from compose.
@@ -171,7 +174,7 @@ docker_app_create() {
     if [[ "$proxy" == true ]]; then
         docker_write_proxy "$name" "$mode" "$port" "$domain" "$aliases"
     fi
-    docker_compose "$name" pull --quiet
+    docker_compose "$name" pull
     docker_compose "$name" up -d --remove-orphans
 }
 
@@ -199,7 +202,7 @@ docker_app_replace_compose() {
 docker_app_deploy() {
     local name="$1"
     step "Pulling the latest images for $name"
-    docker_compose "$name" pull --quiet
+    docker_compose "$name" pull
     step "Recreating the containers"
     docker_compose "$name" up -d --remove-orphans
     docker_compose "$name" ps
