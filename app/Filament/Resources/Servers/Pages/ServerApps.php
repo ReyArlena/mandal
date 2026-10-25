@@ -124,7 +124,7 @@ class ServerApps extends Page
     public function hasPendingTask(): bool
     {
         return $this->server()->tasks()
-            ->whereIn('type', [TaskType::CreateApp, TaskType::DeleteApp, TaskType::Deploy, TaskType::Rollback, TaskType::Certificate])
+            ->whereIn('type', [TaskType::CreateApp, TaskType::DeleteApp, TaskType::Deploy, TaskType::Rollback, TaskType::Control, TaskType::Certificate])
             ->whereIn('status', [TaskStatus::Pending, TaskStatus::Running])
             ->exists();
     }

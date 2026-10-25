@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Servers\Concerns;
 
 use App\Enums\TaskType;
 use App\Filament\Resources\Servers\ServerResource;
+use App\Jobs\ControlApp;
 use App\Jobs\DeleteApp;
 use App\Jobs\DeployApp;
 use App\Jobs\RequestCertificate;
@@ -61,6 +62,49 @@ trait ManagesApps
                 }
 
                 $this->queueTask(TaskType::Deploy, DeployApp::class, ['name' => $name], "Deploying {$name}");
+            });
+    }
+
+    public function startAppAction(): Action
+    {
+        return $this->controlAppAction('startApp', 'start', 'Start', Heroicon::OutlinedPlay, 'success');
+    }
+
+    public function stopAppAction(): Action
+    {
+        return $this->controlAppAction('stopApp', 'stop', 'Stop', Heroicon::OutlinedStop, 'warning')
+            ->requiresConfirmation()
+            ->modalHeading(fn (array $arguments): string => "Stop {$arguments['name']}?")
+            ->modalDescription('Stops the containers and keeps their state; they wait for a clean shutdown first, up to the stop grace period in the compose file. Start brings them back as they were.')
+            ->modalSubmitActionLabel('Stop');
+    }
+
+    public function restartAppAction(): Action
+    {
+        return $this->controlAppAction('restartApp', 'restart', 'Restart', Heroicon::OutlinedArrowPath, 'gray')
+            ->requiresConfirmation()
+            ->modalHeading(fn (array $arguments): string => "Restart {$arguments['name']}?")
+            ->modalDescription('Stops and starts the containers. Anyone connected is disconnected.')
+            ->modalSubmitActionLabel('Restart');
+    }
+
+    /**
+     * Start, stop and restart share one shape: a queued app:control task.
+     */
+    private function controlAppAction(string $name, string $action, string $label, Heroicon $icon, string $color): Action
+    {
+        return Action::make($name)
+            ->label($label)
+            ->icon($icon)
+            ->color($color)
+            ->action(function (array $arguments) use ($action, $label): void {
+                $app = $this->appName($arguments);
+
+                if ($app === null) {
+                    return;
+                }
+
+                $this->queueTask(TaskType::Control, ControlApp::class, ['name' => $app, 'action' => $action], "{$label}: {$app}");
             });
     }
 

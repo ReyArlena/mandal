@@ -11,6 +11,7 @@ enum TaskType: string implements HasLabel
     case DeleteApp = 'delete-app';
     case Deploy = 'deploy';
     case Rollback = 'rollback';
+    case Control = 'control';
     case Certificate = 'certificate';
     case UpdateCli = 'update-cli';
     case Backup = 'backup';
@@ -26,6 +27,7 @@ enum TaskType: string implements HasLabel
             self::DeleteApp => 'Delete app',
             self::Deploy => 'Deploy',
             self::Rollback => 'Roll back',
+            self::Control => 'Start, stop or restart',
             self::Certificate => 'Request certificate',
             self::UpdateCli => 'Update CLI',
             self::Backup => 'Back up',

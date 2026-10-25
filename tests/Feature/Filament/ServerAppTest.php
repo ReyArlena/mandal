@@ -2,6 +2,7 @@
 
 use App\Enums\TaskType;
 use App\Filament\Resources\Servers\Pages\ServerApp;
+use App\Jobs\ControlApp;
 use App\Jobs\RollbackApp;
 use App\Models\Server;
 use App\Models\User;
@@ -127,6 +128,36 @@ it('shows a docker app behind nginx with its ports and containers instead of rel
         ->assertActionVisible('requestCertificate');
 
     expect($this->ssh->ran('app:releases --name=tool'))->toBeFalse();
+});
+
+it('offers stop and restart while a docker app runs, start when it does not, and queues them as tasks', function () {
+    Queue::fake();
+    $inventory = json_decode(file_get_contents(base_path('tests/Fixtures/inventory.json')), true);
+    $inventory['apps'][] = ['name' => 'game', 'type' => 'docker', 'proxy' => false, 'home' => '/srv/docker/game', 'ports' => [], 'containers' => [['name' => 'game-game-1', 'image' => 'x', 'state' => 'running', 'status' => 'Up']]];
+    $inventory['apps'][] = ['name' => 'idle', 'type' => 'docker', 'proxy' => false, 'home' => '/srv/docker/idle', 'ports' => [], 'containers' => [['name' => 'idle-app-1', 'image' => 'x', 'state' => 'exited', 'status' => 'Exited (0)']]];
+    $this->ssh->respondWithJson('inventory', $inventory);
+
+    livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'game'])
+        ->assertActionVisible('stopApp')
+        ->assertActionVisible('restartApp')
+        ->assertActionHidden('startApp')
+        ->callAction('stopApp', arguments: ['name' => 'game'])
+        ->assertNotified('Stop: game');
+
+    livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'idle'])
+        ->assertActionVisible('startApp')
+        ->assertActionHidden('stopApp')
+        ->assertActionHidden('restartApp');
+
+    livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'shop'])
+        ->assertActionHidden('startApp')
+        ->assertActionHidden('stopApp');
+
+    $task = $this->server->tasks()->sole();
+
+    expect($task->type)->toBe(TaskType::Control)
+        ->and((new ControlApp($task))->arguments())->toBe('app:control --name=game --action=stop');
+    Queue::assertPushed(ControlApp::class);
 });
 
 it('shows a docker app without nginx with its public ports and no certificate action', function () {

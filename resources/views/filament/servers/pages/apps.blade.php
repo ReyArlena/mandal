@@ -43,6 +43,11 @@
                         @if (($app['type'] ?? 'laravel') === 'docker')
                             @php $running = collect($app['containers'] ?? [])->where('state', 'running')->count(); @endphp
                             <x-filament::badge :color="$running > 0 ? 'success' : 'gray'">{{ $running > 0 ? 'Running' : 'Stopped' }}</x-filament::badge>
+                            @if ($running > 0)
+                                {{ ($this->stopAppAction)(['name' => $app['name']])->link() }}
+                            @else
+                                {{ ($this->startAppAction)(['name' => $app['name']])->link() }}
+                            @endif
                             {{ ($this->deployAppAction)(['name' => $app['name']])->label('Pull and restart')->link() }}
                         @else
                             @if (! empty($app['current_release']))

@@ -1080,7 +1080,21 @@ grep -q 'tool:1.4' "${MANDAL_DOCKER_DIR}/tool/compose.yml" && pass || fail "an a
 rm -f "${MANDAL_NGINX_DIR}/sites-available/tool.conf"
 printf 'TYPE=docker\nDOMAIN=tool.example.com\nWWW=redirect-to-naked\nPROXY=true\nPORT=20000\n' > "${MANDAL_APPS_DIR}/tool.conf"
 cp "$compose_file" "${MANDAL_DOCKER_DIR}/tool/compose.yml"
+for action in start stop restart; do
+    dcontrol="$(cmd_app_control --name=tool --action=$action --dry-run 2>&1)"
+    assert_eq "app:control $action dry run completes" "0" "$?"
+    case "$action" in
+        start) marker="--project-name tool up -d" ;;
+        stop) marker="--project-name tool stop" ;;
+        restart) marker="--project-name tool restart" ;;
+    esac
+    [[ "$dcontrol" == *"$marker"* && "$dcontrol" == *"--project-name tool ps"* && "$dcontrol" == *"tool: $action done."* ]] && pass || fail "app:control $action runs compose $action and shows the containers"
+done
+[[ "$(cmd_app_control --name=tool --action=stop --dry-run 2>&1)" != *"--project-name tool down"* ]] && pass || fail "app:control stop keeps the containers (no compose down)"
+(cmd_app_control --name=tool --action=kill --dry-run) > /dev/null 2>&1 && fail "app:control rejects unknown actions" || pass
+(cmd_app_control --name=tool --dry-run) > /dev/null 2>&1 && fail "app:control requires an action" || pass
 printf 'TYPE=laravel\n' > "${MANDAL_APPS_DIR}/notdocker.conf"
+(cmd_app_control --name=notdocker --action=start --dry-run) > /dev/null 2>&1 && fail "app:control refuses a Laravel app" || pass
 (cmd_app_compose --name=notdocker) > /dev/null 2>&1 && fail "app:compose refuses a Laravel app" || pass
 (cmd_app_configure --name=notdocker --port=20001 --dry-run) > /dev/null 2>&1 && fail "app:configure --port refuses a Laravel app" || pass
 rm -f "${MANDAL_APPS_DIR}/notdocker.conf"

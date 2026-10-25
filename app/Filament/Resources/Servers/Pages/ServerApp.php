@@ -116,6 +116,14 @@ class ServerApp extends Page
     }
 
     /**
+     * Whether any of a Docker app's containers is running.
+     */
+    public function isRunning(): bool
+    {
+        return collect($this->appData['containers'] ?? [])->contains(fn (array $container): bool => ($container['state'] ?? '') === 'running');
+    }
+
+    /**
      * A Docker app without the nginx proxy has no domain, so nothing to
      * request a certificate for.
      */
@@ -144,6 +152,9 @@ class ServerApp extends Page
     protected function getHeaderActions(): array
     {
         return [
+            $this->startAppAction()->arguments(['name' => $this->appName])->visible(fn (): bool => $this->isDocker() && ! $this->isRunning()),
+            $this->stopAppAction()->arguments(['name' => $this->appName])->visible(fn (): bool => $this->isDocker() && $this->isRunning()),
+            $this->restartAppAction()->arguments(['name' => $this->appName])->visible(fn (): bool => $this->isDocker() && $this->isRunning()),
             $this->deployAppAction()
                 ->arguments(['name' => $this->appName])
                 ->label(fn (): string => $this->isDocker() ? 'Pull and restart' : 'Deploy')
