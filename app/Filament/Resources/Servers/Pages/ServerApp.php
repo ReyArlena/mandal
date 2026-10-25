@@ -9,8 +9,10 @@ use App\Models\Server;
 use App\Models\Webhook;
 use App\Sources\AutoDeploy;
 use App\Ssh\SshException;
+use Filament\Actions\Action;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
+use Filament\Support\Icons\Heroicon;
 use Livewire\Attributes\Locked;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -153,6 +155,11 @@ class ServerApp extends Page
                 ->arguments(['name' => $this->appName])
                 ->visible(fn (): bool => $this->webhook() !== null),
             $this->requestCertificateAction()->arguments(['name' => $this->appName])->visible(fn (): bool => empty($this->appData['ssl']) && $this->hasDomain()),
+            Action::make('logs')
+                ->label('Logs')
+                ->icon(Heroicon::OutlinedDocumentMagnifyingGlass)
+                ->color('gray')
+                ->url(fn (): string => ServerApps::logsUrlFor($this->server(), ['name' => $this->appName, 'type' => $this->appData['type'] ?? 'laravel'])),
             $this->editComposeAction()->arguments(['name' => $this->appName])->visible(fn (): bool => $this->isDocker()),
             $this->changeProxyPortAction()->arguments(['name' => $this->appName, 'port' => (string) ($this->appData['port'] ?? '')])->visible(fn (): bool => $this->isDocker() && ! empty($this->appData['proxy'])),
             $this->editEnvAction()->arguments(['name' => $this->appName]),

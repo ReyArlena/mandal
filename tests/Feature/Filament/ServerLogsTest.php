@@ -62,6 +62,7 @@ it('offers the time filter for container logs', function () {
 
     livewire(ServerLogs::class, ['record' => $this->server->getRouteKey()])
         ->assertSee('listening on :80')
+        ->assertSee('Jump to present')
         ->assertSeeHtml('wire:model.live="since"')
         ->set('since', '1h');
 

@@ -27,6 +27,7 @@ beforeEach(function () {
 it('lists the apps from the inventory', function () {
     livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
         ->assertOk()
+        ->assertSeeHtml('logs?source=laravel%3Ashop')
         ->assertSee('shop')
         ->assertSee('shop.example.com')
         ->assertSee('acme/shop@main')

@@ -134,6 +134,27 @@ class ServerApps extends Page
         return ServerResource::getUrl('app', ['record' => $this->server(), 'app' => $name]);
     }
 
+    /**
+     * The Logs page opened on the app's most useful source: its containers
+     * for a Docker app, the Laravel log otherwise.
+     *
+     * @param  array<string, mixed>  $app
+     */
+    public function logsUrl(array $app): string
+    {
+        return self::logsUrlFor($this->server(), $app);
+    }
+
+    /**
+     * @param  array<string, mixed>  $app
+     */
+    public static function logsUrlFor(Server $server, array $app): string
+    {
+        $prefix = ($app['type'] ?? 'laravel') === 'docker' ? 'docker' : 'laravel';
+
+        return ServerResource::getUrl('logs', ['record' => $server, 'source' => "{$prefix}:{$app['name']}"]);
+    }
+
     protected function getHeaderActions(): array
     {
         return [
