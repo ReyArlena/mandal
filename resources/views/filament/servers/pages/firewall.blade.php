@@ -42,5 +42,36 @@
                 </tbody>
             </table>
         </x-filament::section>
+
+        <x-filament::section heading="Docker" description="Ports Docker publishes on every interface. They are reachable from the internet regardless of the rules above.">
+            <div class="mb-3 flex items-start gap-3 rounded-lg bg-warning-50 p-3 text-sm dark:bg-warning-500/10">
+                <x-filament::icon icon="heroicon-o-exclamation-triangle" class="h-5 w-5 shrink-0 text-warning-500" />
+                <p class="text-gray-700 dark:text-gray-300">
+                    Docker inserts its own iptables rules ahead of ufw, so a published container port is open even when no rule allows it, and a ufw rule cannot block it.
+                    Bind a port to <span class="font-mono">127.0.0.1</span> in the compose file and put nginx in front unless it is meant to be public.
+                </p>
+            </div>
+            @if (! ($firewall['docker']['active'] ?? false))
+                <p class="text-sm text-gray-500">Docker is not running.</p>
+            @else
+                <table class="w-full text-left text-sm">
+                    <thead class="text-xs uppercase text-gray-500">
+                        <tr><th class="py-1 pr-3">Port</th><th class="py-1 pr-3">Container</th><th class="py-1 pr-3">Bound to</th><th class="py-1">In the container</th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 dark:divide-white/10">
+                        @forelse ($firewall['docker']['exposed'] ?? [] as $port)
+                            <tr>
+                                <td class="py-2 pr-3 font-mono">{{ $port['port'] }}/{{ $port['protocol'] }}</td>
+                                <td class="py-2 pr-3 font-mono">{{ $port['container'] }}</td>
+                                <td class="py-2 pr-3 font-mono">{{ $port['host'] }}</td>
+                                <td class="py-2 font-mono">{{ $port['target'] }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="4" class="py-2 text-gray-500">No container publishes a port past the firewall.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            @endif
+        </x-filament::section>
     @endif
 </x-filament-panels::page>

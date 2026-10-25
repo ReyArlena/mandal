@@ -45,6 +45,17 @@ abstract class RunMandalTask implements ShouldBeUnique, ShouldQueue
      */
     abstract public function arguments(): string;
 
+    /**
+     * A file to upload before the command runs; the command then receives
+     * its path as --from=<path>.
+     *
+     * @return array{contents: string, extension: string}|null
+     */
+    protected function upload(): ?array
+    {
+        return null;
+    }
+
     protected function succeeded(Server $server, CommandResult $result): void {}
 
     public function handle(MandalClient $mandal): void
@@ -55,13 +66,24 @@ abstract class RunMandalTask implements ShouldBeUnique, ShouldQueue
         $task->markRunning();
 
         try {
-            $result = $mandal->run(
-                $server,
-                $this->arguments(),
-                onOutput: fn (string $chunk) => $task->appendOutput($chunk),
-                timeoutSeconds: $this->timeout - 60,
-                mergeErrorOutput: true,
-            );
+            $upload = $this->upload();
+
+            $result = $upload === null
+                ? $mandal->run(
+                    $server,
+                    $this->arguments(),
+                    onOutput: fn (string $chunk) => $task->appendOutput($chunk),
+                    timeoutSeconds: $this->timeout - 60,
+                    mergeErrorOutput: true,
+                )
+                : $mandal->runWithUpload(
+                    $server,
+                    $this->arguments(),
+                    $upload['contents'],
+                    $upload['extension'],
+                    onOutput: fn (string $chunk) => $task->appendOutput($chunk),
+                    timeoutSeconds: $this->timeout - 60,
+                );
         } catch (SshException $exception) {
             $task->appendOutput("\nerror: {$exception->getMessage()}\n");
             $task->markFinished(255);

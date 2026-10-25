@@ -17,6 +17,7 @@
         <div class="grid gap-6 lg:grid-cols-2">
             <x-filament::section heading="Details">
                 <dl class="grid grid-cols-3 gap-x-4 gap-y-3 text-sm">
+                    @if ($this->hasDomain())
                     <dt class="text-gray-500 dark:text-gray-400">Domain</dt>
                     <dd class="col-span-2">
                         <a href="{{ (empty($app['ssl']) ? 'http' : 'https') }}://{{ $app['domain'] ?? '' }}" target="_blank" rel="noopener" class="text-primary-600 underline dark:text-primary-400">{{ $app['domain'] ?? '' }}</a>
@@ -33,11 +34,30 @@
                     @endif
                     <dt class="text-gray-500 dark:text-gray-400">www</dt>
                     <dd class="col-span-2">{{ $app['www'] ?? 'redirect-to-naked' }}</dd>
+                    @endif
                     @if ($this->isDocker())
-                        <dt class="text-gray-500 dark:text-gray-400">Image</dt>
-                        <dd class="col-span-2 font-mono">{{ $app['image'] ?? '' }}</dd>
-                        <dt class="text-gray-500 dark:text-gray-400">Port</dt>
-                        <dd class="col-span-2 font-mono">127.0.0.1:{{ $app['port'] ?? '' }} &rarr; {{ $app['container_port'] ?? '' }} in the container</dd>
+                        <dt class="text-gray-500 dark:text-gray-400">nginx</dt>
+                        <dd class="col-span-2">
+                            @if (! empty($app['proxy']))
+                                Proxies the domain to <span class="font-mono">127.0.0.1:{{ $app['port'] ?? '' }}</span>
+                            @else
+                                <x-filament::badge color="gray">Not in front</x-filament::badge>
+                                <span class="ml-1 text-xs text-gray-500">The compose file publishes its own ports.</span>
+                            @endif
+                        </dd>
+                        <dt class="text-gray-500 dark:text-gray-400">Published ports</dt>
+                        <dd class="col-span-2 font-mono">
+                            @forelse ($app['ports'] ?? [] as $port)
+                                <div>
+                                    {{ $port['host_ip'] }}:{{ $port['published'] }} &rarr; {{ $port['target'] }}/{{ $port['protocol'] }}
+                                    @if ($port['host_ip'] !== '127.0.0.1' && $port['host_ip'] !== '::1')
+                                        <x-filament::badge color="warning" class="ml-1">public, bypasses ufw</x-filament::badge>
+                                    @endif
+                                </div>
+                            @empty
+                                <span class="font-sans text-gray-500">none</span>
+                            @endforelse
+                        </dd>
                         <dt class="text-gray-500 dark:text-gray-400">Project</dt>
                         <dd class="col-span-2 font-mono">{{ $app['home'] ?? '' }}</dd>
                     @else

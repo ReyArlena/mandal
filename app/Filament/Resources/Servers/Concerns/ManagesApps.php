@@ -123,6 +123,53 @@ trait ManagesApps
             });
     }
 
+    public function editComposeAction(): Action
+    {
+        return Action::make('editCompose')
+            ->label('Compose file')
+            ->icon(Heroicon::OutlinedCube)
+            ->modalHeading(fn (array $arguments): string => "{$arguments['name']} compose.yml")
+            ->modalDescription('Checked with `docker compose config` and applied with `docker compose up -d`, which recreates the containers that changed. An invalid file is refused and the current one kept. Ports published here bypass the firewall.')
+            ->modalWidth(Width::ThreeExtraLarge)
+            ->modalSubmitActionLabel('Save and apply')
+            ->fillForm(function (array $arguments): array {
+                $name = $this->appName($arguments);
+
+                if ($name === null) {
+                    return ['contents' => ''];
+                }
+
+                try {
+                    $result = app(MandalClient::class)->run($this->server(), 'app:compose --name='.$name, timeoutSeconds: 30);
+                } catch (SshException $exception) {
+                    return ['contents' => '# Could not read the file: '.$exception->getMessage()];
+                }
+
+                return ['contents' => $result->successful() ? $result->output : '# '.trim($result->errorOutput ?: $result->output)];
+            })
+            ->schema([
+                Textarea::make('contents')
+                    ->hiddenLabel()
+                    ->rows(24)
+                    ->required()
+                    ->maxLength(262144)
+                    ->extraInputAttributes(['class' => 'font-mono text-sm', 'spellcheck' => 'false']),
+            ])
+            ->action(function (array $arguments, array $data): void {
+                $name = $this->appName($arguments);
+
+                if ($name === null) {
+                    return;
+                }
+
+                $this->runSynchronously(
+                    fn (MandalClient $mandal) => $mandal->runWithUpload($this->server(), 'app:compose --name='.$name, rtrim((string) $data['contents'])."\n", '.yml', timeoutSeconds: 300),
+                    "Applied {$name} compose.yml",
+                    'Could not apply the compose file',
+                );
+            });
+    }
+
     public function editEnvAction(): Action
     {
         return Action::make('editEnv')

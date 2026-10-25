@@ -388,8 +388,8 @@ inv_docker() {
             containers="$({ docker ps --all --format '{{json .}}' 2> /dev/null || true; } | jq -s '.')"
         fi
     fi
-    jq -n --argjson installed "$installed" --arg active "$(unit_state docker)" --arg version "$version" --argjson projects "$projects" --argjson containers "$containers" \
-        '{installed: $installed, active: $active, version: $version, projects: $projects, containers: $containers}'
+    jq -n --argjson installed "$installed" --arg active "$(unit_state docker)" --arg version "$version" --argjson projects "$projects" --argjson containers "$containers" --argjson exposed "$(docker_exposed_ports_json)" \
+        '{installed: $installed, active: $active, version: $version, projects: $projects, containers: $containers, exposed: $exposed}'
 }
 
 # ---------------------------------------------------------------------------
@@ -418,16 +418,18 @@ inv_app() {
         releases="$(find "$home/releases" -mindepth 1 -maxdepth 1 -type d 2> /dev/null | wc -l)"
     fi
     [[ -r "$home/.ssh/id_ed25519.pub" ]] && deploy_key="$(cat "$home/.ssh/id_ed25519.pub")"
-    local containers='[]'
+    local containers='[]' ports='[]'
     if [[ "$(jq -r '.type // "laravel"' <<< "$manifest")" == "docker" ]]; then
         containers="$(docker_app_status_json "$name")"
+        ports="$(docker_app_ports_json "$name")"
         home="$(docker_app_dir "$name")"
     fi
     jq -n --arg name "$name" --argjson manifest "$manifest" --arg home "$home" --argjson user_exists "$user_exists" \
-        --arg current "$current" --argjson releases "$releases" --arg deploy_key "$deploy_key" --argjson containers "$containers" '
+        --arg current "$current" --argjson releases "$releases" --arg deploy_key "$deploy_key" --argjson containers "$containers" --argjson ports "$ports" '
         {name: $name, home: $home, user_exists: $user_exists}
         + $manifest
-        + {current_release: (if $current == "" then null else $current end), releases: $releases, deploy_key: (if $deploy_key == "" then null else $deploy_key end), containers: $containers}
+        + (if $manifest.type == "docker" then {proxy: ($manifest.proxy == "true")} else {} end)
+        + {current_release: (if $current == "" then null else $current end), releases: $releases, deploy_key: (if $deploy_key == "" then null else $deploy_key end), containers: $containers, ports: $ports}
     '
 }
 

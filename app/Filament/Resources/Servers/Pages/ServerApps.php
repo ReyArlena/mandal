@@ -20,6 +20,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 
 /**
@@ -29,6 +30,31 @@ class ServerApps extends Page
 {
     use InteractsWithRecord;
     use ManagesApps;
+
+    /**
+     * What the compose field starts with: one service, bound to loopback
+     * for nginx, with the knobs most apps need.
+     */
+    public const string COMPOSE_TEMPLATE = <<<'YAML'
+    services:
+      app:
+        image: ghcr.io/org/app:1.2
+        restart: unless-stopped
+        env_file:
+          - .env
+        ports:
+          - "127.0.0.1:8080:80"
+        volumes:
+          - data:/data
+        logging:
+          driver: json-file
+          options:
+            max-size: "10m"
+            max-file: "3"
+
+    volumes:
+      data:
+    YAML;
 
     protected static string $resource = ServerResource::class;
 
@@ -125,11 +151,12 @@ class ServerApps extends Page
             ->icon(Heroicon::OutlinedPlus)
             ->visible(fn (): bool => $this->error === null)
             ->modalHeading('Create an app')
-            ->modalDescription('A Laravel app gets a system user, PHP-FPM pool, nginx site, database and a production .env; deploying the code comes next. A Docker app runs an image behind nginx.')
+            ->modalDescription('A Laravel app gets a system user, PHP-FPM pool, nginx site, database and a production .env; deploying the code comes next. A Docker app runs the compose file you provide, optionally with nginx in front.')
             ->modalSubmitActionLabel('Create app')
+            ->modalWidth(Width::ThreeExtraLarge)
             ->schema([
                 Select::make('type')
-                    ->options(['laravel' => 'Laravel app', 'docker' => 'Docker image'])
+                    ->options(['laravel' => 'Laravel app', 'docker' => 'Docker compose project'])
                     ->default('laravel')
                     ->required()
                     ->live()
@@ -140,20 +167,47 @@ class ServerApps extends Page
                     ->notIn(array_column($this->apps, 'name'))
                     ->helperText('2 to 32 lower-case letters, digits or hyphens. Used for the system user, database and directories.')
                     ->placeholder('shop'),
+                Textarea::make('compose')
+                    ->label('Compose file')
+                    ->rows(14)
+                    ->default(self::COMPOSE_TEMPLATE)
+                    ->requiredIf('type', 'docker')
+                    ->maxLength(262144)
+                    ->extraInputAttributes(['class' => 'font-mono text-sm', 'spellcheck' => 'false'])
+                    ->helperText('Saved as compose.yml in /srv/docker/<name> and run as root, so it can do anything on the server. Ports in it are published by Docker straight past the firewall; bind to 127.0.0.1 unless a port is meant to be public.')
+                    ->visible(fn (callable $get): bool => $get('type') === 'docker'),
+                Checkbox::make('proxy')
+                    ->label('Serve a domain through nginx')
+                    ->helperText('For web apps: nginx proxies the domain to a port a service publishes on 127.0.0.1. Leave it off for game servers and anything that is not HTTP.')
+                    ->live()
+                    ->visible(fn (callable $get): bool => $get('type') === 'docker'),
+                TextInput::make('port')
+                    ->label('Upstream port')
+                    ->numeric()
+                    ->integer()
+                    ->minValue(1)
+                    ->maxValue(65535)
+                    ->placeholder('8080')
+                    ->helperText('The port a service publishes on 127.0.0.1 (for example "127.0.0.1:8080:80" in its ports).')
+                    ->required(fn (callable $get): bool => $get('type') === 'docker' && (bool) $get('proxy'))
+                    ->visible(fn (callable $get): bool => $get('type') === 'docker' && (bool) $get('proxy')),
                 TextInput::make('domain')
-                    ->required()
+                    ->required(fn (callable $get): bool => $get('type') !== 'docker' || (bool) $get('proxy'))
                     ->rule(fn (): string => 'regex:/^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/')
                     ->placeholder('shop.example.com')
-                    ->helperText('Without www.'),
+                    ->helperText('Without www.')
+                    ->visible(fn (callable $get): bool => $get('type') !== 'docker' || (bool) $get('proxy')),
                 Select::make('www')
                     ->label('www handling')
                     ->options(WwwMode::class)
                     ->default(WwwMode::default())
                     ->required()
-                    ->selectablePlaceholder(false),
+                    ->selectablePlaceholder(false)
+                    ->visible(fn (callable $get): bool => $get('type') !== 'docker' || (bool) $get('proxy')),
                 TagsInput::make('aliases')
                     ->placeholder('Add another domain')
-                    ->nestedRecursiveRules(['regex:/^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/']),
+                    ->nestedRecursiveRules(['regex:/^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/'])
+                    ->visible(fn (callable $get): bool => $get('type') !== 'docker' || (bool) $get('proxy')),
                 Select::make('php')
                     ->label('PHP version')
                     ->options(array_combine($this->phpVersions, $this->phpVersions))
@@ -177,42 +231,30 @@ class ServerApps extends Page
                     ->label('Create a database and user')
                     ->default(true)
                     ->visible(fn (callable $get): bool => $get('type') !== 'docker'),
-                TextInput::make('image')
-                    ->label('Image')
-                    ->placeholder('ghcr.io/org/app:1.2')
-                    ->requiredIf('type', 'docker')
-                    ->regex('#^[a-z0-9]([a-z0-9._/-]*[a-z0-9])?(:[A-Za-z0-9._-]{1,128})?(@sha256:[0-9a-f]{64})?$#')
-                    ->visible(fn (callable $get): bool => $get('type') === 'docker'),
-                TextInput::make('port')
-                    ->label('Container port')
-                    ->numeric()
-                    ->integer()
-                    ->minValue(1)
-                    ->maxValue(65535)
-                    ->requiredIf('type', 'docker')
-                    ->helperText('The port the image listens on. nginx proxies to it; nothing is exposed directly.')
-                    ->visible(fn (callable $get): bool => $get('type') === 'docker'),
                 Textarea::make('env')
                     ->label('Environment variables')
                     ->rows(5)
                     ->placeholder("KEY=value\nOTHER=value")
+                    ->helperText('Written to .env next to the compose file; reference it with env_file or ${VAR}.')
                     ->visible(fn (callable $get): bool => $get('type') === 'docker'),
             ])
             ->action(function (array $data): void {
                 $type = ($data['type'] ?? 'laravel') === 'docker' ? 'docker' : 'laravel';
+                $proxy = $type === 'docker' && (bool) ($data['proxy'] ?? false);
 
                 $options = [
                     'type' => $type,
                     'name' => $data['name'],
-                    'domain' => $data['domain'],
-                    'www' => $data['www'],
+                    'domain' => $type === 'laravel' || $proxy ? $data['domain'] : null,
+                    'www' => $data['www'] ?? WwwMode::default()->value,
                     'aliases' => array_values($data['aliases'] ?? []),
                 ];
 
                 if ($type === 'docker') {
                     $options += [
-                        'image' => $data['image'],
-                        'port' => (string) $data['port'],
+                        'compose' => (string) $data['compose'],
+                        'proxy' => $proxy,
+                        'port' => $proxy ? (string) $data['port'] : null,
                         'env' => array_values(array_filter(array_map('trim', preg_split('/\R/', (string) ($data['env'] ?? '')) ?: []))),
                     ];
                 } else {

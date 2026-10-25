@@ -11,8 +11,8 @@ app_create_usage() {
 Usage: mandal app:create --name=<name> --domain=<domain> [options]
 
   --name=<name>           2-32 lower-case letters, digits or hyphens
-  --type=laravel|docker   Laravel app (default) or a Docker image behind nginx
-  --domain=<domain>       Primary domain (without www)
+  --type=laravel|docker   Laravel app (default) or a Docker compose project
+  --domain=<domain>       Primary domain (without www); Docker apps: with --proxy
   --alias=<domain>        Extra domain served by the app (repeatable)
   --www=<mode>            redirect-to-naked (default), redirect-to-www or naked-only
   --php=<version>         PHP version (default: the server's CLI default)
@@ -21,21 +21,23 @@ Usage: mandal app:create --name=<name> --domain=<domain> [options]
   --branch=<branch>       Branch to deploy (default: main)
   --keep-releases=<n>     Releases to keep (default: 5)
   --no-database           Do not create a database and user
-  --image=<image>         Docker apps: the image to run (e.g. ghcr.io/org/app:1.2)
-  --port=<port>           Docker apps: the port the container listens on
-  --env=KEY=value         Docker apps: environment variable (repeatable)
+  --from=<file>           Docker apps: the compose file to run (removed once used)
+  --proxy                 Docker apps: serve the domain through nginx
+  --port=<port>           Docker apps: the port a service publishes on 127.0.0.1 for nginx
+  --env=KEY=value         Docker apps: environment variable for .env (repeatable)
   --dry-run               Print what would happen without doing it
 EOF
 }
 
 cmd_app_create() {
     local name="" domain="" www="redirect-to-naked" php="" repo="" branch="main" keep=5 database=true clone=ssh arg
-    local type="laravel" image="" port="" aliases=() env=()
+    local type="laravel" compose="" proxy=false port="" aliases=() env=()
     for arg in "$@"; do
         case "$arg" in
             --name=*) name="${arg#*=}" ;;
             --type=*) type="${arg#*=}" ;;
-            --image=*) image="${arg#*=}" ;;
+            --from=*) compose="${arg#*=}" ;;
+            --proxy) proxy=true ;;
             --port=*) port="${arg#*=}" ;;
             --env=*) env+=("${arg#*=}") ;;
             --domain=*) domain="${arg#*=}" ;;
@@ -54,9 +56,15 @@ cmd_app_create() {
     done
 
     [[ -n "$name" ]] || die 64 "--name is required"
-    [[ -n "$domain" ]] || die 64 "--domain is required"
+    [[ "$type" =~ ^(laravel|docker)$ ]] || die 2 "--type must be laravel or docker"
+    # A Docker app only has a domain when nginx proxies to it.
+    if [[ "$type" == "docker" && "$proxy" == false ]]; then
+        domain=""
+        aliases=()
+    fi
+    [[ -n "$domain" || ("$type" == "docker" && "$proxy" == false) ]] || die 64 "--domain is required"
     validate_name "$name"
-    validate_domain "$domain"
+    [[ -z "$domain" ]] || validate_domain "$domain"
     local alias
     for alias in "${aliases[@]}"; do
         validate_domain "$alias"
@@ -65,16 +73,19 @@ cmd_app_create() {
     [[ -n "$repo" ]] && validate_repo "$repo"
     validate_branch "$branch"
     [[ "$keep" =~ ^[1-9][0-9]?$ ]] || die 2 "--keep-releases must be between 1 and 99"
-    [[ "$type" =~ ^(laravel|docker)$ ]] || die 2 "--type must be laravel or docker"
 
     require_root
     load_all_drivers
 
     if [[ "$type" == "docker" ]]; then
-        [[ -n "$image" ]] || die 64 "--image is required for a Docker app"
-        [[ -n "$port" ]] || die 64 "--port is required for a Docker app"
-        validate_image "$image"
-        validate_container_port "$port"
+        [[ -n "$compose" ]] || die 64 "--from=<compose file> is required for a Docker app"
+        validate_compose_file "$compose"
+        if [[ "$proxy" == true ]]; then
+            [[ -n "$port" ]] || die 64 "--port is required with --proxy (the port a service publishes on 127.0.0.1)"
+            validate_proxy_port "$port"
+        else
+            port=""
+        fi
         local pair
         for pair in "${env[@]}"; do
             validate_env_pair "$pair"
@@ -86,18 +97,21 @@ cmd_app_create() {
             audit "app:create $name (docker)"
         fi
         step "Creating Docker app $name"
-        DOCKER_HOST_PORT=""
-        docker_app_create "$name" "$image" "$port" "$www" "$domain" "${aliases[*]:-}" "${env[@]}"
+        docker_app_create "$name" "$compose" "$proxy" "$port" "$www" "$domain" "${aliases[*]:-}" "${env[@]}"
+        dry_run || rm -f "$compose"
         app_write_manifest "$name" \
             "TYPE=docker" \
             "DOMAIN=$domain" \
             "ALIASES=${aliases[*]:-}" \
             "WWW=$www" \
-            "IMAGE=$image" \
-            "CONTAINER_PORT=$port" \
-            "PORT=$DOCKER_HOST_PORT" \
+            "PROXY=$proxy" \
+            "PORT=$port" \
             "CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        printf '\nDocker app %s created on 127.0.0.1:%s behind nginx.\n' "$name" "${DOCKER_HOST_PORT:-?}"
+        if [[ "$proxy" == true ]]; then
+            printf '\nDocker app %s created; nginx serves %s from 127.0.0.1:%s.\n' "$name" "$domain" "$port"
+        else
+            printf '\nDocker app %s created. Ports in its compose file are published directly and bypass the firewall.\n' "$name"
+        fi
         return 0
     fi
 

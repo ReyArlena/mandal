@@ -990,27 +990,76 @@ rm -rf "$install_root" "$install_bin"
 # ---------------------------------------------------------------------------
 
 export MANDAL_DOCKER_DIR="${TMP}/srv/docker"
-compose="$(docker_render_compose tool ghcr.io/org/tool:1.2 8080 20000)"
-[[ "$compose" == *'image: ghcr.io/org/tool:1.2'* && "$compose" == *'"127.0.0.1:20000:8080"'* && "$compose" == *'restart: unless-stopped'* ]] && pass || fail "compose binds the container to loopback"
 proxy="$(docker_render_proxy_vhost tool redirect-to-naked 20000 tool.example.com)"
 [[ "$proxy" == *"proxy_pass http://127.0.0.1:20000;"* && "$proxy" == *"server_name www.tool.example.com;"* && "$proxy" == *'proxy_set_header Upgrade $http_upgrade;'* ]] && pass || fail "proxy vhost forwards to the container and handles websockets"
 assert_eq "every server block in the proxy vhost hides the nginx version" "2" "$(grep -c 'server_tokens off;' <<< "$proxy")"
-assert_eq "the first docker port is the start of the range" "20000" "$(docker_next_port)"
-(validate_image 'evil; rm -rf /') 2> /dev/null && fail "validate_image rejects shell characters" || pass
-(validate_image ghcr.io/org/tool:1.2) && pass || fail "validate_image accepts registry paths and tags"
 (validate_env_pair 'bad key=1') 2> /dev/null && fail "validate_env_pair rejects spaces in keys" || pass
+(validate_proxy_port 99999) 2> /dev/null && fail "validate_proxy_port rejects ports above 65535" || pass
 
-dcreate="$(cmd_app_create --name=tool --type=docker --domain=tool.example.com --image=ghcr.io/org/tool:1.2 --port=8080 --env=APP_KEY=abc --env=DEBUG=0 --dry-run 2>&1)"
+# A fake docker: `compose config` answers with the ports from an env var
+# (or fails on demand), `ps` with the containers from another.
+mkdir -p "${TMP}/compose-bin"
+cat > "${TMP}/compose-bin/docker" <<'DOCKEREOF'
+#!/usr/bin/env bash
+if [[ "$*" == *"config --format json"* ]]; then
+    [[ "${MANDAL_FAKE_COMPOSE_FAIL:-0}" == 1 ]] && { echo "services.app.ports must be a list" >&2; exit 1; }
+    printf '{"services":{"app":{"image":"x","ports":%s}}}\n' "${MANDAL_FAKE_COMPOSE_PORTS:-[]}"
+elif [[ "$1" == "ps" ]]; then
+    printf '%s\n' "${MANDAL_FAKE_DOCKER_PS:-}"
+fi
+DOCKEREOF
+chmod +x "${TMP}/compose-bin/docker"
+compose_file="${TMP}/tool-compose.yml"
+printf 'services:\n  app:\n    image: ghcr.io/org/tool:1.2\n    ports:\n      - "127.0.0.1:20000:8080"\n' > "$compose_file"
+
+dcreate="$(cmd_app_create --name=tool --type=docker --from="$compose_file" --proxy --port=20000 --domain=tool.example.com --env=APP_KEY=abc --env=DEBUG=0 --dry-run 2>&1)"
 assert_eq "docker app:create dry run completes" "0" "$?"
-for marker in "write ${MANDAL_DOCKER_DIR}/tool/compose.yml (0640" "write ${MANDAL_DOCKER_DIR}/tool/.env (0600" "write ${MANDAL_NGINX_DIR}/conf.d/mandal-upgrade.conf" "write ${MANDAL_NGINX_DIR}/sites-available/tool.conf" "docker compose --project-directory ${MANDAL_DOCKER_DIR}/tool --project-name tool pull --quiet" "--project-name tool up -d --remove-orphans" "Docker app tool created on 127.0.0.1:20000 behind nginx."; do
+for marker in "write ${MANDAL_DOCKER_DIR}/tool/compose.yml (0640" "write ${MANDAL_DOCKER_DIR}/tool/.env (0600" "write ${MANDAL_NGINX_DIR}/conf.d/mandal-upgrade.conf" "write ${MANDAL_NGINX_DIR}/sites-available/tool.conf" "docker compose --project-directory ${MANDAL_DOCKER_DIR}/tool --project-name tool pull --quiet" "--project-name tool up -d --remove-orphans" "Docker app tool created; nginx serves tool.example.com from 127.0.0.1:20000."; do
     if [[ "$dcreate" == *"$marker"* ]]; then pass; else fail "docker app:create mentions: $marker"; fi
 done
 [[ "$dcreate" != *"useradd"* && "$dcreate" != *"CREATE DATABASE"* ]] && pass || fail "docker app:create creates no user or database"
-(cmd_app_create --name=tool --type=docker --domain=tool.example.com --port=8080 --dry-run) > /dev/null 2>&1 && fail "docker app:create requires an image" || pass
-(cmd_app_create --name=tool --type=docker --domain=tool.example.com --image=x --port=99999 --dry-run) > /dev/null 2>&1 && fail "docker app:create validates the port" || pass
+[[ -f "$compose_file" ]] && pass || fail "docker app:create dry run keeps the uploaded compose file"
+dgame="$(cmd_app_create --name=game --type=docker --from="$compose_file" --domain=ignored.example.com --dry-run 2>&1)"
+assert_eq "docker app:create without a proxy completes" "0" "$?"
+[[ "$dgame" != *"sites-available"* && "$dgame" != *"mandal-upgrade.conf"* && "$dgame" == *"published directly and bypass the firewall"* ]] && pass || fail "docker app:create without --proxy writes no vhost and warns about the firewall"
+(cmd_app_create --name=tool --type=docker --domain=tool.example.com --dry-run) > /dev/null 2>&1 && fail "docker app:create requires a compose file" || pass
+(cmd_app_create --name=tool --type=docker --from="$compose_file" --proxy --domain=tool.example.com --dry-run) > /dev/null 2>&1 && fail "docker app:create with --proxy requires a port" || pass
+(cmd_app_create --name=tool --type=docker --from="$compose_file" --proxy --port=20000 --dry-run) > /dev/null 2>&1 && fail "docker app:create with --proxy requires a domain" || pass
+(cmd_app_create --name=tool --type=docker --from="$compose_file" --proxy --port=99999 --domain=tool.example.com --dry-run) > /dev/null 2>&1 && fail "docker app:create validates the proxy port" || pass
+: > "${TMP}/empty.yml"
+(cmd_app_create --name=tool --type=docker --from="${TMP}/empty.yml" --dry-run) > /dev/null 2>&1 && fail "docker app:create rejects an empty compose file" || pass
 
-printf 'TYPE=docker\nDOMAIN=tool.example.com\nWWW=redirect-to-naked\nIMAGE=ghcr.io/org/tool:1.2\nCONTAINER_PORT=8080\nPORT=20000\n' > "${MANDAL_APPS_DIR}/tool.conf"
-assert_eq "the next docker port skips used ones" "20001" "$(docker_next_port)"
+mkdir -p "${MANDAL_DOCKER_DIR}/tool"
+cp "$compose_file" "${MANDAL_DOCKER_DIR}/tool/compose.yml"
+(PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_COMPOSE_PORTS='[{"host_ip":"127.0.0.1","published":"20000","target":8080,"protocol":"tcp"}]' docker_check_project tool true 20000) > /dev/null 2>&1 && pass || fail "docker_check_project accepts a service on the proxied loopback port"
+(PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_COMPOSE_PORTS='[{"published":"15637","target":15637,"protocol":"udp"}]' docker_check_project tool true 20000) > /dev/null 2>&1 && fail "docker_check_project refuses a proxy without the loopback port" || pass
+(PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_COMPOSE_PORTS='[{"published":"15637","target":15637,"protocol":"udp"}]' docker_check_project tool false "") > /dev/null 2>&1 && pass || fail "docker_check_project accepts any ports without a proxy"
+(PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_COMPOSE_FAIL=1 docker_check_project tool false "") > /dev/null 2>&1 && fail "docker_check_project refuses an invalid compose file" || pass
+assert_json "docker_app_ports_json lists the published ports" "$(PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_COMPOSE_PORTS='[{"host_ip":"127.0.0.1","published":"20000","target":8080},{"published":"15637","target":15637,"protocol":"udp"}]' docker_app_ports_json tool)" 'map(.host_ip + ":" + .published + "->" + .target + "/" + .protocol) | join(",")' "127.0.0.1:20000->8080/tcp,0.0.0.0:15637->15637/udp"
+
+ps_json='{"Names":"enshrouded-server","Ports":"0.0.0.0:15637->15637/udp, :::15637->15637/udp"}
+{"Names":"tool-app-1","Ports":"127.0.0.1:20000->8080/tcp"}
+{"Names":"valheim-server","Ports":"0.0.0.0:2456-2457->2456-2457/udp, [::]:2456-2457->2456-2457/udp"}'
+exposed="$(unit_state() { echo active; }; PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_DOCKER_PS="$ps_json" docker_exposed_ports_json)"
+assert_json "exposed ports skip loopback bindings and duplicates per protocol" "$exposed" 'map(.container + ":" + .port + "/" + .protocol) | join(",")' "enshrouded-server:15637/udp,valheim-server:2456-2457/udp"
+assert_json "exposed ports are empty while docker is inactive" "$(PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_DOCKER_PS="$ps_json" docker_exposed_ports_json)" 'length' "0"
+assert_json "firewall:list reports docker" "$(PATH="${TMP}/compose-bin:${PATH}" firewall_rules_json)" '.docker | (.active | tostring) + ":" + (.exposed | length | tostring)' "false:0"
+
+printf 'TYPE=docker\nDOMAIN=tool.example.com\nWWW=redirect-to-naked\nPROXY=true\nPORT=20000\n' > "${MANDAL_APPS_DIR}/tool.conf"
+printf 'services:\n  app:\n    image: ghcr.io/org/tool:1.3\n' > "${TMP}/new-compose.yml"
+dcompose="$(cmd_app_compose --name=tool 2>&1)"
+[[ "$dcompose" == *"ghcr.io/org/tool:1.2"* ]] && pass || fail "app:compose prints the compose file"
+dreplace="$(cmd_app_compose --name=tool --from="${TMP}/new-compose.yml" --dry-run 2>&1)"
+assert_eq "app:compose dry run completes" "0" "$?"
+[[ "$dreplace" == *"write ${MANDAL_DOCKER_DIR}/tool/compose.yml"* && "$dreplace" == *"up -d --remove-orphans"* ]] && pass || fail "app:compose writes the file and recreates the containers"
+dinvalid="$(PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_COMPOSE_FAIL=1 cmd_app_compose --name=tool --from="${TMP}/new-compose.yml" 2>&1)"
+assert_eq "app:compose refuses an invalid file" "1" "$?"
+[[ "$dinvalid" == *"previous compose file was kept"* ]] && pass || fail "app:compose says it kept the old file"
+[[ "$(cat "${MANDAL_DOCKER_DIR}/tool/compose.yml")" == "$(cat "$compose_file")" ]] && pass || fail "app:compose restores the previous file after a failed check"
+[[ -f "${TMP}/new-compose.yml" ]] && pass || fail "app:compose leaves the upload for the panel to remove when it refuses it"
+printf 'TYPE=laravel\n' > "${MANDAL_APPS_DIR}/notdocker.conf"
+(cmd_app_compose --name=notdocker) > /dev/null 2>&1 && fail "app:compose refuses a Laravel app" || pass
+rm -f "${MANDAL_APPS_DIR}/notdocker.conf"
 ddeploy="$(cmd_app_deploy --name=tool --dry-run 2>&1)"
 [[ "$ddeploy" == *"--project-name tool pull --quiet"* && "$ddeploy" == *"up -d --remove-orphans"* && "$ddeploy" != *"git clone"* ]] && pass || fail "docker app:deploy pulls and recreates instead of cloning"
 ddelete="$(cmd_app_delete --name=tool --dry-run 2>&1)"
@@ -1020,7 +1069,7 @@ dkeep="$(cmd_app_delete --name=tool --keep-files --dry-run 2>&1)"
 printf 'A=1\n' > "${TMP}/tool.env"
 denv="$(cmd_app_env --name=tool --from="${TMP}/tool.env" --dry-run 2>&1)"
 [[ "$denv" == *"write ${MANDAL_DOCKER_DIR}/tool/.env (0600 root:root)"* ]] && pass || fail "app:env targets the docker app's env file" "$(printf '%s' "$denv" | tail -n 3)"
-assert_json "inventory marks docker apps with their port" "$(inv_apps)" 'map(select(.name == "tool")) | .[0] | .type + ":" + .port' "docker:20000"
+assert_json "inventory marks docker apps with their proxy port" "$(inv_apps)" 'map(select(.name == "tool")) | .[0] | .type + ":" + (.proxy | tostring) + ":" + .port + ":" + (.ports | length | tostring)' "docker:true:20000:0"
 rm -f "${MANDAL_APPS_DIR}/tool.conf"
 
 # ---------------------------------------------------------------------------

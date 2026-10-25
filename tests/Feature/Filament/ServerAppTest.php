@@ -109,19 +109,36 @@ it('protects the app that hosts the panel', function () {
         ->assertActionHidden('deleteApp');
 });
 
-it('shows a docker app with its containers instead of releases', function () {
+it('shows a docker app behind nginx with its ports and containers instead of releases', function () {
     $inventory = json_decode(file_get_contents(base_path('tests/Fixtures/inventory.json')), true);
-    $inventory['apps'][] = ['name' => 'tool', 'type' => 'docker', 'domain' => 'tool.example.com', 'image' => 'ghcr.io/org/tool:1.2', 'port' => '20000', 'container_port' => '8080', 'home' => '/srv/docker/tool', 'containers' => [['name' => 'tool-app-1', 'image' => 'ghcr.io/org/tool:1.2', 'state' => 'running', 'status' => 'Up 2 hours']]];
+    $inventory['apps'][] = ['name' => 'tool', 'type' => 'docker', 'domain' => 'tool.example.com', 'proxy' => true, 'port' => '20000', 'home' => '/srv/docker/tool', 'ports' => [['host_ip' => '127.0.0.1', 'published' => '20000', 'target' => '8080', 'protocol' => 'tcp']], 'containers' => [['name' => 'tool-app-1', 'image' => 'ghcr.io/org/tool:1.2', 'state' => 'running', 'status' => 'Up 2 hours']]];
     $this->ssh->respondWithJson('inventory', $inventory);
 
     livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'tool'])
         ->assertOk()
-        ->assertSee('ghcr.io/org/tool:1.2')
+        ->assertSee('tool.example.com')
         ->assertSee('127.0.0.1:20000')
         ->assertSee('tool-app-1')
         ->assertSee('Up 2 hours')
         ->assertDontSee('Workers')
-        ->assertActionVisible('deployApp');
+        ->assertDontSee('bypasses ufw')
+        ->assertActionVisible('deployApp')
+        ->assertActionVisible('editCompose')
+        ->assertActionVisible('requestCertificate');
 
     expect($this->ssh->ran('app:releases --name=tool'))->toBeFalse();
+});
+
+it('shows a docker app without nginx with its public ports and no certificate action', function () {
+    $inventory = json_decode(file_get_contents(base_path('tests/Fixtures/inventory.json')), true);
+    $inventory['apps'][] = ['name' => 'enshrouded', 'type' => 'docker', 'domain' => '', 'proxy' => false, 'port' => '', 'home' => '/srv/docker/enshrouded', 'ports' => [['host_ip' => '0.0.0.0', 'published' => '15637', 'target' => '15637', 'protocol' => 'udp']], 'containers' => []];
+    $this->ssh->respondWithJson('inventory', $inventory);
+
+    livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'enshrouded'])
+        ->assertOk()
+        ->assertSee('Not in front')
+        ->assertSee('0.0.0.0:15637')
+        ->assertSee('bypasses ufw')
+        ->assertDontSee('Domain')
+        ->assertActionHidden('requestCertificate');
 });

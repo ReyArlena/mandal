@@ -24,6 +24,9 @@ beforeEach(function () {
             ['number' => 1, 'to' => '22/tcp', 'action' => 'ALLOW IN', 'from' => 'Anywhere', 'ipv6' => false, 'comment' => 'SSH'],
             ['number' => 2, 'to' => '3306', 'action' => 'ALLOW IN', 'from' => '10.0.0.0/8', 'ipv6' => false, 'comment' => ''],
         ],
+        'docker' => ['active' => true, 'exposed' => [
+            ['container' => 'enshrouded-server', 'host' => '0.0.0.0', 'port' => '15637', 'target' => '15637', 'protocol' => 'udp'],
+        ]],
     ]);
     $this->ssh->respondWithJson('php:list', [
         ['version' => '8.3', 'apps' => [], 'package' => '8.3.20-1', 'default' => false],
@@ -37,13 +40,16 @@ beforeEach(function () {
     ]);
 });
 
-it('shows the firewall rules', function () {
+it('shows the firewall rules and the ports Docker publishes past them', function () {
     livewire(ServerFirewall::class, ['record' => $this->server->getRouteKey()])
         ->assertOk()
         ->assertSee('Active')
         ->assertSee('22/tcp')
         ->assertSee('10.0.0.0/8')
-        ->assertSee('SSH');
+        ->assertSee('SSH')
+        ->assertSee('15637/udp')
+        ->assertSee('enshrouded-server')
+        ->assertSee('ufw rule cannot block it');
 });
 
 it('adds and deletes rules through the CLI', function () {

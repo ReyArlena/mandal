@@ -83,6 +83,28 @@ it('reports an env save failure', function () {
         ->assertNotified('Could not save .env');
 });
 
+it('prefills the compose editor from the server and applies it through an upload', function () {
+    $inventory = $this->inventory;
+    $inventory['apps'][] = ['name' => 'tool', 'type' => 'docker', 'proxy' => false, 'home' => '/srv/docker/tool', 'ports' => [], 'containers' => []];
+    $this->ssh->respondWithJson('inventory', $inventory);
+    $this->ssh->respondTo('app:compose --name=tool --from=', "Updated /srv/docker/tool/compose.yml and recreated the containers.\n");
+    $this->ssh->respondTo('app:compose --name=tool', "services:\n  app:\n    image: x:1\n");
+    $this->ssh->respondTo('printf %s "$HOME"', '/home/mandal');
+
+    livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'tool'])
+        ->mountAction('editCompose', arguments: ['name' => 'tool'])
+        ->assertActionDataSet(['contents' => "services:\n  app:\n    image: x:1\n"])
+        ->setActionData(['contents' => "services:\n  app:\n    image: x:2"])
+        ->callMountedAction()
+        ->assertNotified('Applied tool compose.yml');
+
+    $upload = collect($this->ssh->uploads)->first();
+
+    expect($upload['contents'])->toBe("services:\n  app:\n    image: x:2\n")
+        ->and(array_key_first($this->ssh->uploads))->toEndWith('.yml')
+        ->and($this->ssh->ran("app:compose --name=tool --from='/home/mandal/.mandal/"))->toBeTrue();
+});
+
 it('offers a CLI update only when the server build differs', function () {
     $hash = app(CliArchive::class)->hash();
 

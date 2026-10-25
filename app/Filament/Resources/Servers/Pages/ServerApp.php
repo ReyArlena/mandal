@@ -113,6 +113,15 @@ class ServerApp extends Page
         return ($this->appData['type'] ?? 'laravel') === 'docker';
     }
 
+    /**
+     * A Docker app without the nginx proxy has no domain, so nothing to
+     * request a certificate for.
+     */
+    public function hasDomain(): bool
+    {
+        return ! $this->isDocker() || ! empty($this->appData['proxy']);
+    }
+
     public function getTitle(): string
     {
         return $this->appName;
@@ -143,7 +152,8 @@ class ServerApp extends Page
             $this->disableAutoDeployAction()
                 ->arguments(['name' => $this->appName])
                 ->visible(fn (): bool => $this->webhook() !== null),
-            $this->requestCertificateAction()->arguments(['name' => $this->appName])->visible(fn (): bool => empty($this->appData['ssl'])),
+            $this->requestCertificateAction()->arguments(['name' => $this->appName])->visible(fn (): bool => empty($this->appData['ssl']) && $this->hasDomain()),
+            $this->editComposeAction()->arguments(['name' => $this->appName])->visible(fn (): bool => $this->isDocker()),
             $this->editEnvAction()->arguments(['name' => $this->appName]),
             $this->deleteAppAction()->arguments(['name' => $this->appName])->visible(fn (): bool => empty($this->appData['panel'])),
         ];

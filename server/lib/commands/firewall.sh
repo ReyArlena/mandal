@@ -6,10 +6,18 @@ MANDAL_COMMANDS+=("firewall:list|List ufw rules as JSON|read")
 MANDAL_COMMANDS+=("firewall:allow|Allow a port (--port=443 [--proto=tcp|udp] [--from=<cidr>] [--comment=...])|write")
 MANDAL_COMMANDS+=("firewall:delete|Delete a rule by its number from firewall:list (--number=N)|write")
 
+# What Docker publishes past ufw, so the firewall page can show it next to
+# the rules: {active, exposed: [{container, host, port, target, protocol}]}
+firewall_docker_json() {
+    local active=false
+    has_cmd docker && [[ "$(unit_state docker)" == "active" ]] && active=true
+    jq -n --argjson active "$active" --argjson exposed "$(docker_exposed_ports_json)" '{active: $active, exposed: $exposed}'
+}
+
 firewall_rules_json() {
     local verbose numbered
     if ! has_cmd ufw; then
-        echo '{"installed": false, "status": "unknown", "rules": []}'
+        jq -n --argjson docker "$(firewall_docker_json)" '{installed: false, status: "unknown", rules: [], docker: $docker}'
         return 0
     fi
     verbose="$(ufw status verbose 2> /dev/null || true)"
@@ -34,7 +42,8 @@ firewall_rules_json() {
         --arg incoming "$(printf '%s\n' "$verbose" | grep -oE '[a-z]+ \(incoming\)' | awk '{print $1}' || true)" \
         --arg outgoing "$(printf '%s\n' "$verbose" | grep -oE '[a-z]+ \(outgoing\)' | awk '{print $1}' || true)" \
         --argjson rules "$numbered" \
-        '{installed: true, status: ($status | if . == "" then "unknown" else . end), default_incoming: $incoming, default_outgoing: $outgoing, rules: $rules}'
+        --argjson docker "$(firewall_docker_json)" \
+        '{installed: true, status: ($status | if . == "" then "unknown" else . end), default_incoming: $incoming, default_outgoing: $outgoing, rules: $rules, docker: $docker}'
 }
 
 cmd_firewall_list() {

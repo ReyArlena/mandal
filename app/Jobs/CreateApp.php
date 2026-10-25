@@ -22,30 +22,33 @@ class CreateApp extends RunMandalTask
 
         $name = (string) ($options['name'] ?? '');
         $domain = (string) ($options['domain'] ?? '');
+        $docker = ($options['type'] ?? 'laravel') === 'docker';
+        $proxy = $docker && ! empty($options['proxy']);
 
         if (! preg_match('/^[a-z][a-z0-9-]{1,31}$/', $name)) {
             throw new InvalidArgumentException("Invalid app name [{$name}].");
         }
 
-        if (! self::isDomain($domain)) {
-            throw new InvalidArgumentException("Invalid domain [{$domain}].");
-        }
+        $arguments = ['app:create', '--name='.$name];
 
-        $arguments = [
-            'app:create',
-            '--name='.$name,
-            '--domain='.$domain,
-            '--www='.WwwMode::from($options['www'] ?? WwwMode::default()->value)->value,
-        ];
+        // A Docker app without the nginx proxy has no domain at all.
+        if (! $docker || $proxy) {
+            if (! self::isDomain($domain)) {
+                throw new InvalidArgumentException("Invalid domain [{$domain}].");
+            }
 
-        foreach ((array) ($options['aliases'] ?? []) as $alias) {
-            if (self::isDomain((string) $alias)) {
-                $arguments[] = '--alias='.$alias;
+            $arguments[] = '--domain='.$domain;
+            $arguments[] = '--www='.WwwMode::from($options['www'] ?? WwwMode::default()->value)->value;
+
+            foreach ((array) ($options['aliases'] ?? []) as $alias) {
+                if (self::isDomain((string) $alias)) {
+                    $arguments[] = '--alias='.$alias;
+                }
             }
         }
 
-        if (($options['type'] ?? 'laravel') === 'docker') {
-            return implode(' ', [...$arguments, ...$this->dockerArguments($options)]);
+        if ($docker) {
+            return implode(' ', [...$arguments, ...$this->dockerArguments($options, $proxy)]);
         }
 
         if (! empty($options['php']) && preg_match('/^\d+\.\d+$/', (string) $options['php'])) {
@@ -72,23 +75,40 @@ class CreateApp extends RunMandalTask
     }
 
     /**
+     * The compose file of a Docker app travels as an upload, never on the
+     * command line.
+     */
+    protected function upload(): ?array
+    {
+        $options = $this->task->options ?? [];
+
+        if (($options['type'] ?? 'laravel') !== 'docker') {
+            return null;
+        }
+
+        return ['contents' => self::composeContents($options), 'extension' => '.yml'];
+    }
+
+    /**
      * @param  array<string, mixed>  $options
      * @return list<string>
      */
-    private function dockerArguments(array $options): array
+    private function dockerArguments(array $options, bool $proxy): array
     {
-        $image = (string) ($options['image'] ?? '');
-        $port = (string) ($options['port'] ?? '');
+        self::composeContents($options);
 
-        if (! preg_match('#^[a-z0-9]([a-z0-9._/-]*[a-z0-9])?(:[A-Za-z0-9._-]{1,128})?(@sha256:[0-9a-f]{64})?$#', $image)) {
-            throw new InvalidArgumentException("Invalid image [{$image}].");
+        $arguments = ['--type=docker'];
+
+        if ($proxy) {
+            $port = (string) ($options['port'] ?? '');
+
+            if (! preg_match('/^\d{1,5}$/', $port) || (int) $port < 1 || (int) $port > 65535) {
+                throw new InvalidArgumentException("Invalid proxy port [{$port}].");
+            }
+
+            $arguments[] = '--proxy';
+            $arguments[] = '--port='.$port;
         }
-
-        if (! preg_match('/^\d{1,5}$/', $port) || (int) $port < 1 || (int) $port > 65535) {
-            throw new InvalidArgumentException("Invalid container port [{$port}].");
-        }
-
-        $arguments = ['--type=docker', '--image='.$image, '--port='.$port];
 
         foreach ((array) ($options['env'] ?? []) as $pair) {
             if (is_string($pair) && preg_match('/^[A-Z][A-Z0-9_]*=[^\n]*$/', $pair)) {
@@ -97,6 +117,22 @@ class CreateApp extends RunMandalTask
         }
 
         return $arguments;
+    }
+
+    /**
+     * The compose file from the task options, checked to be sane text.
+     *
+     * @param  array<string, mixed>  $options
+     */
+    public static function composeContents(array $options): string
+    {
+        $compose = rtrim((string) ($options['compose'] ?? ''))."\n";
+
+        if (trim($compose) === '' || strlen($compose) > 262144 || str_contains($compose, "\0")) {
+            throw new InvalidArgumentException('The compose file is empty, too large or not text.');
+        }
+
+        return $compose;
     }
 
     /**

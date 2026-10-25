@@ -89,7 +89,9 @@ To deploy on every push, set the panel's **Public URL** in Settings (it must be 
 
 ### Docker apps
 
-Choose **Docker image** in the New app form for anything that is not Laravel: give it an image, the port the container listens on and any environment variables. Mandal writes a compose project to `/srv/docker/<app>`, binds the container to `127.0.0.1` on a port it picks (Docker publishes straight past the firewall, so nothing is exposed directly) and puts an nginx site in front with websocket support. **Pull and restart** fetches the latest image; SSL and the environment editor work as for Laravel apps.
+Choose **Docker compose project** in the New app form for anything that is not Laravel, from a web app to a game server: paste the compose file and any environment variables. Mandal writes them to `/srv/docker/<app>` (`compose.yml` and `.env`), checks the file with `docker compose config` and starts the project. Tick **Serve a domain through nginx** for HTTP apps: give the domain and the port a service publishes on `127.0.0.1`, and nginx proxies to it with websocket support; SSL works as for Laravel apps. Leave it off for game servers and other non-HTTP services, which publish their own ports and have no domain.
+
+The compose file runs as root, so it can do anything on the server, and Docker publishes ports straight past ufw: anything in `ports:` that is not bound to `127.0.0.1` is reachable from the internet whatever the firewall says. The app page lists the published ports, and the **Firewall** page has a Docker section listing every port containers expose past the rules. The compose file can be edited from the app page (an invalid file is refused and the current one kept); **Pull and restart** fetches the latest images and recreates the containers.
 
 ### Databases
 

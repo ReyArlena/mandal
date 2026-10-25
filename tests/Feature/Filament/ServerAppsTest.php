@@ -157,33 +157,54 @@ it('builds deploy and rollback arguments only from safe values', function () {
         ->and((new RollbackApp($badRelease))->arguments())->toBe('app:rollback --name=shop');
 });
 
-it('queues a docker app with its image, port and environment', function () {
+it('queues a docker app behind nginx with its compose file, upstream port and environment', function () {
     Queue::fake();
 
     livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
         ->callAction('createApp', data: [
             'type' => 'docker',
             'name' => 'tool',
+            'compose' => "services:\n  app:\n    image: ghcr.io/org/tool:1.2\n    ports:\n      - \"127.0.0.1:8080:80\"\n",
+            'proxy' => true,
+            'port' => 8080,
             'domain' => 'tool.example.com',
             'www' => 'naked-only',
             'aliases' => [],
-            'image' => 'ghcr.io/org/tool:1.2',
-            'port' => 8080,
             'env' => "APP_KEY=abc\n\nDEBUG=0",
         ])
         ->assertHasNoActionErrors()
         ->assertNotified('Creating tool');
 
-    expect((new CreateApp($this->server->tasks()->sole()))->arguments())
-        ->toBe("app:create --name=tool --domain=tool.example.com --www=naked-only --type=docker --image=ghcr.io/org/tool:1.2 --port=8080 --env='APP_KEY=abc' --env='DEBUG=0'");
+    $task = $this->server->tasks()->sole();
+
+    expect((new CreateApp($task))->arguments())
+        ->toBe("app:create --name=tool --domain=tool.example.com --www=naked-only --type=docker --proxy --port=8080 --env='APP_KEY=abc' --env='DEBUG=0'")
+        ->and($task->options['compose'])->toContain('ghcr.io/org/tool:1.2');
 });
 
-it('rejects a docker app with a bad image or port', function () {
+it('queues a docker app without nginx and without a domain', function () {
     Queue::fake();
 
     livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
-        ->callAction('createApp', data: ['type' => 'docker', 'name' => 'tool', 'domain' => 'tool.example.com', 'www' => 'naked-only', 'image' => 'evil; rm', 'port' => 99999])
-        ->assertHasActionErrors(['image', 'port']);
+        ->callAction('createApp', data: [
+            'type' => 'docker',
+            'name' => 'enshrouded',
+            'compose' => "services:\n  game:\n    image: sknnr/enshrouded-dedicated-server:latest\n    ports:\n      - \"15637:15637/udp\"\n",
+            'proxy' => false,
+            'env' => '',
+        ])
+        ->assertHasNoActionErrors()
+        ->assertNotified('Creating enshrouded');
+
+    expect((new CreateApp($this->server->tasks()->sole()))->arguments())->toBe('app:create --name=enshrouded --type=docker');
+});
+
+it('rejects a docker app without a compose file, or with a proxy but no port or domain', function () {
+    Queue::fake();
+
+    livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
+        ->callAction('createApp', data: ['type' => 'docker', 'name' => 'tool', 'compose' => '', 'proxy' => true, 'port' => null, 'domain' => ''])
+        ->assertHasActionErrors(['compose', 'port', 'domain']);
 
     Queue::assertNothingPushed();
 });

@@ -1,62 +1,34 @@
 #!/usr/bin/env bash
 #
-# Docker apps: one compose project per app under /srv/docker/<app>, bound
-# to 127.0.0.1 only, with nginx in front. Docker publishes ports past ufw,
-# which is why the loopback binding is not optional.
+# Docker apps: one compose project per app under /srv/docker/<app>, from a
+# compose file the user provides. Optionally nginx proxies a domain to a
+# port a service publishes on 127.0.0.1. Docker publishes ports past ufw,
+# so anything else in `ports:` is reachable from the internet; the firewall
+# page lists those.
 
-MANDAL_DOCKER_PORT_MIN=20000
-MANDAL_DOCKER_PORT_MAX=29999
+MANDAL_DOCKER_COMPOSE_MAX_BYTES=262144
 
 docker_app_dir() {
     printf '%s/%s\n' "$MANDAL_DOCKER_DIR" "$1"
-}
-
-validate_image() {
-    [[ "$1" =~ ^[a-z0-9]([a-z0-9._/-]*[a-z0-9])?(:[A-Za-z0-9._-]{1,128})?(@sha256:[0-9a-f]{64})?$ ]] || die 2 "invalid image '$1'"
-}
-
-validate_container_port() {
-    [[ "$1" =~ ^[0-9]{1,5}$ && "$1" -ge 1 && "$1" -le 65535 ]] || die 2 "invalid container port '$1'"
 }
 
 validate_env_pair() {
     [[ "$1" =~ ^[A-Z][A-Z0-9_]*=[^$'\n']*$ ]] || die 2 "invalid environment variable '$1' (KEY=value)"
 }
 
-# The next free loopback port for a new app, from the manifests.
-docker_next_port() {
-    local file used port
-    used="$(for file in "$MANDAL_APPS_DIR"/*.conf; do [[ -f "$file" ]] && conf_get "$file" PORT 2> /dev/null; done | sort -n || true)"
-    for port in $(seq "$MANDAL_DOCKER_PORT_MIN" "$MANDAL_DOCKER_PORT_MAX"); do
-        grep -qx "$port" <<< "$used" || { printf '%s\n' "$port"; return 0; }
-    done
-    die "no free port for a Docker app"
+validate_proxy_port() {
+    [[ "$1" =~ ^[0-9]{1,5}$ && "$1" -ge 1 && "$1" -le 65535 ]] || die 2 "invalid port '$1'"
 }
 
-# docker_render_compose name image container_port host_port
-docker_render_compose() {
-    local name="$1" image="$2" container_port="$3" host_port="$4"
-    cat <<EOF
-# managed-by: mandal app=${name}
-services:
-  app:
-    image: ${image}
-    restart: unless-stopped
-    env_file:
-      - .env
-    ports:
-      - "127.0.0.1:${host_port}:${container_port}"
-    volumes:
-      - data:/data
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-volumes:
-  data:
-EOF
+# The compose file must be text of a sane size; compose itself checks the rest.
+validate_compose_file() {
+    local file="$1"
+    [[ -f "$file" && ! -L "$file" ]] || die 2 "compose file not found: $file"
+    [[ -s "$file" ]] || die 2 "the compose file is empty"
+    if [[ "$(tr -d '\000' < "$file" | wc -c)" -ne "$(wc -c < "$file")" ]]; then
+        die 2 "the compose file contains binary data"
+    fi
+    [[ "$(wc -c < "$file")" -le "$MANDAL_DOCKER_COMPOSE_MAX_BYTES" ]] || die 2 "the compose file is larger than 256 KB"
 }
 
 # docker_render_proxy_vhost name mode host_port domain [alias...]
@@ -124,31 +96,109 @@ docker_compose() {
     run_cmd docker compose --project-directory "$(docker_app_dir "$name")" --project-name "$name" "$@"
 }
 
-# docker_app_create name image container_port mode domain aliases env...
-docker_app_create() {
-    local name="$1" image="$2" container_port="$3" mode="$4" domain="$5" aliases="$6" host_port dir
-    shift 6
-    dir="$(docker_app_dir "$name")"
-    host_port="$(docker_next_port)"
-    run_cmd install -d -m 0750 "$dir"
-    write_file "$dir/compose.yml" 0640 < <(docker_render_compose "$name" "$image" "$container_port" "$host_port")
-    write_file "$dir/.env" 0600 < <(printf '%s\n' "$@")
+# The resolved compose configuration as JSON, or an error from compose.
+docker_compose_config() {
+    local name="$1"
+    docker compose --project-directory "$(docker_app_dir "$name")" --project-name "$name" config --format json 2>&1
+}
+
+# The ports the project publishes, from the compose file:
+# [{host_ip, published, target, protocol}]
+docker_app_ports_json() {
+    local name="$1" config
+    if ! has_cmd docker || dry_run; then
+        echo '[]'
+        return 0
+    fi
+    config="$(docker_compose_config "$name")" || { echo '[]'; return 0; }
+    jq '[.services // {} | .[] | .ports // [] | .[] | {host_ip: (.host_ip // "0.0.0.0"), published: ((.published // "") | tostring), target: ((.target // "") | tostring), protocol: (.protocol // "tcp")}]' <<< "$config" 2> /dev/null || echo '[]'
+}
+
+# Validates the compose file in the project directory and, with a proxy,
+# that a service publishes the proxied port on loopback. Dies on failure,
+# so the caller must restore any previous file first if it wants to keep it.
+docker_check_project() {
+    local name="$1" proxy="$2" port="$3" config
+    has_cmd docker || dry_run || die "Docker is not installed; run mandal provision first"
+    dry_run && return 0
+    config="$(docker_compose_config "$name")" || die "the compose file is invalid: $(printf '%s' "$config" | tail -n 3)"
+    if [[ "$proxy" == true ]]; then
+        jq -e --arg port "$port" '[.services // {} | .[] | .ports // [] | .[] | select((.host_ip // "") == "127.0.0.1" and ((.published // "") | tostring) == $port)] | length > 0' <<< "$config" > /dev/null \
+            || die "no service publishes 127.0.0.1:$port, which nginx would proxy to; add \"127.0.0.1:$port:<container port>\" to a service's ports"
+    fi
+}
+
+# Ports published to every interface by running containers, which ufw
+# does not filter: [{container, host, port, target, protocol}]
+docker_exposed_ports_json() {
+    if ! has_cmd docker || [[ "$(unit_state docker)" != "active" ]] || ! is_root; then
+        echo '[]'
+        return 0
+    fi
+    { docker ps --format '{{json .}}' 2> /dev/null || true; } | jq -s '
+        [.[] | . as $c | (.Ports // "") | split(", ") | .[]
+            | capture("^(?<host>[^:]+|\\[[^\\]]+\\]):(?<port>[0-9-]+)->(?<target>[0-9-]+)/(?<protocol>tcp|udp|sctp)$")?
+            | select(.host != "127.0.0.1" and .host != "[::1]")
+            | {container: $c.Names, host: .host, port: .port, target: .target, protocol: .protocol}]
+        | unique_by([.port, .protocol])
+    ' 2> /dev/null || echo '[]'
+}
+
+# docker_write_proxy name mode port domain aliases
+docker_write_proxy() {
+    local name="$1" mode="$2" port="$3" domain="$4" aliases="$5"
     docker_write_upgrade_map
     # shellcheck disable=SC2086  # aliases are space separated by design
-    write_file "$MANDAL_NGINX_DIR/sites-available/${name}.conf" 0644 < <(docker_render_proxy_vhost "$name" "$mode" "$host_port" "$domain" $aliases)
+    write_file "$MANDAL_NGINX_DIR/sites-available/${name}.conf" 0644 < <(docker_render_proxy_vhost "$name" "$mode" "$port" "$domain" $aliases)
     run_cmd ln -sfn "$MANDAL_NGINX_DIR/sites-available/${name}.conf" "$MANDAL_NGINX_DIR/sites-enabled/${name}.conf"
     nginx_check_and_reload
+}
+
+# docker_app_create name compose_file proxy port mode domain aliases env...
+docker_app_create() {
+    local name="$1" compose="$2" proxy="$3" port="$4" mode="$5" domain="$6" aliases="$7" dir
+    shift 7
+    dir="$(docker_app_dir "$name")"
+    run_cmd install -d -m 0750 "$dir"
+    write_file "$dir/.env" 0600 < <(printf '%s\n' "$@")
+    write_file "$dir/compose.yml" 0640 < "$compose"
+    if ! docker_check_project "$name" "$proxy" "$port"; then
+        rm -rf "$dir"
+        return 1
+    fi
+    if [[ "$proxy" == true ]]; then
+        docker_write_proxy "$name" "$mode" "$port" "$domain" "$aliases"
+    fi
     docker_compose "$name" pull --quiet
     docker_compose "$name" up -d --remove-orphans
-    # shellcheck disable=SC2034  # read by app:create
-    DOCKER_HOST_PORT="$host_port"
+}
+
+# docker_app_replace_compose name compose_file: validates the new file and
+# recreates the containers; the previous file is kept when it is invalid.
+docker_app_replace_compose() {
+    local name="$1" compose="$2" dir manifest proxy port previous
+    dir="$(docker_app_dir "$name")"
+    manifest="$(app_conf_path "$name")"
+    proxy="$(conf_get "$manifest" PROXY 2> /dev/null || echo false)"
+    port="$(conf_get "$manifest" PORT 2> /dev/null || true)"
+    previous="$(cat "$dir/compose.yml" 2> /dev/null || true)"
+    write_file "$dir/compose.yml" 0640 < "$compose"
+    if ! dry_run && [[ -n "$previous" ]]; then
+        if ! (docker_check_project "$name" "$proxy" "$port"); then
+            printf '%s\n' "$previous" > "$dir/compose.yml"
+            die "the previous compose file was kept"
+        fi
+    else
+        docker_check_project "$name" "$proxy" "$port"
+    fi
+    docker_compose "$name" up -d --remove-orphans
 }
 
 docker_app_deploy() {
     local name="$1"
-    step "Pulling the latest image for $name"
+    step "Pulling the latest images for $name"
     docker_compose "$name" pull --quiet
-    step "Recreating the container"
+    step "Recreating the containers"
     docker_compose "$name" up -d --remove-orphans
     docker_compose "$name" ps
     printf '\nDeployed %s.\n' "$name"

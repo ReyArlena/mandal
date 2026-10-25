@@ -27,7 +27,7 @@
                     <div class="flex items-center gap-3">
                         @if (($app['type'] ?? 'laravel') === 'docker')
                             <x-filament::badge color="info">Docker</x-filament::badge>
-                            <span class="font-mono text-xs text-gray-500">{{ $app['image'] ?? '' }}</span>
+                            <span class="font-mono text-xs text-gray-500">{{ collect($app['ports'] ?? [])->map(fn (array $port): string => $port['host_ip'].':'.$port['published'].'/'.$port['protocol'])->join(', ') }}</span>
                         @elseif (! empty($app['php']))
                             <x-filament::badge color="info">PHP {{ $app['php'] }}</x-filament::badge>
                         @endif
