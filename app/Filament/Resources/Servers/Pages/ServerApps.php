@@ -33,13 +33,15 @@ class ServerApps extends Page
 
     /**
      * What the compose field starts with: one service, bound to loopback
-     * for nginx, with the knobs most apps need.
+     * for nginx, unable to gain privileges, with the knobs most apps need.
      */
     public const string COMPOSE_TEMPLATE = <<<'YAML'
     services:
       app:
         image: ghcr.io/org/app:1.2
         restart: unless-stopped
+        security_opt:
+          - no-new-privileges:true
         env_file:
           - .env
         ports:
