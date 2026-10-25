@@ -1029,6 +1029,9 @@ assert_eq "docker app:create without a proxy completes" "0" "$?"
 : > "${TMP}/empty.yml"
 (cmd_app_create --name=tool --type=docker --from="${TMP}/empty.yml" --dry-run) > /dev/null 2>&1 && fail "docker app:create rejects an empty compose file" || pass
 
+(PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_COMPOSE_PORTS='[]' docker_app_create webx "$compose_file" true 20200 naked-only webx.example.com "") > /dev/null 2>&1 && fail "docker_app_create fails when the proxied port is not published" || pass
+[[ ! -e "${MANDAL_DOCKER_DIR}/webx" ]] && pass || fail "docker_app_create removes the project directory after a failed check"
+
 mkdir -p "${MANDAL_DOCKER_DIR}/tool"
 cp "$compose_file" "${MANDAL_DOCKER_DIR}/tool/compose.yml"
 (PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_COMPOSE_PORTS='[{"host_ip":"127.0.0.1","published":"20000","target":8080,"protocol":"tcp"}]' docker_check_project tool true 20000) > /dev/null 2>&1 && pass || fail "docker_check_project accepts a service on the proxied loopback port"

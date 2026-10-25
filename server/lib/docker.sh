@@ -162,9 +162,11 @@ docker_app_create() {
     run_cmd install -d -m 0750 "$dir"
     write_file "$dir/.env" 0600 < <(printf '%s\n' "$@")
     write_file "$dir/compose.yml" 0640 < "$compose"
-    if ! docker_check_project "$name" "$proxy" "$port"; then
-        rm -rf "$dir"
-        return 1
+    # The check dies on failure, so it runs in a subshell and the files
+    # written so far are removed before this process dies too.
+    if ! (docker_check_project "$name" "$proxy" "$port"); then
+        dry_run || rm -rf "$dir"
+        die "app '$name' was not created"
     fi
     if [[ "$proxy" == true ]]; then
         docker_write_proxy "$name" "$mode" "$port" "$domain" "$aliases"
