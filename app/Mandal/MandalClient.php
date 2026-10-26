@@ -35,7 +35,11 @@ class MandalClient
      */
     public function version(Server $server): array
     {
-        return $this->json($server, 'version --json', asRoot: false, timeoutSeconds: 15);
+        $version = $this->json($server, 'version --json', asRoot: false, timeoutSeconds: 15);
+
+        $this->sawCliBuild($server, $version['build'] ?? null);
+
+        return $version;
     }
 
     /**
@@ -49,7 +53,26 @@ class MandalClient
             Cache::forget($key);
         }
 
-        return Cache::remember($key, self::INVENTORY_TTL, fn (): array => $this->json($server, 'inventory'));
+        $inventory = Cache::remember($key, self::INVENTORY_TTL, fn (): array => $this->json($server, 'inventory'));
+
+        $this->sawCliBuild($server, $inventory['mandal']['build'] ?? null);
+
+        return $inventory;
+    }
+
+    /**
+     * Every read of a server's version keeps the panel's record of its CLI
+     * build current; a change raises or clears the update notice.
+     */
+    private function sawCliBuild(Server $server, mixed $build): void
+    {
+        if (! is_string($build) || $build === '') {
+            return;
+        }
+
+        if ($server->recordCliBuild($build)) {
+            app(CliUpdates::class)->check($server);
+        }
     }
 
     public function forgetInventory(Server $server): void

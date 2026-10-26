@@ -1,6 +1,7 @@
 {
   "mandal": {
     "version": "0.1.0",
+    "build": "fixture00001",
     "provisioned": true,
     "provisioned_at": "2026-10-27T10:00:00Z",
     "drivers": {

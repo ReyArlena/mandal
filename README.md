@@ -79,7 +79,7 @@ The **Apps** page creates Laravel apps on a provisioned server. Each app gets it
 
 Each app's page also edits its `.env`, requests a Let's Encrypt certificate (after checking DNS points at the server) and manages Supervisor **workers**: `queue:work`, Horizon or Reverb processes that run as the app user and restart after every deploy.
 
-When the panel's copy of the `mandal` CLI is newer than a server's, the server page offers **Update CLI**, which uploads and installs it over SSH.
+When the panel's copy of the `mandal` CLI differs from a server's, the servers list shows a **CLI update required** badge, every user gets a persistent notification in the bell menu, and the server page offers **Update CLI**, which uploads and installs it over SSH and clears the notice. The panel records each server's build whenever it talks to it, and `php artisan mandal:check-cli` (scheduled hourly) checks every connected server, so the scheduler must run: `schedule:run` from cron on a hosted panel, `php artisan schedule:work` locally.
 
 ### GitHub and automatic deploys
 

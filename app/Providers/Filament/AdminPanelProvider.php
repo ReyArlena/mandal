@@ -38,6 +38,7 @@ class AdminPanelProvider extends PanelProvider
             ->brandLogo(fn () => view('filament.brand-logo'))
             ->login()
             ->profile()
+            ->databaseNotifications()
             ->userMenuItems([
                 Action::make('settings')
                     ->label('Settings')

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Servers\Tables;
 
+use App\Mandal\CliArchive;
 use App\Models\Server;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -31,6 +32,16 @@ class ServersTable
                     ->state(fn (Server $record): string => $record->status())
                     ->badge()
                     ->color(fn (Server $record): string => $record->statusColor()),
+                TextColumn::make('cli_build')
+                    ->label('CLI')
+                    ->state(fn (Server $record): ?string => match (true) {
+                        $record->cli_build === null => null,
+                        $record->cliOutdated(app(CliArchive::class)->hash()) => 'Update required',
+                        default => 'Current',
+                    })
+                    ->badge()
+                    ->color(fn (string $state): string => $state === 'Current' ? 'success' : 'warning')
+                    ->placeholder(''),
                 TextColumn::make('connected_at')
                     ->label('Last connected')
                     ->since()

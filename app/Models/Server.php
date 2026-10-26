@@ -82,6 +82,29 @@ class Server extends Model
     }
 
     /**
+     * Whether the CLI last seen on the server differs from the build the
+     * panel ships. Unknown until the panel has read the server's version.
+     */
+    public function cliOutdated(string $panelBuild): bool
+    {
+        return $this->cli_build !== null && $this->cli_build !== $panelBuild;
+    }
+
+    /**
+     * Remember the build the server reported; true when it changed.
+     */
+    public function recordCliBuild(?string $build): bool
+    {
+        if ($build === null || $build === $this->cli_build) {
+            return false;
+        }
+
+        $this->forceFill(['cli_build' => $build])->saveQuietly();
+
+        return true;
+    }
+
+    /**
      * A one-word summary of how far setup has got.
      */
     public function status(): string

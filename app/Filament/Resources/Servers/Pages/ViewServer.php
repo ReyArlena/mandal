@@ -195,13 +195,15 @@ class ViewServer extends ViewRecord
                     return false;
                 }
 
+                // Reading the inventory (cached briefly) records the build
+                // the server runs right now.
                 try {
-                    $build = $mandal->inventory($record)['mandal']['build'] ?? null;
+                    $mandal->inventory($record);
                 } catch (SshException) {
                     return false;
                 }
 
-                return $build !== $archive->hash();
+                return $record->cliOutdated($archive->hash());
             })
             ->requiresConfirmation()
             ->modalHeading('Update the mandal CLI on this server')

@@ -48,5 +48,10 @@ class UpdateCli extends RunMandalTask
 
         $task->markFinished($result->exitCode);
         $mandal->forgetInventory($server);
+
+        // Reading the version records the new build and clears the notice.
+        if ($result->successful()) {
+            rescue(fn () => $mandal->version($server), report: false);
+        }
     }
 }
