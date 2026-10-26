@@ -4,6 +4,7 @@
 # normal app, flagged so that nothing can pull the rug from under it.
 
 MANDAL_COMMANDS+=("panel:install|Create an app for hosting the panel on this server (--name= --domain= --repo=)|write")
+MANDAL_COMMANDS+=("panel:update|Update the hosted panel and the CLI to a release (--version=<tag>, default: the latest)|write")
 
 # The panel's own .env: SQLite in shared/ so it survives deploys, database
 # queue and cache so no extra service is involved.
@@ -111,4 +112,99 @@ cmd_panel_install() {
     if [[ -r "$(app_home "$name")/.ssh/id_ed25519.pub" ]]; then
         printf 'Deploy key: %s\n' "$(cat "$(app_home "$name")/.ssh/id_ed25519.pub")"
     fi
+}
+
+# Highest of two versions, as sort -V sees them.
+panel_version_at_least() {
+    [[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n 1)" == "$1" ]]
+}
+
+# The newest v* tag of a repository, or nothing.
+panel_latest_tag() {
+    git ls-remote --tags --refs "$1" 'refs/tags/v*' 2> /dev/null | awk -F/ '{print $NF}' | sort -V | tail -n 1 || true
+}
+
+# panel:update - what install.sh does on a server that already hosts the
+# panel: fetch the release, update the CLI through cli:update, point the
+# panel app at the tag and deploy it. Run as root on the server:
+#   sudo mandal panel:update
+cmd_panel_update() {
+    local version="" source_dir="" arg name manifest repo clone_url checkout tmp target_version target_label installed_version deployed_version=""
+    for arg in "$@"; do
+        case "$arg" in
+            --version=*) version="${arg#*=}" ;;
+            --source=*) source_dir="${arg#*=}" ;;
+            --dry-run) export MANDAL_DRY_RUN=1 ;;
+            *) die 64 "unknown option '$arg'" ;;
+        esac
+    done
+    [[ -z "$version" || "$version" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || die 2 "invalid version '$version' (expected a release tag such as v0.1.0)"
+    [[ -z "$source_dir" || -x "$source_dir/server/bin/mandal" ]] || die 2 "--source must point at a checkout of the repository"
+    require_root
+    load_all_drivers
+    name="$(panel_apps | awk 'NR == 1')"
+    [[ -n "$name" ]] || die "this server does not host the panel; see install.sh"
+    manifest="$(app_conf_path "$name")"
+    repo="$(conf_get "$manifest" REPO)" || die "the panel app has no repository in its manifest"
+    clone_url="https://github.com/$repo.git"
+
+    tmp="$(mktemp -d)"
+    # shellcheck disable=SC2064  # expand now: the directory is fixed
+    trap "rm -rf '$tmp'" EXIT
+    if [[ -n "$source_dir" ]]; then
+        checkout="$source_dir"
+        target_version="$(tr -d '[:space:]' < "$checkout/VERSION")"
+        version="v$target_version"
+        target_label="$source_dir ($target_version)"
+    else
+        if [[ -z "$version" ]]; then
+            version="$(panel_latest_tag "$clone_url")"
+            [[ -n "$version" ]] || die "no release tags found in $clone_url; pass --version=<tag>"
+        fi
+        [[ "$version" == v* ]] || version="v$version"
+        target_version="${version#v}"
+        target_label="$repo@$version"
+        checkout="$tmp/checkout"
+        step "Fetching $target_label"
+        run_cmd git clone --quiet --depth 1 --branch "$version" "$clone_url" "$checkout"
+        if ! dry_run; then
+            [[ "$(tr -d '[:space:]' < "$checkout/VERSION")" == "$target_version" ]] || die "$version has VERSION $(tr -d '[:space:]' < "$checkout/VERSION"); tags must match the VERSION file"
+        fi
+    fi
+    dry_run || [[ -x "$checkout/server/bin/mandal" && -f "$checkout/server/lib/core.sh" ]] || die "$target_label does not contain the mandal CLI"
+
+    installed_version="$(mandal_version)"
+    [[ -r "$(app_home "$name")/current/VERSION" ]] && deployed_version="$(tr -d '[:space:]' < "$(app_home "$name")/current/VERSION")"
+    if panel_version_at_least "$installed_version" "$target_version" && [[ "$deployed_version" == "$target_version" ]]; then
+        printf 'Mandal %s is already installed and deployed.\n' "$target_version"
+        return 0
+    fi
+
+    if ! dry_run; then
+        with_lock
+        audit "panel:update $version"
+    fi
+
+    step "mandal CLI $target_version"
+    if panel_version_at_least "$installed_version" "$target_version"; then
+        printf '+ mandal %s already installed\n' "$installed_version"
+    else
+        mkdir -p "$tmp/mandal"
+        cp -R "$checkout/server/." "$tmp/mandal/"
+        rm -rf "$tmp/mandal/tests"
+        cp "$checkout/VERSION" "$tmp/mandal/VERSION"
+        tar -C "$tmp/mandal" -czf "$tmp/mandal-cli.tar.gz" .
+        cmd_cli_update --from="$tmp/mandal-cli.tar.gz"
+    fi
+
+    step "Panel $name from $target_label"
+    if [[ "$(conf_get "$manifest" BRANCH 2> /dev/null || true)" != "$version" ]]; then
+        cmd_app_configure --name="$name" --branch="$version"
+    fi
+    if [[ "$deployed_version" == "$target_version" ]]; then
+        printf '+ mandal %s already deployed\n' "$deployed_version"
+    else
+        cmd_app_deploy --name="$name"
+    fi
+    printf '\nMandal %s is installed and deployed.\n' "$target_version"
 }

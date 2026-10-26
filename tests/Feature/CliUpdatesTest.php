@@ -61,7 +61,7 @@ it('checks every connected server from the scheduled command', function () {
     Server::factory()->create(['name' => 'never-connected']);
     $this->ssh->respondWithJson('version --json', ['version' => '0.0.9', 'build' => 'release00001']);
 
-    $this->artisan('mandal:check-cli')
+    $this->artisan('mandal:check-updates')
         ->expectsOutputToContain('old-box runs CLI build release00001')
         ->assertSuccessful();
 

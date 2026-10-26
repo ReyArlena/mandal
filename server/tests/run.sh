@@ -809,7 +809,23 @@ forced="$(MANDAL_FORCE_PANEL=1 cmd_app_delete --name=mandal-panel --dry-run 2>&1
 again="$(cmd_panel_install --name=mandal-panel --domain=panel.example.com --repo=acme/mandal --dry-run 2>&1)"
 assert_eq "panel:install succeeds when the panel app already exists" "0" "$?"
 [[ "$again" == *"already exists; nothing to do"* && "$again" != *"Creating the panel app"* ]] && pass || fail "panel:install leaves an existing panel app alone"
+printf 'TYPE=laravel\nPANEL=true\nDOMAIN=panel.example.com\nPHP=8.5\nREPO=acme/mandal\nBRANCH=v0.0.9\nCLONE=https\n' > "${MANDAL_APPS_DIR}/mandal-panel.conf"
+pupdate="$(cmd_panel_update --source="${MANDAL_ROOT}/.." --dry-run 2>&1)"
+assert_eq "panel:update dry run completes" "0" "$?"
+for marker in "+ mandal $(mandal_version) already installed" "Updated ${MANDAL_APPS_DIR}/mandal-panel.conf." "Deploying mandal-panel from acme/mandal@v$(mandal_version)" "Mandal $(mandal_version) is installed and deployed."; do
+    [[ "$pupdate" == *"$marker"* ]] && pass || fail "panel:update mentions: $marker"
+done
+[[ "$pupdate" != *"tar -xzf"* ]] && pass || fail "panel:update leaves a current CLI alone"
+pold="$(mandal_version() { echo 0.0.9; }; cmd_panel_update --source="${MANDAL_ROOT}/.." --dry-run 2>&1)"
+assert_eq "panel:update from an older CLI completes" "0" "$?"
+[[ "$pold" == *"Installing the CLI from"* && "$pold" == *"tar -xzf"* ]] && pass || fail "panel:update updates an older CLI through cli:update"
+mkdir -p "${MANDAL_HOME_DIR}/mandal-panel/current" && printf '%s\n' "$(mandal_version)" > "${MANDAL_HOME_DIR}/mandal-panel/current/VERSION"
+assert_eq "panel:update is a no-op when installed and deployed" "Mandal $(mandal_version) is already installed and deployed." "$(cmd_panel_update --source="${MANDAL_ROOT}/.." --dry-run 2>&1)"
+rm -rf "${MANDAL_HOME_DIR}/mandal-panel"
+(cmd_panel_update --version=latest --dry-run) > /dev/null 2>&1 && fail "panel:update rejects a version that is not a tag" || pass
+(cmd_panel_update --source="$TMP" --dry-run) > /dev/null 2>&1 && fail "panel:update rejects a source without the CLI" || pass
 rm -f "${MANDAL_APPS_DIR}/mandal-panel.conf"
+(cmd_panel_update --dry-run) > /dev/null 2>&1 && fail "panel:update refuses a server that does not host the panel" || pass
 
 # ---------------------------------------------------------------------------
 # setup.sh
@@ -899,6 +915,12 @@ printf '%s\n' "$*" >> "$INSTALL_LOG/mandal.log"
 manifest="$MANDAL_ETC/apps/mandal-panel.conf"
 case "$1" in
     cli:update) tar -xzOf "${2#--from=}" ./VERSION > "$MANDAL_INSTALL_DIR/VERSION" ;;
+    panel:update)
+        for arg in "$@"; do case "$arg" in --version=*) v="${arg#*=}"; v="${v#v}" ;; esac; done
+        echo "$v" > "$MANDAL_INSTALL_DIR/VERSION"
+        sed -i "s|^BRANCH=.*|BRANCH=v$v|" "$manifest"
+        mkdir -p "$MANDAL_HOME_DIR/mandal-panel/current" && echo "$v" > "$MANDAL_HOME_DIR/mandal-panel/current/VERSION"
+        ;;
     provision) printf 'PROVISIONED_AT=2026-10-27T10:00:00Z\n' >> "$MANDAL_ETC/server.conf" ;;
     panel:install)
         if [[ -f "$manifest" ]]; then echo "Panel app mandal-panel already exists; nothing to do."; exit 0; fi
@@ -957,8 +979,9 @@ assert_eq "install.sh links the CLI" "${install_root}/opt/mandal/bin/mandal" "$(
 clear_logs
 again="$(run_install)"
 assert_eq "install.sh runs again without --domain" "0" "$?"
-assert_eq "install.sh skips what is done" "panel:install key:add" "$(mandal_calls)"
-for marker in "mandal $(mandal_version) already installed" "already provisioned on 2026-10-27T10:00:00Z" "mandal $(mandal_version) already deployed" "certificate for panel.example.com already present" "already connected"; do
+assert_eq "install.sh hands an installed panel to panel:update" "panel:update key:add" "$(mandal_calls)"
+grep -q "panel:update --version=v$(mandal_version) --source=${MANDAL_ROOT}/.." "${install_root}/mandal.log" && pass || fail "install.sh passes the release and source to panel:update"
+for marker in "certificate for panel.example.com already present" "already connected"; do
     [[ "$again" == *"$marker"* ]] && pass || fail "install.sh second run mentions: $marker"
 done
 [[ "$(grep -c 'register-host' "${install_root}/sudo.log")" -eq 1 ]] && pass || fail "install.sh does not verify a connected host again"
@@ -970,9 +993,9 @@ printf '0.0.9\n' > "${install_root}/home/mandal-panel/current/VERSION"
 sed -i 's/^BRANCH=.*/BRANCH=v0.0.9/' "${install_root}/etc/apps/mandal-panel.conf"
 update="$(run_install)"
 assert_eq "install.sh updates an older install" "0" "$?"
-assert_eq "install.sh updates the CLI first, then the panel" "cli:update panel:install app:configure app:deploy key:add" "$(mandal_calls)"
-grep -q "app:configure --name=mandal-panel --repo=ReyArlena/mandal --branch=v$(mandal_version) --https" "${install_root}/mandal.log" && pass || fail "install.sh moves the panel app to the new tag"
-assert_eq "install.sh updates the CLI through cli:update" "$(mandal_version)" "$(cat "${install_root}/opt/mandal/VERSION")"
+assert_eq "install.sh updates an installed panel through panel:update only" "panel:update key:add" "$(mandal_calls)"
+assert_eq "install.sh ends with the CLI at the release" "$(mandal_version)" "$(cat "${install_root}/opt/mandal/VERSION")"
+assert_eq "install.sh ends with the panel app on the release tag" "v$(mandal_version)" "$(grep '^BRANCH=' "${install_root}/etc/apps/mandal-panel.conf" | cut -d= -f2)"
 assert_eq "install.sh deploys the new release" "$(mandal_version)" "$(cat "${install_root}/home/mandal-panel/current/VERSION")"
 
 clear_logs

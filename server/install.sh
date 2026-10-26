@@ -186,50 +186,40 @@ stage_cli() {
     chmod 0755 "$staged" "$staged/bin/mandal"
 }
 
-step "mandal CLI $target_version"
-if [[ -z "$installed_version" ]]; then
-    stage_cli "$tmp/mandal"
-    printf '+ install %s -> %s\n' "$target_label" "$MANDAL_INSTALL_DIR"
-    mkdir -p "$(dirname "$MANDAL_INSTALL_DIR")"
-    mv "$tmp/mandal" "$MANDAL_INSTALL_DIR"
-    run_cmd ln -sfn "$MANDAL_INSTALL_DIR/bin/mandal" "$MANDAL_BIN_LINK"
-elif version_at_least "$installed_version" "$target_version"; then
-    skip "mandal $installed_version already installed"
+if [[ -n "$installed_version" && -f "$manifest" ]]; then
+    # An installed panel updates itself through the CLI; this is the same
+    # as running `sudo mandal panel:update` by hand.
+    step "Updating the panel to $target_label"
+    update_args=(--version="$version")
+    [[ -z "$source_dir" ]] || update_args+=(--source="$source_dir")
+    run_cmd mandal panel:update "${update_args[@]}"
 else
-    stage_cli "$tmp/mandal"
-    tar -C "$tmp/mandal" -czf "$tmp/mandal-cli.tar.gz" .
-    run_cmd mandal cli:update --from="$tmp/mandal-cli.tar.gz"
-fi
+    step "mandal CLI $target_version"
+    if [[ -z "$installed_version" ]]; then
+        stage_cli "$tmp/mandal"
+        printf '+ install %s -> %s\n' "$target_label" "$MANDAL_INSTALL_DIR"
+        mkdir -p "$(dirname "$MANDAL_INSTALL_DIR")"
+        mv "$tmp/mandal" "$MANDAL_INSTALL_DIR"
+        run_cmd ln -sfn "$MANDAL_INSTALL_DIR/bin/mandal" "$MANDAL_BIN_LINK"
+    elif version_at_least "$installed_version" "$target_version"; then
+        skip "mandal $installed_version already installed"
+    else
+        stage_cli "$tmp/mandal"
+        tar -C "$tmp/mandal" -czf "$tmp/mandal-cli.tar.gz" .
+        run_cmd mandal cli:update --from="$tmp/mandal-cli.tar.gz"
+    fi
 
-# ---------------------------------------------------------------------------
-# The stack
-# ---------------------------------------------------------------------------
+    step "Provisioning"
+    if [[ -n "$(conf_get "$MANDAL_ETC/server.conf" PROVISIONED_AT)" ]]; then
+        skip "already provisioned on $(conf_get "$MANDAL_ETC/server.conf" PROVISIONED_AT)"
+    else
+        run_cmd mandal provision
+    fi
 
-step "Provisioning"
-if [[ -n "$(conf_get "$MANDAL_ETC/server.conf" PROVISIONED_AT)" ]]; then
-    skip "already provisioned on $(conf_get "$MANDAL_ETC/server.conf" PROVISIONED_AT)"
-else
-    run_cmd mandal provision
-fi
+    step "Panel app $name for $domain"
+    run_cmd mandal panel:install --name="$name" --domain="$domain" --repo="$repo" --branch="$version" --https
 
-# ---------------------------------------------------------------------------
-# The panel app
-# ---------------------------------------------------------------------------
-
-step "Panel app $name for $domain"
-run_cmd mandal panel:install --name="$name" --domain="$domain" --repo="$repo" --branch="$version" --https
-if [[ "$(conf_get "$manifest" BRANCH)" != "$version" || "$(conf_get "$manifest" REPO)" != "$repo" ]]; then
-    run_cmd mandal app:configure --name="$name" --repo="$repo" --branch="$version" --https
-fi
-
-step "Deploying $target_label"
-deployed_version=""
-if [[ -r "$home/current/VERSION" ]]; then
-    deployed_version="$(tr -d '[:space:]' < "$home/current/VERSION")"
-fi
-if [[ "$deployed_version" == "$target_version" ]]; then
-    skip "mandal $deployed_version already deployed"
-else
+    step "Deploying $target_label"
     run_cmd mandal app:deploy --name="$name"
 fi
 

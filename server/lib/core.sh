@@ -207,13 +207,17 @@ validate_php_version() {
 # Locking and audit log (write commands)
 # ---------------------------------------------------------------------------
 
-# Take the global write lock for the rest of the process.
+# Take the global write lock for the rest of the process. A command that
+# runs other commands in-process (panel:update) holds it once; the nested
+# ones see MANDAL_LOCKED and skip it.
 with_lock() {
+    [[ "${MANDAL_LOCKED:-0}" == 1 ]] && return 0
     mkdir -p "$(dirname "$MANDAL_LOCK_FILE")"
     exec 9> "$MANDAL_LOCK_FILE"
     if ! flock -w "${MANDAL_LOCK_WAIT:-30}" 9; then
         die 75 "another mandal command is running; try again shortly"
     fi
+    export MANDAL_LOCKED=1
 }
 
 audit() {

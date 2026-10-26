@@ -12,6 +12,7 @@ use App\Jobs\ProvisionServer;
 use App\Jobs\UpdateCli;
 use App\Mandal\CliArchive;
 use App\Mandal\MandalClient;
+use App\Mandal\PanelReleases;
 use App\Models\Server;
 use App\Models\Task;
 use App\Ssh\KeyPair;
@@ -41,6 +42,7 @@ class ViewServer extends ViewRecord
             $this->provisionAction(),
             $this->grantAccessAction(),
             $this->updateCliAction(),
+            $this->panelUpdateAction(),
             EditAction::make(),
             DeleteAction::make(),
         ];
@@ -253,6 +255,38 @@ class ViewServer extends ViewRecord
         } catch (SshException) {
             return false;
         }
+    }
+
+    /**
+     * On the server that hosts the panel, points at the newer release and
+     * the command that installs it. The update runs on the server, not
+     * from here: deploying the panel restarts the worker that would drive it.
+     */
+    private function panelUpdateAction(): Action
+    {
+        return Action::make('panelUpdate')
+            ->label(fn (PanelReleases $releases): string => "Mandal {$releases->latest()} available")
+            ->icon(Heroicon::OutlinedArrowUpCircle)
+            ->color('info')
+            ->visible(function (Server $record, MandalClient $mandal, PanelReleases $releases): bool {
+                if ($record->connected_at === null || ! $releases->available()) {
+                    return false;
+                }
+
+                try {
+                    return (bool) ($mandal->inventory($record)['mandal']['hosts_panel'] ?? false);
+                } catch (SshException) {
+                    return false;
+                }
+            })
+            ->modalHeading(fn (PanelReleases $releases): string => "Update Mandal to {$releases->latest()}")
+            ->modalContent(fn (Server $record, PanelReleases $releases): View => view('filament.servers.panel-update', [
+                'server' => $record,
+                'latest' => $releases->latest(),
+                'current' => $releases->current(),
+            ]))
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Close');
     }
 
     /**
