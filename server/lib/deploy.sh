@@ -155,7 +155,7 @@ deploy_run() {
         deploy_link_shared "$name" "$home" "$release"
 
         step "Running deploy.sh"
-        deploy_as "$name" "$home" "$php" "APP_NAME=$name" "RELEASE_DIR=$release" "SHARED_DIR=$home/shared" "BRANCH=$branch" "COMMIT=${commit:-}" \
+        deploy_as "$name" "$home" "$php" "MANDAL_APP=$name" "RELEASE_DIR=$release" "SHARED_DIR=$home/shared" "BRANCH=$branch" "COMMIT=${commit:-}" \
             -- bash -c "cd '$release' && exec bash '$home/deploy.sh'"
 
         step "Activating the release"

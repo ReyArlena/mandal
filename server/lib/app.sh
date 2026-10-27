@@ -245,7 +245,7 @@ app_render_deploy_script() {
 #
 # Runs inside the new release directory as the app user, after the code
 # has been cloned and shared files linked, and before the release goes
-# live. Edit freely; it is yours. Available: $APP_NAME, $RELEASE_DIR,
+# live. Edit freely; it is yours. Available: $MANDAL_APP, $RELEASE_DIR,
 # $SHARED_DIR, $PHP (the app's PHP binary), $BRANCH, $COMMIT.
 
 set -euo pipefail

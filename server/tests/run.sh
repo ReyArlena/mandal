@@ -453,6 +453,7 @@ for marker in "==> Deploying shop from acme/shop@main" "git clone --quiet --dept
     if [[ "$deploy" == *"$marker"* ]]; then pass; else fail "app:deploy mentions: $marker"; fi
 done
 [[ "$deploy" == *"sudo -u shop -H env HOME=${MANDAL_HOME_DIR}/shop"* ]] && pass || fail "deploy steps run as the app user"
+[[ "$deploy" == *"MANDAL_APP=shop RELEASE_DIR="* && "$deploy" != *"APP_NAME="* ]] && pass || fail "deploy.sh gets the app name as MANDAL_APP, never as APP_NAME"
 [[ "$deploy" != *"supervisorctl start shop-worker:shop-worker_00"* ]] && pass || fail "app:deploy leaves running workers to queue:restart"
 assert_eq "dry run writes no deploy log" "0" "$(find "$MANDAL_DEPLOY_LOG_DIR" -type f 2> /dev/null | wc -l)"
 
