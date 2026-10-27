@@ -18,7 +18,8 @@ use App\Ssh\CommandResult;
 use App\Ssh\SshException;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Checkbox;
-use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\CodeEditor;
+use Filament\Forms\Components\CodeEditor\Enums\Language;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Actions;
@@ -255,12 +256,11 @@ trait ManagesApps
                 return ['contents' => $result->successful() ? $result->output : '# '.trim($result->errorOutput ?: $result->output)];
             })
             ->schema([
-                Textarea::make('contents')
+                CodeEditor::make('contents')
                     ->hiddenLabel()
-                    ->rows(24)
+                    ->language(Language::Yaml)
                     ->required()
-                    ->maxLength(262144)
-                    ->extraInputAttributes(['class' => 'font-mono text-sm', 'spellcheck' => 'false']),
+                    ->rules(['max:262144']),
             ])
             ->action(function (array $arguments, array $data): void {
                 $name = $this->appName($arguments);
@@ -302,12 +302,10 @@ trait ManagesApps
                 return ['contents' => $result->successful() ? $result->output : '# '.trim($result->errorOutput ?: $result->output)];
             })
             ->schema([
-                Textarea::make('contents')
+                CodeEditor::make('contents')
                     ->hiddenLabel()
-                    ->rows(24)
                     ->required()
-                    ->maxLength(262144)
-                    ->extraInputAttributes(['class' => 'font-mono text-sm', 'spellcheck' => 'false']),
+                    ->rules(['max:262144']),
             ])
             ->action(function (array $arguments, array $data): void {
                 $name = $this->appName($arguments);
@@ -349,12 +347,10 @@ trait ManagesApps
                 return ['contents' => $result->successful() ? $result->output : '# '.trim($result->errorOutput ?: $result->output)];
             })
             ->schema([
-                Textarea::make('contents')
+                CodeEditor::make('contents')
                     ->hiddenLabel()
-                    ->rows(24)
                     ->required()
-                    ->maxLength(262144)
-                    ->extraInputAttributes(['class' => 'font-mono text-sm', 'spellcheck' => 'false']),
+                    ->rules(['max:262144']),
             ])
             ->extraModalFooterActions(fn (array $arguments): array => [
                 Action::make('resetDeployScript')

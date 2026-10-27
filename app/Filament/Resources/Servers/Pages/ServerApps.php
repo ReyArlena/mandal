@@ -16,6 +16,8 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
+use Filament\Forms\Components\CodeEditor;
+use Filament\Forms\Components\CodeEditor\Enums\Language;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
@@ -190,13 +192,12 @@ class ServerApps extends Page
                     ->notIn(array_column($this->apps, 'name'))
                     ->helperText('2 to 32 lower-case letters, digits or hyphens. Used for the system user, database and directories.')
                     ->placeholder('shop'),
-                Textarea::make('compose')
+                CodeEditor::make('compose')
                     ->label('Compose file')
-                    ->rows(14)
+                    ->language(Language::Yaml)
                     ->default(self::COMPOSE_TEMPLATE)
                     ->requiredIf('type', 'docker')
-                    ->maxLength(262144)
-                    ->extraInputAttributes(['class' => 'font-mono text-sm', 'spellcheck' => 'false'])
+                    ->rules(['max:262144'])
                     ->helperText('Saved as compose.yml in /srv/docker/<name> and run as root through Docker, like any compose project. Ports here bypass ufw; bind to 127.0.0.1 unless a port should be public.')
                     ->visible(fn (callable $get): bool => $get('type') === 'docker'),
                 Checkbox::make('proxy')
@@ -255,13 +256,11 @@ class ServerApps extends Page
                     ->default(true)
                     ->helperText('Named after the app, with a generated password. Both are written to the app\'s .env, which you can read from the app page; the panel does not keep the password.')
                     ->visible(fn (callable $get): bool => $get('type') !== 'docker'),
-                Textarea::make('deploy_script')
+                CodeEditor::make('deploy_script')
                     ->label('Deploy script')
-                    ->rows(14)
                     ->default(fn (): string => self::deployScriptTemplate())
                     ->requiredIf('type', 'laravel')
-                    ->maxLength(262144)
-                    ->extraInputAttributes(['class' => 'font-mono text-sm', 'spellcheck' => 'false'])
+                    ->rules(['max:262144'])
                     ->helperText('Saved as /home/<name>/deploy.sh and run inside each new release before it goes live. Editable later from the app page.')
                     ->visible(fn (callable $get): bool => $get('type') !== 'docker'),
                 Textarea::make('env')
