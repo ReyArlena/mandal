@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `install.sh` failed at its last step on a fresh server because nothing had created the `mandal` SSH user: `key:add` now creates the user and its sudo rule when they are missing.
 - The panel's queue worker stayed in Supervisor's FATAL state after `install.sh`, since it was added before the first release existed. Deploys now start any of the app's Supervisor processes that is not running.
 
+### Changed
+
+- Pulling a Docker app's images asks "Pull and restart?" and describes what `docker compose pull` and `up -d` do, instead of the Laravel deploy wording.
+- Adding a worker offers templates for a queue worker, Horizon, Reverb and `schedule:work` that fill in the form, and each worker on the app page has its own Restart button.
+
 ### Added
 
 - Laravel 13 application with a Filament 5 panel served from the site root.

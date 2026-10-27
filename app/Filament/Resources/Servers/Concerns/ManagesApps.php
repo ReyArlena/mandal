@@ -21,6 +21,9 @@ use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Actions;
+use Filament\Schemas\Components\Utilities\Set;
+use Filament\Support\Enums\Size;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use RuntimeException;
@@ -38,6 +41,18 @@ trait ManagesApps
 
     public const string WORKER_COMMAND_PATTERN = '/^[A-Za-z0-9:_=,. -]{1,200}$/';
 
+    /**
+     * Starting points offered when adding a worker. The first is the default.
+     *
+     * @var list<array{worker: string, label: string, command: string}>
+     */
+    public const array WORKER_TEMPLATES = [
+        ['worker' => 'queue', 'label' => 'Queue worker', 'command' => 'queue:work --sleep=3 --tries=3 --max-time=3600'],
+        ['worker' => 'horizon', 'label' => 'Horizon', 'command' => 'horizon'],
+        ['worker' => 'reverb', 'label' => 'Reverb', 'command' => 'reverb:start'],
+        ['worker' => 'scheduler', 'label' => 'Scheduler', 'command' => 'schedule:work'],
+    ];
+
     abstract protected function server(): Server;
 
     /**
@@ -51,9 +66,13 @@ trait ManagesApps
             ->label('Deploy')
             ->icon(Heroicon::OutlinedRocketLaunch)
             ->requiresConfirmation()
-            ->modalHeading(fn (array $arguments): string => "Deploy {$arguments['name']}?")
-            ->modalDescription('Clones the configured branch into a new release, runs the app\'s deploy script and switches over when it succeeds. The live release is untouched if anything fails.')
-            ->modalSubmitActionLabel('Deploy')
+            ->modalHeading(fn (array $arguments): string => ($arguments['type'] ?? 'laravel') === 'docker'
+                ? "Pull and restart {$arguments['name']}?"
+                : "Deploy {$arguments['name']}?")
+            ->modalDescription(fn (array $arguments): string => ($arguments['type'] ?? 'laravel') === 'docker'
+                ? 'Pulls the images named in the compose file, then recreates only the containers whose image or configuration changed. Containers that did not change keep running.'
+                : 'Clones the configured branch into a new release, runs the app\'s deploy script and switches over when it succeeds. The live release is untouched if anything fails.')
+            ->modalSubmitActionLabel(fn (array $arguments): string => ($arguments['type'] ?? 'laravel') === 'docker' ? 'Pull and restart' : 'Deploy')
             ->action(function (array $arguments): void {
                 $name = $this->appName($arguments);
 
@@ -358,17 +377,29 @@ trait ManagesApps
             ->modalDescription('A Supervisor program running an artisan command as the app user. It restarts automatically and is restarted after every deploy.')
             ->modalSubmitActionLabel('Add worker')
             ->schema([
+                Actions::make(array_map(
+                    fn (array $template): Action => Action::make($template['worker'])
+                        ->label($template['label'])
+                        ->color('gray')
+                        ->size(Size::Small)
+                        ->action(function (Set $set) use ($template): void {
+                            $set('worker', $template['worker']);
+                            $set('command', $template['command']);
+                            $set('processes', 1);
+                        }),
+                    self::WORKER_TEMPLATES,
+                )),
                 TextInput::make('worker')
                     ->label('Name')
-                    ->default('default')
+                    ->default('queue')
                     ->required()
                     ->regex(self::WORKER_NAME_PATTERN),
                 TextInput::make('command')
                     ->label('Artisan command')
-                    ->default('queue:work --sleep=3 --tries=3 --max-time=3600')
+                    ->default(self::WORKER_TEMPLATES[0]['command'])
                     ->required()
                     ->regex(self::WORKER_COMMAND_PATTERN)
-                    ->helperText('Without "php artisan". Use "horizon" for Horizon or "reverb:start" for Reverb.'),
+                    ->helperText('Without "php artisan". The buttons above fill in a sensible default; "schedule:work" is only for apps whose crontab entry was removed, since Mandal already runs schedule:run every minute.'),
                 TextInput::make('processes')
                     ->numeric()
                     ->integer()
@@ -421,6 +452,29 @@ trait ManagesApps
                     fn (MandalClient $mandal) => $mandal->run($this->server(), "worker:remove --app={$name} --name={$worker}", timeoutSeconds: 60),
                     "Worker {$worker} removed",
                     'Could not remove the worker',
+                );
+            });
+    }
+
+    public function restartWorkerAction(): Action
+    {
+        return Action::make('restartWorker')
+            ->label('Restart')
+            ->icon(Heroicon::OutlinedArrowPath)
+            ->color('gray')
+            ->link()
+            ->action(function (array $arguments): void {
+                $name = $this->appName($arguments);
+                $worker = (string) ($arguments['worker'] ?? '');
+
+                if ($name === null || ! preg_match(self::WORKER_NAME_PATTERN, $worker)) {
+                    return;
+                }
+
+                $this->runSynchronously(
+                    fn (MandalClient $mandal) => $mandal->run($this->server(), "worker:restart --app={$name} --name={$worker}", timeoutSeconds: 120),
+                    "Worker {$worker} restarted",
+                    'Could not restart the worker',
                 );
             });
     }

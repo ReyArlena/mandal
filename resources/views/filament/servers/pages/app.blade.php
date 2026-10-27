@@ -156,6 +156,9 @@
                         </div>
                         <div class="flex items-center gap-3">
                             <span class="text-xs text-gray-500">{{ $worker['numprocs'] }} process{{ $worker['numprocs'] == 1 ? '' : 'es' }}</span>
+                            @unless (str_starts_with((string) ($worker['command'] ?? ''), 'schedule:') || str_contains((string) ($worker['command'] ?? ''), 'artisan schedule:'))
+                                {{ ($this->restartWorkerAction)(['name' => $app['name'], 'worker' => $worker['worker']]) }}
+                            @endunless
                             {{ ($this->removeWorkerAction)(['name' => $app['name'], 'worker' => $worker['worker']]) }}
                         </div>
                     </div>

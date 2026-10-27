@@ -34,7 +34,7 @@ To deploy on every push, set the panel's **Public URL** in Settings (reachable f
 - **Releases**: every release with its commit, and a **Roll back** button per release.
 - **.env**: edit the production environment file. It is uploaded as a file, never passed on a command line.
 - **SSL**: requests a Let's Encrypt certificate with Certbot's nginx plugin after checking that the domain and every alias resolve to the server. Certbot edits the nginx site to add the certificate and the HTTPS redirect, and Mandal does not rewrite the site afterwards, so those lines stay.
-- **Workers**: Supervisor programs running an artisan command (`queue:work`, `horizon`, `reverb:start`, anything else) as the app user, with the number of processes. They restart after every deploy.
+- **Workers**: Supervisor programs running an artisan command (`queue:work`, `horizon`, `reverb:start`, anything else) as the app user, with the number of processes. Buttons in the add form fill in a queue worker, Horizon, Reverb or `schedule:work` (the last only for apps whose crontab entry was removed, since Mandal already runs `schedule:run` every minute). Every worker restarts after each deploy; **Restart workers** restarts them all, and each row has its own **Restart** (Supervisor sends SIGTERM, which `queue:work` and Horizon treat as "finish the current job, then exit").
 - **Logs**: opens the Logs page on the app's Laravel log.
 - **Delete** removes everything the app created. Options keep the database or the home directory.
 

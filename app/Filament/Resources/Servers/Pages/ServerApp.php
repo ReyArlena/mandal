@@ -156,7 +156,7 @@ class ServerApp extends Page
             $this->stopAppAction()->arguments(['name' => $this->appName])->visible(fn (): bool => $this->isDocker() && $this->isRunning()),
             $this->restartAppAction()->arguments(['name' => $this->appName])->visible(fn (): bool => $this->isDocker() && $this->isRunning()),
             $this->deployAppAction()
-                ->arguments(['name' => $this->appName])
+                ->arguments(['name' => $this->appName, 'type' => $this->isDocker() ? 'docker' : 'laravel'])
                 ->label(fn (): string => $this->isDocker() ? 'Pull and restart' : 'Deploy')
                 ->visible(fn (): bool => $this->isDocker() || ! empty($this->appData['repo'])),
             $this->enableAutoDeployAction()

@@ -48,7 +48,7 @@
                             @else
                                 {{ ($this->startAppAction)(['name' => $app['name']])->link() }}
                             @endif
-                            {{ ($this->deployAppAction)(['name' => $app['name']])->label('Pull and restart')->link() }}
+                            {{ ($this->deployAppAction)(['name' => $app['name'], 'type' => 'docker'])->label('Pull and restart')->link() }}
                         @else
                             @if (! empty($app['current_release']))
                                 <x-filament::badge color="success">Deployed</x-filament::badge>
