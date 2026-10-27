@@ -4,7 +4,7 @@
 
 MANDAL_COMMANDS+=("updates:status|Pending updates, component versions and reboot state as JSON|read")
 MANDAL_COMMANDS+=("updates:apply|Install updates (--security, --all or --package=<name>)|write")
-MANDAL_COMMANDS+=("component:update|Update a standalone component (--component=cache|js|composer|docker)|write")
+MANDAL_COMMANDS+=("component:update|Update a standalone component (--component=cache/js/composer/docker)|write")
 MANDAL_COMMANDS+=("reboot|Reboot the server after a short delay|write")
 
 cmd_updates_status() {

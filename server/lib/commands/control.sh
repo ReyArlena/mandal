@@ -4,7 +4,7 @@
 # keeps the containers and their state, so starting again is quick; it is
 # `compose stop`, not `compose down`.
 
-MANDAL_COMMANDS+=("app:control|Start, stop or restart a Docker app (--name= --action=start|stop|restart)|write")
+MANDAL_COMMANDS+=("app:control|Start, stop or restart a Docker app (--name= --action=start/stop/restart)|write")
 
 cmd_app_control() {
     local action="" arg

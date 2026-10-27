@@ -3,7 +3,7 @@
 # firewall:list / firewall:allow / firewall:delete - ufw rules, additive only.
 
 MANDAL_COMMANDS+=("firewall:list|List ufw rules as JSON|read")
-MANDAL_COMMANDS+=("firewall:allow|Allow a port (--port=443 [--proto=tcp|udp] [--from=<cidr>] [--comment=...])|write")
+MANDAL_COMMANDS+=("firewall:allow|Allow a port (--port=443 [--proto=tcp/udp] [--from=<cidr>] [--comment=...])|write")
 MANDAL_COMMANDS+=("firewall:delete|Delete a rule by its number from firewall:list (--number=N)|write")
 
 # What Docker publishes past ufw, so the firewall page can show it next to
