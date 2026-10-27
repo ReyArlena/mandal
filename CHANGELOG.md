@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `install.sh` failed at its last step on a fresh server because nothing had created the `mandal` SSH user: `key:add` now creates the user and its sudo rule when they are missing.
+- The panel's queue worker stayed in Supervisor's FATAL state after `install.sh`, since it was added before the first release existed. Deploys now start any of the app's Supervisor processes that is not running.
+
 ### Added
 
 - Laravel 13 application with a Filament 5 panel served from the site root.

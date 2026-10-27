@@ -84,7 +84,7 @@ With a GitHub token in the panel, the deploy key is also added to the repository
 | Build | `deploy.sh` runs inside the release as the app user |
 | Record | `releases/<timestamp>/.mandal-release` (branch, commit, time) |
 | Switch | `/home/<app>/current` repointed atomically (`current.new` then rename) |
-| Reload | PHP-FPM for the app's version reloaded; `artisan queue:restart` run from the new release, plus `horizon:terminate` and `reverb:restart` when those packages are installed, so workers pick up the new code |
+| Reload | PHP-FPM for the app's version reloaded; `artisan queue:restart` run from the new release, plus `horizon:terminate` and `reverb:restart` when those packages are installed, so workers pick up the new code; any of the app's Supervisor processes that is not running (a worker added before the first deploy, for example) is started |
 | Prune | Oldest releases removed down to `KEEP_RELEASES` (5 by default, 3 for the panel app) |
 | Log | `/var/log/mandal/deploys/<app>/<timestamp>.log` |
 
@@ -181,7 +181,7 @@ Nothing is written outside MariaDB. Databases and users that belong to an app ar
 
 | Command | Changes |
 |---|---|
-| `key:add` | A labelled line appended to `/home/mandal/.ssh/authorized_keys` |
+| `key:add` | A labelled line appended to `/home/mandal/.ssh/authorized_keys`. When the `mandal` user or `/etc/sudoers.d/mandal` is missing (a hosted panel never runs `setup.sh`), the user is created and the rule written first |
 | `key:remove` | That line removed; the last key is refused |
 | `panel:install` | Everything `app:create` does for `mandal-panel`, except the MariaDB database: `shared/.env` uses SQLite at `shared/database.sqlite` (created empty, `0600`) and the database queue; `/etc/supervisor/conf.d/mandal-panel-queue.conf` runs `queue:work`; the manifest carries `PANEL=true` |
 | `panel:update` | Downloads the release, then `cli:update`, `app:configure --branch=<tag>` and `app:deploy` for the panel app |

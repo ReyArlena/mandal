@@ -8,9 +8,36 @@ MANDAL_COMMANDS+=("key:add|Allow another panel's public key (--key='ssh-ed25519 
 MANDAL_COMMANDS+=("key:remove|Remove a panel's key by its fingerprint (--fingerprint=SHA256:...)|write")
 
 MANDAL_SSH_USER="${MANDAL_SSH_USER:-mandal}"
+MANDAL_SUDOERS_FILE="${MANDAL_SUDOERS_FILE:-/etc/sudoers.d/mandal}"
 
 key_authorized_file() {
     printf '%s/%s/.ssh/authorized_keys\n' "$MANDAL_HOME_DIR" "$MANDAL_SSH_USER"
+}
+
+# setup.sh normally creates the SSH user and its sudo rule. A hosted panel
+# never runs setup.sh, so key:add makes sure both exist before adding a key.
+key_ensure_user() {
+    local user="$MANDAL_SSH_USER" rule tmp
+    if id "$user" > /dev/null 2>&1; then
+        :
+    else
+        run_cmd useradd --create-home --home-dir "$MANDAL_HOME_DIR/$user" --shell /bin/bash --user-group "$user"
+    fi
+    rule="$user ALL=(root) NOPASSWD: $MANDAL_ROOT/bin/mandal"
+    if [[ -f "$MANDAL_SUDOERS_FILE" ]] && [[ "$(cat "$MANDAL_SUDOERS_FILE")" == "$rule" ]]; then
+        return 0
+    fi
+    printf '+ write %s: %s\n' "$MANDAL_SUDOERS_FILE" "$rule"
+    dry_run && return 0
+    mkdir -p "$(dirname "$MANDAL_SUDOERS_FILE")"
+    tmp="$(mktemp "$MANDAL_SUDOERS_FILE.XXXXXX")"
+    printf '%s\n' "$rule" > "$tmp"
+    chmod 0440 "$tmp"
+    if ! visudo -cf "$tmp" > /dev/null; then
+        rm -f "$tmp"
+        die "the sudo rule for $user failed validation"
+    fi
+    mv -f "$tmp" "$MANDAL_SUDOERS_FILE"
 }
 
 # SHA256 fingerprint of an OpenSSH public key line, like ssh-keygen -lf.
@@ -71,6 +98,7 @@ cmd_key_add() {
         with_lock
         audit "key:add $name $(key_fingerprint "$key")"
     fi
+    key_ensure_user
     run_cmd install -d -m 0700 -o "$MANDAL_SSH_USER" -g "$MANDAL_SSH_USER" "$(dirname "$file")"
     ensure_line "$file" "$line"
     if ! dry_run; then

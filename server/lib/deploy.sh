@@ -80,6 +80,23 @@ deploy_restart_workers() {
     if [[ -d "$release/vendor/laravel/reverb" ]]; then
         deploy_as "$name" "$home" "$php" -- "/usr/bin/php$php" "$release/artisan" reverb:restart || true
     fi
+    deploy_start_workers "$name"
+}
+
+# A program added before the app's first deploy had no current/ to start in
+# and sits in FATAL, which Supervisor never retries on its own. Start every
+# process of the app that is not running.
+deploy_start_workers() {
+    local name="$1" file program process
+    has_cmd supervisorctl || dry_run || return 0
+    for file in "$MANDAL_SUPERVISOR_DIR/${name}"-*.conf; do
+        [[ -f "$file" ]] || continue
+        program="$(basename "$file" .conf)"
+        while read -r process; do
+            [[ -n "$process" ]] || continue
+            run_cmd supervisorctl start "$process" || warn "could not start $process"
+        done < <({ supervisorctl status "$program:*" 2> /dev/null || true; } | awk '$2 != "RUNNING" && $2 != "STARTING" { print $1 }')
+    done
 }
 
 deploy_prune() {

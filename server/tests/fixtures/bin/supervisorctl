@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 case "$*" in
+  "status shop-worker:*")
+    printf 'shop-worker:shop-worker_00       RUNNING   pid 1201, uptime 2 days, 1:02:03\nshop-worker:shop-worker_01       FATAL     Exited too quickly (process log may have details)\n'
+    ;;
   "status")
     printf 'shop-worker:shop-worker_00       RUNNING   pid 1201, uptime 2 days, 1:02:03\nshop-worker:shop-worker_01       RUNNING   pid 1202, uptime 2 days, 1:02:03\nlegacy                           STOPPED   Oct 20 09:00 AM\n'
     ;;

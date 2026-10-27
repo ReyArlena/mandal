@@ -449,10 +449,11 @@ deploy="$(cmd_app_deploy --name=shop --dry-run 2>&1)"
 deploy_status=$?
 assert_eq "app:deploy dry run completes" "0" "$deploy_status"
 [[ "$deploy_status" -eq 0 ]] || printf '%s\n' "$deploy" | tail -n 6 | sed 's/^/      | /'
-for marker in "==> Deploying shop from acme/shop@main" "git clone --quiet --depth 1 --branch main git@github.com:acme/shop.git ${MANDAL_HOME_DIR}/shop/releases/" "GIT_SSH_COMMAND=ssh -i ${MANDAL_HOME_DIR}/shop/.ssh/id_ed25519" "ln -sfn ${MANDAL_HOME_DIR}/shop/shared/storage" "ln -sfn ${MANDAL_HOME_DIR}/shop/shared/.env" "exec bash '${MANDAL_HOME_DIR}/shop/deploy.sh'" "PHP=/usr/bin/php8.5" "mv -T ${MANDAL_HOME_DIR}/shop/current.new ${MANDAL_HOME_DIR}/shop/current" "systemctl reload-or-restart php8.5-fpm" "artisan queue:restart" "==> Pruning old releases (keeping 5)" "Deployed shop"; do
+for marker in "==> Deploying shop from acme/shop@main" "git clone --quiet --depth 1 --branch main git@github.com:acme/shop.git ${MANDAL_HOME_DIR}/shop/releases/" "GIT_SSH_COMMAND=ssh -i ${MANDAL_HOME_DIR}/shop/.ssh/id_ed25519" "ln -sfn ${MANDAL_HOME_DIR}/shop/shared/storage" "ln -sfn ${MANDAL_HOME_DIR}/shop/shared/.env" "exec bash '${MANDAL_HOME_DIR}/shop/deploy.sh'" "PHP=/usr/bin/php8.5" "mv -T ${MANDAL_HOME_DIR}/shop/current.new ${MANDAL_HOME_DIR}/shop/current" "systemctl reload-or-restart php8.5-fpm" "artisan queue:restart" "supervisorctl start shop-worker:shop-worker_01" "==> Pruning old releases (keeping 5)" "Deployed shop"; do
     if [[ "$deploy" == *"$marker"* ]]; then pass; else fail "app:deploy mentions: $marker"; fi
 done
 [[ "$deploy" == *"sudo -u shop -H env HOME=${MANDAL_HOME_DIR}/shop"* ]] && pass || fail "deploy steps run as the app user"
+[[ "$deploy" != *"supervisorctl start shop-worker:shop-worker_00"* ]] && pass || fail "app:deploy leaves running workers to queue:restart"
 assert_eq "dry run writes no deploy log" "0" "$(find "$MANDAL_DEPLOY_LOG_DIR" -type f 2> /dev/null | wc -l)"
 
 assert_eq "clone url defaults to ssh" "git@github.com:acme/shop.git" "$(deploy_clone_url acme/shop)"
@@ -1160,12 +1161,21 @@ printf '%s\n' "$key1" > "$(key_authorized_file)"
 [[ "$(key_fingerprint "$key1")" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]] && pass || fail "key_fingerprint looks like ssh-keygen output"
 assert_json "key:list reads labelled keys" "$(cmd_key_list)" '.[0].comment + "|" + .[0].type' "mandal-panel: first|ssh-ed25519"
 key2="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGVsc2VzaG9ydHNob3J0c2hvcnRzaG9ydHNob3J0c2hvcg== laptop"
-add="$(cmd_key_add --key="$key2" --name='Laptop panel' 2>&1)"
+export MANDAL_SUDOERS_FILE="${TMP}/key-sudoers/mandal"
+add="$(PATH="${setup_bin}:${PATH}" cmd_key_add --key="$key2" --name='Laptop panel' 2>&1)"
 assert_eq "key:add completes" "0" "$?"
+[[ "$add" == *"useradd --create-home --home-dir ${MANDAL_HOME_DIR}/mandal --shell /bin/bash --user-group mandal"* ]] && pass || fail "key:add creates the SSH user when it is missing"
+assert_eq "key:add writes the sudo rule" "mandal ALL=(root) NOPASSWD: ${MANDAL_ROOT}/bin/mandal" "$(cat "$MANDAL_SUDOERS_FILE")"
+assert_eq "key:add keeps the sudo rule file private" "440" "$(stat -c %a "$MANDAL_SUDOERS_FILE")"
 assert_eq "key:add appends a labelled line" "1" "$(grep -c 'mandal-panel: Laptop panel$' "$(key_authorized_file)")"
 assert_eq "key:add is idempotent" "This key is already allowed." "$(cmd_key_add --key="$key2" --name='Laptop panel' 2>&1)"
 (cmd_key_add --key='ssh-ed25519 not*base64 x' --name=a) > /dev/null 2>&1 && fail "key:add validates the key" || pass
 (cmd_key_add --key="$key2" --name='bad;name') > /dev/null 2>&1 && fail "key:add validates the name" || pass
+key3="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHRoaXJkdGhpcmR0aGlyZHRoaXJkdGhpcmR0aGlyZHRoaXJkdGhpcmQ= third"
+again="$(id() { [[ "$1" == mandal ]] || command id "$@"; }; PATH="${setup_bin}:${PATH}" cmd_key_add --key="$key3" --name='Third' 2>&1)"
+assert_eq "key:add completes when the user exists" "0" "$?"
+[[ "$again" != *"useradd"* && "$again" != *"write ${MANDAL_SUDOERS_FILE}"* ]] && pass || fail "key:add leaves an existing user and sudo rule alone"
+(cmd_key_remove --fingerprint="$(key_fingerprint "$key3")") > /dev/null 2>&1
 fp2="$(key_fingerprint "$key2")"
 (cmd_key_remove --fingerprint="$fp2") > /dev/null 2>&1
 assert_eq "key:remove drops the key" "0" "$(grep -c 'Laptop panel' "$(key_authorized_file)")"
