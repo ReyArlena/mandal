@@ -149,3 +149,7 @@ bash server/tests/run.sh           # server CLI (needs bash and jq)
 ```
 
 The CLI tests run against fixture directories and stand-in commands, so they work on any machine without touching the system.
+
+## License
+
+Mandal is open-source software licensed under the [MIT license](LICENSE).
