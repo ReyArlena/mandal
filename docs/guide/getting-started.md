@@ -39,7 +39,7 @@ composer run dev
 | Email | `admin@admin.com` |
 | Password | `changethispassword` |
 
-On first sign-in you set up an authenticator app. Multi-factor authentication is required for every account. Once in, open your profile from the user menu and change the email address and password. There is no public registration page; additional users are created inside the panel.
+On first sign-in you set up an authenticator app. Multi-factor authentication is required for every account. Once in, open your profile from the user menu and change the email address and password. There is no public registration page and no user management in the panel yet; further users are created from the command line, for example with `php artisan tinker`.
 
 ## Running in production
 

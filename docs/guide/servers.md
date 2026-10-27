@@ -11,7 +11,7 @@ Mandal supports Ubuntu 26.04 LTS. Each server gets its own Ed25519 key pair when
    curl -fsSL https://github.com/ReyArlena/mandal/releases/latest/download/setup.sh | sudo bash -s -- --user=mandal --key='ssh-ed25519 AAAA... mandal-panel'
    ```
 
-   `setup.sh` creates the user, installs the panel's public key, installs the `mandal` CLI from the same release under `/opt/mandal` and allows that user to run only the CLI through sudo. Nothing else is touched and the command can be run again safely; a newer CLI already on the server is kept. The server only has to reach GitHub, never the panel. Exact changes: [files changed on the server](../reference/server-files#setup-sh).
+   `setup.sh` creates the user, installs the panel's public key, installs the `mandal` CLI from the same release under `/opt/mandal` and allows that user to run only the CLI through sudo. Beyond installing `jq`, `git` and `tar` when they are missing, nothing else is touched, and the command can be run again safely; a newer CLI already on the server is kept. The server only has to reach GitHub, never the panel. Exact changes: [files changed on the server](../reference/server-files#setup-sh).
 
 3. Choose **Test connection**, check the fingerprint it shows against `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server, and confirm. If the CLI the release installed differs from the one this panel ships, the panel queues an update to its own build straight away.
 
@@ -36,13 +36,13 @@ The full list of files is in [files changed on the server](../reference/server-f
 
 The server switcher next to the logo moves between servers and keeps you on the same page. Inside a server the sidebar lists its pages: overview, Apps, Inventory, PHP, Firewall, Databases, Logs, Updates, Tasks and Edit. Elsewhere it lists the servers. Panel settings and your profile are in the user menu.
 
-The **Inventory** page shows what is on the server: services, PHP versions and pools, nginx sites, databases, Supervisor programs, certificates, firewall rules, Docker and the apps Mandal manages. It is read from the server on each visit and cached for a few seconds.
+The **Inventory** page shows what is on the server: services, PHP versions and pools, nginx sites, databases, Supervisor programs, certificates, firewall rules, Docker and the apps Mandal manages. It is read from the server on each visit and cached for 20 seconds.
 
 Only one task runs per server at a time. A second one is refused with a message rather than queued behind the first.
 
 ## Keeping the CLI current
 
-Every connection records the server's CLI build. When it differs from the panel's, the servers list shows a **CLI update required** badge, every user gets a persistent notification in the bell menu and the server page offers **Update CLI**, which uploads the panel's copy over SFTP and installs it with `mandal cli:update`. `php artisan mandal:check-updates` runs hourly and checks every connected server, so the scheduler must be running.
+Every connection records the server's CLI build. When it differs from the panel's, the servers list shows an **Update required** badge in its CLI column, every user gets a persistent notification in the bell menu and the server page offers **Update CLI**, which uploads the panel's copy over SFTP and installs it with `mandal cli:update`. `php artisan mandal:check-updates` runs hourly and checks every connected server, so the scheduler must be running.
 
 ## Several panels, one server
 

@@ -19,7 +19,7 @@ Ubuntu security updates, PHP patch releases and Docker engine updates install th
 - pending packages split into security and other, and held packages
 - whether a reboot is needed and why, and the running kernel against the newest installed one
 - the last automatic update run
-- each component's installed and latest version: Dragonfly, Bun, Composer and Docker are checked against their releases (cached on the server for six hours)
+- each component's installed and latest version: Dragonfly, Bun and Composer are checked against their releases (cached on the server for six hours), Docker against the apt candidate
 - recent package changes from the apt history
 
 From the page you can install security updates, all updates or a single package, update a component (`mandal component:update`), update the CLI and reboot. Existing configuration files are always kept (`apt` runs with the options that keep the local version). Rebooting a server that hosts the panel takes the panel offline until it is back; the page warns before doing it.
@@ -33,4 +33,4 @@ The **Logs** page reads logs straight from the server. Sources are addressed by 
 - global nginx and PHP-FPM logs, fail2ban, package updates, Mandal's own action log
 - per app: nginx access and error logs, the Laravel log (one entry per message with stack traces attached, filterable by level), the PHP slow log, worker logs and the latest deployment; for Docker apps, the nginx logs and the container output
 
-Filter by text, limit the lines and switch on **Tail** to follow a log live. Live output keeps scrolling with new lines; scroll up to read, and use **Jump to present** to return. Task output on the Tasks page behaves the same way.
+Filter by text, limit the lines and switch on **Tail** to follow a log live. Line-based logs keep scrolling with new lines; scroll up to read, and use **Jump to present** to return. The Laravel log is shown as a list of entries instead. Task output on the Tasks page follows the same way.

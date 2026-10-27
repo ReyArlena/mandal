@@ -16,7 +16,7 @@ The exact paths are listed under [app:create](../reference/server-files#app-crea
 
 Add the app's deploy key (shown on its page) to the GitHub repository; read-only access is enough. Public repositories can be cloned over HTTPS instead, without a key.
 
-**Deploy** clones the configured branch into `releases/<timestamp>`, links `shared/storage` and `shared/.env` into it, runs `deploy.sh` as the app user (Composer, Bun build, migrations, `optimize`), then switches the `current` symlink, reloads PHP-FPM and restarts the app's workers. The switch only happens when `deploy.sh` succeeds; a failed deploy removes its release and leaves the live one alone. Old releases are pruned down to the number configured for the app (three by default).
+**Deploy** clones the configured branch into `releases/<timestamp>`, links `shared/storage` and `shared/.env` into it, runs `deploy.sh` as the app user (Composer, Bun build, migrations, `optimize`), then switches the `current` symlink, reloads PHP-FPM and restarts the app's workers. The switch only happens when `deploy.sh` succeeds; a failed deploy removes its release and leaves the live one alone. Old releases are pruned down to the number configured for the app (five by default).
 
 **Roll back** switches `current` to the previous release, or to any release listed on the app's page, without running `deploy.sh`.
 
@@ -30,11 +30,10 @@ To deploy on every push, set the panel's **Public URL** in Settings (reachable f
 
 ## The app page
 
-- **Details**: domain, aliases, PHP version, repository and branch, releases to keep. **Configure** changes the repository, branch or retention.
-- **Deploy key**: the public key to add to the repository.
+- **Details**: domain and www mode, PHP version, repository and branch, auto deploy, database, user and home, and the deploy key to add to the repository. Repository, branch and releases to keep are changed on the server with `mandal app:configure --repo= --branch= --keep-releases=`.
 - **Releases**: every release with its commit, and a **Roll back** button per release.
 - **.env**: edit the production environment file. It is uploaded as a file, never passed on a command line.
-- **SSL**: requests a Let's Encrypt certificate with Certbot's nginx plugin after checking that the domain and every alias resolve to the server. Certbot edits the nginx site to add the certificate and the HTTPS redirect; later changes to the site by Mandal keep those lines.
+- **SSL**: requests a Let's Encrypt certificate with Certbot's nginx plugin after checking that the domain and every alias resolve to the server. Certbot edits the nginx site to add the certificate and the HTTPS redirect, and Mandal does not rewrite the site afterwards, so those lines stay.
 - **Workers**: Supervisor programs running an artisan command (`queue:work`, `horizon`, `reverb:start`, anything else) as the app user, with the number of processes. They restart after every deploy.
 - **Logs**: opens the Logs page on the app's Laravel log.
 - **Delete** removes everything the app created. Options keep the database or the home directory.

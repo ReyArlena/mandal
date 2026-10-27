@@ -22,6 +22,6 @@ MariaDB's `root` authenticates through the Unix socket, so `sudo mariadb` on the
 
 Credentials are written to `/etc/mandal/rclone.conf` on the server, readable only by root; the panel never stores them. Dumps land under `/var/backups/mandal/db/<database>/`, and the run is logged to `/var/log/mandal/backups.log`. When the server hosts the panel, the panel's SQLite database is copied into the same backup set.
 
-**Run now** backs up every database, or one. Any backup, local or remote, can be restored into a fresh database next to the live one for checking; restoring over a live database is left to you on purpose.
+**Back up now** backs up every database at once (`mandal backup:run --database=` on the server does a single one). Any backup, local or remote, can be restored into a fresh database next to the live one for checking; restoring over a live database is left to you on purpose.
 
 The files involved are listed under [backups](../reference/server-files#backups).

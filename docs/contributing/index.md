@@ -26,7 +26,7 @@ Any local PHP environment works; the panel is plain Laravel with an SQLite datab
 
 ## Tests and checks
 
-Run before every commit; CI runs the same things on every push and pull request.
+Run before every commit; CI runs the same things on every push to `main` and every pull request.
 
 ```bash
 php artisan test --exclude-testsuite=Browser   # panel, Pest
@@ -41,11 +41,11 @@ The browser tests need `bunx playwright install chromium` once and run with `com
 
 ### Panel tests
 
-Pest, under `tests/Feature`. SSH is replaced by `Tests\Support\FakeSshClient`, which answers each command with canned output (`respondTo`, `respondWithJson`) and records what ran (`ran`). `tests/Fixtures/inventory.json` is a full inventory the Filament pages are tested against. There is no test that needs a server.
+Pest, under `tests/Unit` and `tests/Feature` (`tests/Browser` holds the Playwright login tests). SSH is replaced by `Tests\Support\FakeSshClient`, which answers each command with canned output (`respondTo`, `respondWithJson`) and records what ran (`ran`). `tests/Fixtures/inventory.json` is a full inventory the Filament pages are tested against. There is no test that needs a server.
 
 ### CLI tests
 
-`server/tests/run.sh` is one Bash file of assertions. It sources the CLI with every `MANDAL_*` path pointed at `server/tests/fixtures/` or a temporary directory, and puts fake `apt-get`, `systemctl`, `useradd`, `docker` and friends on `PATH` that record what they were called with. Write commands are mostly exercised with `--dry-run`, which prints each step instead of running it, so the assertions compare printed steps. Add tests next to the command they cover; the file is grouped by command.
+`server/tests/run.sh` is one Bash file of assertions. It sources the CLI with every `MANDAL_*` path pointed at `server/tests/fixtures/` or a temporary directory, and puts the fakes in `server/tests/fixtures/bin` (`apt-get`, `systemctl`, `ufw`, `mariadb`, `supervisorctl`, `certbot` and others) on `PATH`; they answer from fixtures and record what they were called with. A few sections generate their own throwaway fakes, such as `useradd` for `setup.sh` and `docker` for compose projects. Write commands are mostly exercised with `--dry-run`, which prints each step instead of running it, so the assertions compare printed steps. Add tests next to the command they cover; the file is grouped by command.
 
 ## Layout
 
@@ -54,7 +54,7 @@ Pest, under `tests/Feature`. SSH is replaced by `Tests\Support\FakeSshClient`, w
 | `app/Mandal/` | `MandalClient` (runs CLI commands over SSH, parses JSON), `CliArchive` (the CLI tarball the panel ships and its hash), `CliUpdates`, `PanelReleases` |
 | `app/Ssh/` | SSH and SFTP, host key pinning |
 | `app/Jobs/` | One job per long task, all based on `RunMandalTask`, streaming output into a `Task` |
-| `app/Filament/Resources/Servers/` | The server pages (`Pages/`), their actions (`Concerns/`) and the table |
+| `app/Filament/Resources/Servers/` | The server pages and their actions (`Pages/`), the shared app actions (`Concerns/ManagesApps.php`), the form schemas (`Schemas/`) and the servers table (`Tables/`) |
 | `server/bin/mandal` | CLI entry point: argument parsing, locking, command dispatch |
 | `server/lib/*.sh` | Shared helpers (`core.sh`, `system.sh`), and the domains: `provision.sh`, `app.sh`, `deploy.sh`, `docker.sh`, `backup.sh`, `php.sh`, `updates.sh`, `logs.sh` |
 | `server/lib/commands/*.sh` | One file per command group; each registers itself in `MANDAL_COMMANDS` |

@@ -12,11 +12,13 @@ curl -fsSL https://github.com/ReyArlena/mandal/releases/latest/download/install.
 
 | Option | Meaning |
 |---|---|
-| `--domain=` | The panel's domain (required). |
+| `--domain=` | The panel's domain. Required the first time; later runs read it from the installed panel. |
 | `--email=` | Contact address for the Let's Encrypt certificate. |
 | `--version=` | Install a specific release tag instead of the latest. |
 | `--skip-ssl` | Leave the certificate for later. |
 | `--repo=` | Install from another GitHub repository (a fork). |
+| `--name=` | The app name for the panel (`mandal-panel` by default). |
+| `--source=` | Install the CLI and the panel from a local checkout instead of GitHub, for testing. |
 
 The script works through these steps, printing what it does:
 

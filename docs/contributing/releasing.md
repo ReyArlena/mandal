@@ -1,6 +1,6 @@
 # Releasing
 
-A release is a `v*` tag on `main`. The tag must equal the `VERSION` file, and that file is the only place the version lives: the CLI prints it, the panel compares it with GitHub's latest release, `setup.sh` and `install.sh` fetch the matching tag, and `panel:update` moves a hosted panel to it.
+A release is a `v*` tag on `main`. The tag must equal the `VERSION` file, and that file is the only place the version lives: the CLI prints it and the panel compares it with GitHub's latest release. `setup.sh`, `install.sh` and `panel:update` install the newest `v*` tag they find (or `--version=<tag>`), and the scripts themselves are served from the latest release.
 
 ## Steps
 

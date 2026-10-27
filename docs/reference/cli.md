@@ -14,11 +14,11 @@ mandal help
 
 Conventions:
 
-- Read commands print JSON. Write commands print what they do, one `+` line per step, and most accept `--dry-run`.
+- Read commands print JSON, apart from `version` without `--json` and `app:env` or `app:compose` without `--from=`, which print the bare value or file. Write commands print what they do, one `+` line per step, and most accept `--dry-run`.
 - Write commands need root. The `mandal` user may run `sudo mandal` and nothing else.
-- Only one write command runs at a time; a second one waits up to 30 seconds for the lock (`/run/lock/mandal.lock`) and then gives up.
+- Only one write command runs at a time; a second one waits up to 30 seconds for the lock (`/run/lock/mandal.lock`) and then gives up. `backup:run` has its own lock and fails at once when a backup is already running; `reboot` takes none.
 - Every write command is recorded in `/var/log/mandal/actions.log` with the time, the Unix user and the panel that ran it.
-- Files Mandal writes carry a `# managed-by: mandal` line. Files it has to change but did not write are backed up under `/var/backups/mandal/config` first.
+- Configuration files Mandal writes carry a `# managed-by: mandal` line. Files it has to change but did not write are backed up under `/var/backups/mandal/config` first.
 - Secrets (database passwords, `.env` contents, compose files) are passed as files, never as arguments.
 - The build hash reported by `mandal version --json` and the inventory is a hash of `bin/`, `lib/` and `VERSION`; the panel compares it with its own copy to know when a server needs `cli:update`.
 
@@ -28,7 +28,7 @@ Paths can be overridden with `MANDAL_*` environment variables (`MANDAL_ETC`, `MA
 
 <!--@include: ./cli-commands.md-->
 
-There is no per-command `--help`; the options are listed above and in each command's header comment in `server/lib/commands/`.
+`provision` and `app:create` print a usage text with `--help`; for the others the options are listed above and in each command's header comment in `server/lib/commands/`.
 
 ## Roles and drivers
 
@@ -36,7 +36,7 @@ Components are split into roles, each implemented by a driver in `server/lib/rol
 
 | Role | Driver | Provides |
 |---|---|---|
-| `database` | `mariadb` | MariaDB server and client, databases, users, dumps |
+| `database` | `mariadb` | MariaDB server and client, databases, users and grants (dumps and restores call `mariadb-dump` and `mariadb` directly) |
 | `cache` | `dragonfly` | Dragonfly on 127.0.0.1:6379 with a generated password |
 | `js` | `bun` | Bun and `bunx` in `/usr/local/bin` |
 
