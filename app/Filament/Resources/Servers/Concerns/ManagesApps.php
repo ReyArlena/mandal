@@ -257,6 +257,7 @@ trait ManagesApps
             })
             ->schema([
                 CodeEditor::make('contents')
+                    ->wrap()
                     ->hiddenLabel()
                     ->language(Language::Yaml)
                     ->required()
@@ -303,6 +304,7 @@ trait ManagesApps
             })
             ->schema([
                 CodeEditor::make('contents')
+                    ->wrap()
                     ->hiddenLabel()
                     ->required()
                     ->rules(['max:262144']),
@@ -348,6 +350,7 @@ trait ManagesApps
             })
             ->schema([
                 CodeEditor::make('contents')
+                    ->wrap()
                     ->hiddenLabel()
                     ->required()
                     ->rules(['max:262144']),

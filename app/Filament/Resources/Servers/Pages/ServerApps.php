@@ -193,6 +193,7 @@ class ServerApps extends Page
                     ->helperText('2 to 32 lower-case letters, digits or hyphens. Used for the system user, database and directories.')
                     ->placeholder('shop'),
                 CodeEditor::make('compose')
+                    ->wrap()
                     ->label('Compose file')
                     ->language(Language::Yaml)
                     ->default(self::COMPOSE_TEMPLATE)
@@ -257,6 +258,7 @@ class ServerApps extends Page
                     ->helperText('Named after the app, with a generated password. Both are written to the app\'s .env, which you can read from the app page; the panel does not keep the password.')
                     ->visible(fn (callable $get): bool => $get('type') !== 'docker'),
                 CodeEditor::make('deploy_script')
+                    ->wrap()
                     ->label('Deploy script')
                     ->default(fn (): string => self::deployScriptTemplate())
                     ->requiredIf('type', 'laravel')
