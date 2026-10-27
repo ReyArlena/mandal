@@ -31,3 +31,5 @@ Thumbs.db
 /tests/Browser/Screenshots
 /tests/Browser/Traces
 .env.before_lerd
+/docs/.vitepress/dist
+/docs/.vitepress/cache

@@ -1,6 +1,7 @@
 # Checks on every push to main and every pull request: the panel's tests
-# and code style, the CLI's tests and shellcheck, and that the CLI archive
-# the panel ships hashes the same as the CLI hashes itself.
+# and code style, the CLI's tests and shellcheck, that the CLI archive
+# the panel ships hashes the same as the CLI hashes itself, and that the
+# docs build with a command table matching the CLI.
 
 name: CI
 
@@ -61,3 +62,20 @@ jobs:
 
       - name: Tests
         run: bash server/tests/run.sh
+
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Command table matches the CLI
+        run: bash scripts/cli-reference.sh --check
+
+      - name: Build
+        run: bun run docs:build
