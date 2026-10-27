@@ -8,6 +8,7 @@
 | `app:create` | Create a Laravel app (user, pool, site, database) |
 | `app:delete` | Remove an app and everything mandal created for it |
 | `app:deploy` | Deploy an app from its repository (zero downtime) |
+| `app:deploy-script` | Print an app's deploy.sh, replace it with --from=&lt;file&gt;, or --reset it to the default |
 | `app:env` | Print an app's .env, or replace it with --from=&lt;file&gt; |
 | `app:list` | List apps and their manifests as JSON |
 | `app:releases` | List an app's releases as JSON |

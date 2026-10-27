@@ -69,7 +69,7 @@ A Laravel app named `<app>` with PHP `<v>`.
 | nginx | `/etc/nginx/sites-available/<app>.conf` linked into `sites-enabled`; logs `/var/log/nginx/<app>-access.log` and `<app>-error.log`; `nginx -t` then reload |
 | Database | Database and user named after the app with hyphens replaced by underscores (`my-shop` gives `my_shop`@`localhost`), with a generated password. Skipped with `--no-database` |
 | Environment | `/home/<app>/shared/.env` (`0600`, app user): `APP_KEY`, `APP_URL`, database and cache credentials, with cache, queue and sessions on the cache driver |
-| Deploy script | `/home/<app>/deploy.sh` (`0750`, app user) |
+| Deploy script | `/home/<app>/deploy.sh` (`0750`, app user): Mandal's default, or the script uploaded with `--from=` |
 | Scheduler | The app user's crontab: `* * * * * php<v> /home/<app>/current/artisan schedule:run` |
 | Manifest | `/etc/mandal/apps/<app>.conf` |
 
@@ -97,6 +97,10 @@ Rewrites the manifest's `REPO`, `BRANCH` or `KEEP_RELEASES`. For a proxied Docke
 ## app:env
 
 Replaces `/home/<app>/shared/.env` (Laravel) or `/srv/docker/<app>/.env` (Docker) from an uploaded file; mode and owner are kept. Nothing is restarted: redeploy the app (its `deploy.sh` runs `artisan optimize`, which caches the configuration) or restart the workers for the change to reach running processes, and recreate a Docker app's containers with **Restart**.
+
+## app:deploy-script
+
+Prints `/home/<app>/deploy.sh`, replaces it from an uploaded file (`--from=`, checked with `bash -n` first; `0750`, app user) or restores Mandal's default (`--reset`). `--default` prints that default without touching anything. Laravel apps only. Nothing runs until the next deploy.
 
 ## app:ssl
 

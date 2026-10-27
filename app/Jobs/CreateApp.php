@@ -75,18 +75,24 @@ class CreateApp extends RunMandalTask
     }
 
     /**
-     * The compose file of a Docker app travels as an upload, never on the
-     * command line.
+     * The compose file of a Docker app, or the deploy script of a Laravel
+     * app, travels as an upload, never on the command line.
      */
     protected function upload(): ?array
     {
         $options = $this->task->options ?? [];
 
-        if (($options['type'] ?? 'laravel') !== 'docker') {
+        if (($options['type'] ?? 'laravel') === 'docker') {
+            return ['contents' => self::composeContents($options), 'extension' => '.yml'];
+        }
+
+        $script = rtrim((string) ($options['deploy_script'] ?? ''));
+
+        if ($script === '' || str_contains($script, "\0")) {
             return null;
         }
 
-        return ['contents' => self::composeContents($options), 'extension' => '.yml'];
+        return ['contents' => $script."\n", 'extension' => '.sh'];
     }
 
     /**

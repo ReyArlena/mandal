@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The deploy script can be edited from the panel: the create form starts with Mandal's default `deploy.sh`, the app page has a **Deploy script** editor with **Reset to default**, and the CLI gained `app:deploy-script` (print, `--from=`, `--reset`, `--default`). A syntax check with `bash -n` refuses a broken script.
+- The create form explains where a new app's database password ends up (the app's `.env`, readable from the app page).
+
 - Laravel 13 application with a Filament 5 panel served from the site root.
 - Required app-based multi-factor authentication with recovery codes for every account.
 - Seeded initial administrator account for first login.

@@ -56,6 +56,15 @@ trait ManagesApps
     abstract protected function server(): Server;
 
     /**
+     * The deploy.sh Mandal installs for a new app, read from the CLI source
+     * so the panel and the server always show the same default.
+     */
+    public static function deployScriptTemplate(): string
+    {
+        return (string) file_get_contents(base_path('server/lib/templates/deploy.sh'));
+    }
+
+    /**
      * Called after a synchronous change so the page can reload its data.
      */
     protected function appChanged(): void {}
@@ -311,6 +320,75 @@ trait ManagesApps
                     fn (MandalClient $mandal) => $mandal->runWithUpload($this->server(), 'app:env --name='.$name, rtrim((string) $data['contents'])."\n", '.env', timeoutSeconds: 30),
                     "Saved {$name} .env",
                     'Could not save .env',
+                );
+            });
+    }
+
+    public function editDeployScriptAction(): Action
+    {
+        return Action::make('editDeployScript')
+            ->label('Deploy script')
+            ->icon(Heroicon::OutlinedCommandLine)
+            ->modalHeading(fn (array $arguments): string => "{$arguments['name']} deploy.sh")
+            ->modalDescription('Runs inside each new release as the app user before it goes live, with $MANDAL_APP, $RELEASE_DIR, $SHARED_DIR, $PHP, $BRANCH and $COMMIT set. Saved to /home/<app>/deploy.sh; bash checks the syntax first. Changes apply on the next deploy.')
+            ->modalWidth(Width::ThreeExtraLarge)
+            ->modalSubmitActionLabel('Save')
+            ->fillForm(function (array $arguments): array {
+                $name = $this->appName($arguments);
+
+                if ($name === null) {
+                    return ['contents' => ''];
+                }
+
+                try {
+                    $result = app(MandalClient::class)->run($this->server(), 'app:deploy-script --name='.$name, timeoutSeconds: 30);
+                } catch (SshException $exception) {
+                    return ['contents' => '# Could not read the file: '.$exception->getMessage()];
+                }
+
+                return ['contents' => $result->successful() ? $result->output : '# '.trim($result->errorOutput ?: $result->output)];
+            })
+            ->schema([
+                Textarea::make('contents')
+                    ->hiddenLabel()
+                    ->rows(24)
+                    ->required()
+                    ->maxLength(262144)
+                    ->extraInputAttributes(['class' => 'font-mono text-sm', 'spellcheck' => 'false']),
+            ])
+            ->extraModalFooterActions(fn (array $arguments): array => [
+                Action::make('resetDeployScript')
+                    ->label('Reset to default')
+                    ->color('gray')
+                    ->requiresConfirmation()
+                    ->modalHeading(fn (): string => "Restore the default deploy.sh for {$arguments['name']}?")
+                    ->modalDescription('Replaces the script on the server with the one Mandal installs for new apps.')
+                    ->action(function () use ($arguments): void {
+                        $name = $this->appName($arguments);
+
+                        if ($name === null) {
+                            return;
+                        }
+
+                        $this->runSynchronously(
+                            fn (MandalClient $mandal) => $mandal->run($this->server(), 'app:deploy-script --reset --name='.$name, timeoutSeconds: 30),
+                            "Restored the default deploy.sh for {$name}",
+                            'Could not reset the deploy script',
+                        );
+                    })
+                    ->cancelParentActions(),
+            ])
+            ->action(function (array $arguments, array $data): void {
+                $name = $this->appName($arguments);
+
+                if ($name === null) {
+                    return;
+                }
+
+                $this->runSynchronously(
+                    fn (MandalClient $mandal) => $mandal->runWithUpload($this->server(), 'app:deploy-script --name='.$name, rtrim((string) $data['contents'])."\n", '.sh', timeoutSeconds: 30),
+                    "Saved {$name} deploy.sh",
+                    'Could not save the deploy script',
                 );
             });
     }

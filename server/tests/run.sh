@@ -513,6 +513,27 @@ assert_eq "app:env --from dry run completes" "0" "$?"
 printf 'A=1\x00B=2\n' > "${TMP}/bad.env"
 (cmd_app_env --name=shop --from="${TMP}/bad.env" --dry-run) > /dev/null 2>&1 && fail "app:env rejects binary content" || pass
 
+# app:deploy-script
+assert_eq "app:deploy-script --default prints the template file" "$(cat "${MANDAL_ROOT}/lib/templates/deploy.sh")" "$(cmd_app_deploy_script --default)"
+[[ "$(cmd_app_deploy_script --default)" == *'$MANDAL_APP'* && "$(cmd_app_deploy_script --default)" == *'$PHP artisan optimize'* ]] && pass || fail "the default deploy.sh names MANDAL_APP and runs optimize"
+mkdir -p "${MANDAL_HOME_DIR}/shop"
+printf '#!/usr/bin/env bash\necho custom\n' > "${MANDAL_HOME_DIR}/shop/deploy.sh"
+assert_eq "app:deploy-script prints the app's script" "$(printf '#!/usr/bin/env bash\necho custom')" "$(cmd_app_deploy_script --name=shop)"
+printf '#!/usr/bin/env bash\nset -e\n$PHP artisan migrate --force\n' > "${TMP}/deploy-new.sh"
+script_out="$(cmd_app_deploy_script --name=shop --from="${TMP}/deploy-new.sh" --dry-run 2>&1)"
+assert_eq "app:deploy-script --from dry run completes" "0" "$?"
+[[ "$script_out" == *"write ${MANDAL_HOME_DIR}/shop/deploy.sh (0750 shop:shop)"* ]] && pass || fail "app:deploy-script writes deploy.sh as the app user"
+printf '#!/usr/bin/env bash\nif [ -f x ]; then echo y\n' > "${TMP}/deploy-bad.sh"
+bad_script="$(cmd_app_deploy_script --name=shop --from="${TMP}/deploy-bad.sh" --dry-run 2>&1)" && fail "app:deploy-script rejects a script bash cannot parse" || pass
+[[ "$bad_script" == *"syntax error"* && "$bad_script" != *"${TMP}"* ]] && pass || fail "the syntax error names deploy.sh, not the upload path"
+[[ "$(cmd_app_deploy_script --name=shop --reset --dry-run 2>&1)" == *"write ${MANDAL_HOME_DIR}/shop/deploy.sh (0750 shop:shop)"* ]] && pass || fail "app:deploy-script --reset writes the default"
+(cmd_app_deploy_script --name=shop --reset --from="${TMP}/deploy-new.sh" --dry-run) > /dev/null 2>&1 && fail "app:deploy-script refuses --from with --reset" || pass
+(cmd_app_deploy_script --name=tool --dry-run) > /dev/null 2>&1 && fail "app:deploy-script refuses Docker apps" || pass
+rm -f "${MANDAL_HOME_DIR}/shop/deploy.sh"
+from_create="$(php_default_version() { echo 8.5; }; cmd_app_create --name=custom --domain=custom.example.com --from="${TMP}/deploy-new.sh" --dry-run 2>&1)"
+[[ "$from_create" == *"write ${MANDAL_HOME_DIR}/custom/deploy.sh (0750 custom:custom)"* ]] && pass || fail "app:create --from installs the given deploy script for a Laravel app"
+(php_default_version() { echo 8.5; }; cmd_app_create --name=custom --domain=custom.example.com --from="${TMP}/deploy-bad.sh" --dry-run) > /dev/null 2>&1 && fail "app:create --from rejects a broken deploy script" || pass
+
 # ---------------------------------------------------------------------------
 # workers
 # ---------------------------------------------------------------------------

@@ -238,29 +238,24 @@ MAIL_MAILER=log
 EOF
 }
 
-# app_render_deploy_script
+# The default deploy.sh, kept in lib/templates so the panel can show it
+# before an app exists.
 app_render_deploy_script() {
-    cat <<'EOF'
-#!/usr/bin/env bash
-#
-# Runs inside the new release directory as the app user, after the code
-# has been cloned and shared files linked, and before the release goes
-# live. Edit freely; it is yours. Available: $MANDAL_APP, $RELEASE_DIR,
-# $SHARED_DIR, $PHP (the app's PHP binary), $BRANCH, $COMMIT.
+    cat "$MANDAL_ROOT/lib/templates/deploy.sh"
+}
 
-set -euo pipefail
-
-$PHP /usr/local/bin/composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
-
-if [ -f package.json ]; then
-    bun install --frozen-lockfile
-    bun run build
-fi
-
-$PHP artisan migrate --force
-$PHP artisan storage:link
-$PHP artisan optimize
-EOF
+# A deploy script to install: text, under 256 KB, and bash can parse it.
+deploy_script_check() {
+    local file="$1"
+    [[ -f "$file" && ! -L "$file" ]] || die 2 "file not found: $file"
+    if [[ "$(tr -d '\000' < "$file" | wc -c)" -ne "$(wc -c < "$file")" ]]; then
+        die 2 "the deploy script contains binary data"
+    fi
+    [[ "$(wc -c < "$file")" -le 262144 ]] || die 2 "the deploy script is larger than 256 KB"
+    local errors
+    if ! errors="$(bash -n "$file" 2>&1)"; then
+        die 2 "the deploy script has a syntax error: ${errors//$file/deploy.sh}"
+    fi
 }
 
 app_render_cron() {
@@ -352,9 +347,17 @@ app_write_env() {
     write_file "$home/shared/.env" 0600 "$name:$name" < <(app_render_env "$name" "$domain" "$db" "$db" "$db_password" "$CACHE_PASSWORD")
 }
 
+# app_write_deploy_script name [file]: install the given script, or the
+# default when there is none yet.
 app_write_deploy_script() {
-    local name="$1" home
+    local name="$1" from="${2:-}" home
     home="$(app_home "$name")"
+    if [[ -n "$from" ]]; then
+        deploy_script_check "$from"
+        write_file "$home/deploy.sh" 0750 "$name:$name" < "$from"
+        dry_run || rm -f "$from"
+        return 0
+    fi
     if [[ -f "$home/deploy.sh" ]]; then
         printf '+ deploy.sh already exists, keeping it\n'
         return 0

@@ -20,7 +20,7 @@ Add the app's deploy key (shown on its page) to the GitHub repository; read-only
 
 **Roll back** switches `current` to the previous release, or to any release listed on the app's page, without running `deploy.sh`.
 
-`deploy.sh` lives at `/home/<app>/deploy.sh`, belongs to the app user and can be edited over SSH. It runs inside the new release directory with `$MANDAL_APP`, `$RELEASE_DIR`, `$SHARED_DIR`, `$PHP`, `$BRANCH` and `$COMMIT` set. The default runs `composer install --no-dev`, `bun install --frozen-lockfile` and `bun run build` when a `package.json` exists, then `artisan migrate --force`, `artisan storage:link` and `artisan optimize`. Each release records its branch, commit and time in `.mandal-release`, which is what the releases list shows.
+`deploy.sh` lives at `/home/<app>/deploy.sh` and belongs to the app user. The create form shows the default so it can be changed before the app exists, and **Deploy script** on the app page edits it afterwards (with **Reset to default**); bash checks the syntax before the file is replaced, and the change applies on the next deploy. It runs inside the new release directory with `$MANDAL_APP`, `$RELEASE_DIR`, `$SHARED_DIR`, `$PHP`, `$BRANCH` and `$COMMIT` set. The default runs `composer install --no-dev`, `bun install --frozen-lockfile` and `bun run build` when a `package.json` exists, then `artisan migrate --force`, `artisan storage:link` and `artisan optimize`. Each release records its branch, commit and time in `.mandal-release`, which is what the releases list shows.
 
 ## GitHub and automatic deploys
 

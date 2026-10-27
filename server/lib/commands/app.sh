@@ -21,7 +21,8 @@ Usage: mandal app:create --name=<name> --domain=<domain> [options]
   --branch=<branch>       Branch to deploy (default: main)
   --keep-releases=<n>     Releases to keep (default: 5)
   --no-database           Do not create a database and user
-  --from=<file>           Docker apps: the compose file to run (removed once used)
+  --from=<file>           Docker apps: the compose file to run; Laravel apps: the
+                          deploy script instead of the default (removed once used)
   --proxy                 Docker apps: serve the domain through nginx
   --port=<port>           Docker apps: the port a service publishes on 127.0.0.1 for nginx
   --env=KEY=value         Docker apps: environment variable for .env (repeatable)
@@ -138,7 +139,7 @@ cmd_app_create() {
         app_create_database "$name"
     fi
     app_write_env "$name" "$(app_primary_hostnames "$www" "$domain")" "$APP_DB_PASSWORD"
-    app_write_deploy_script "$name"
+    app_write_deploy_script "$name" "$compose"
     app_write_cron "$name" "$php"
     app_write_manifest "$name" \
         "TYPE=laravel" \

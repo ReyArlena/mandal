@@ -174,6 +174,7 @@ class ServerApp extends Page
             $this->editComposeAction()->arguments(['name' => $this->appName])->visible(fn (): bool => $this->isDocker()),
             $this->changeProxyPortAction()->arguments(['name' => $this->appName, 'port' => (string) ($this->appData['port'] ?? '')])->visible(fn (): bool => $this->isDocker() && ! empty($this->appData['proxy'])),
             $this->editEnvAction()->arguments(['name' => $this->appName]),
+            $this->editDeployScriptAction()->arguments(['name' => $this->appName])->visible(fn (): bool => ! $this->isDocker()),
             $this->deleteAppAction()->arguments(['name' => $this->appName])->visible(fn (): bool => empty($this->appData['panel'])),
         ];
     }
