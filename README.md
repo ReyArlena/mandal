@@ -1,5 +1,10 @@
 # Mandal
 
+[![CI](https://github.com/ReyArlena/mandal/actions/workflows/ci.yml/badge.svg)](https://github.com/ReyArlena/mandal/actions/workflows/ci.yml)
+[![Docs](https://github.com/ReyArlena/mandal/actions/workflows/docs.yml/badge.svg)](https://reyarlena.github.io/mandal/)
+[![Release](https://img.shields.io/github/v/release/ReyArlena/mandal?sort=semver)](https://github.com/ReyArlena/mandal/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A self-hosted panel for managing Laravel and Docker servers. Mandal connects to your servers over SSH, provisions a native stack on Ubuntu 26.04 (nginx, PHP, MariaDB, Dragonfly, Bun, Supervisor, Certbot, Docker, ufw, fail2ban) and manages apps, deployments, databases, backups, updates and logs. The server is always the source of truth: Mandal reads live state through its own CLI rather than keeping a copy.
 
 **Documentation: [reyarlena.github.io/mandal](https://reyarlena.github.io/mandal/)**
