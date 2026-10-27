@@ -45,7 +45,7 @@
         @endforelse
     </x-filament::section>
 
-    <x-filament::section heading="Backup destinations" description="Where database and app backups can be sent. Keys are stored encrypted and copied to a server only when a backup there uses the destination.">
+    <x-filament::section heading="Backup destinations" description="Where backups are sent. Keys are stored encrypted.">
         <x-slot name="afterHeader">
             {{ $this->addDestinationAction }}
         </x-slot>
