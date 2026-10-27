@@ -140,6 +140,62 @@
 
             @endif
 
+            @php
+                $backups = $this->backups;
+                $lastBackup = $backups['last_run'] ?? null;
+            @endphp
+            <x-filament::section heading="Backups" :description="$this->backupSummary()" class="lg:col-span-2">
+                <x-slot name="afterHeader">
+                    <div class="flex items-center gap-3 text-xs text-gray-500">
+                        @if ($lastBackup)
+                            <span>
+                                Last run {{ $lastBackup['at'] ?? '' }}
+                                <x-filament::badge :color="($lastBackup['status'] ?? '') === 'ok' ? 'success' : 'danger'" class="ml-1">{{ $lastBackup['status'] ?? 'unknown' }}</x-filament::badge>
+                                @if ($size = $this->lastBackupSize())
+                                    <span class="ml-1">{{ $size }}</span>
+                                @endif
+                            </span>
+                        @endif
+                        <x-filament::badge :color="($backups['config']['enabled'] ?? false) ? 'success' : 'gray'">{{ ($backups['config']['enabled'] ?? false) ? 'Enabled' : 'Disabled' }}</x-filament::badge>
+                    </div>
+                </x-slot>
+                @unless ($this->isDeployed())
+                    <div class="mb-3 flex items-start gap-3 rounded-lg bg-warning-50 p-3 text-sm dark:bg-warning-400/10">
+                        <x-filament::icon icon="heroicon-o-exclamation-triangle" class="h-5 w-5 shrink-0 text-warning-500" />
+                        <p class="text-gray-700 dark:text-gray-300">{{ \App\Filament\Resources\Servers\Pages\ServerApp::NOT_DEPLOYED_NOTICE }}</p>
+                    </div>
+                @endunless
+                <div class="mb-3 flex gap-2">
+                    {{ ($this->backupSettingsAction)(['name' => $app['name']]) }}
+                    @if ($this->backupsConfigured())
+                        {{ ($this->backupNowAction)(['name' => $app['name']]) }}
+                    @endif
+                </div>
+                @forelse ($backups['backups'] ?? [] as $file)
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 py-2 text-sm last:border-0 dark:border-white/10">
+                        <span class="font-mono">{{ $file['file'] }}</span>
+                        <span class="flex items-center gap-3 text-xs text-gray-500">
+                            <span>{{ $this->bytes($file['size'] ?? 0) }}</span>
+                            <span>{{ $file['modified'] ?? '' }}</span>
+                            <x-filament::badge :color="($file['where'] ?? 'local') === 'local' ? 'gray' : 'info'">{{ $file['where'] ?? 'local' }}</x-filament::badge>
+                            <a href="{{ $this->backupDownloadUrl($file['file']) }}" class="inline-flex items-center gap-1 text-sm font-semibold text-primary-600 hover:underline dark:text-primary-400">
+                                <x-filament::icon icon="heroicon-o-arrow-down-tray" class="h-4 w-4" />
+                                Download
+                            </a>
+                            {{ ($this->deleteAppBackupAction)(['name' => $app['name'], 'file' => $file['file'], 'where' => $file['where'] ?? 'local']) }}
+                        </span>
+                    </div>
+                @empty
+                    <p class="text-sm text-gray-500">
+                        @if ($this->backupsConfigured())
+                            No archives yet. The first one is made on schedule or with "Back up now".
+                        @else
+                            Not set up. Archives of the app's files, kept on the server and, optionally, in a destination from Settings.
+                        @endif
+                    </p>
+                @endforelse
+            </x-filament::section>
+
             @unless ($this->isDocker())
             <x-filament::section heading="Workers" description="Supervisor programs running artisan commands as the app user." class="lg:col-span-2">
                 <div class="mb-3 flex gap-2">

@@ -57,3 +57,4 @@ Mandal holds credentials for every server it manages, so treat it as the most se
 1. [Add a server](./servers) and run its setup command.
 2. Provision it.
 3. Create a [Laravel app](./apps) or a [Docker app](./docker-apps).
+4. Add a [backup destination](./databases#backup-destinations) under **Settings** (user menu) to keep backups off the server.

@@ -99,6 +99,11 @@ cmd_panel_install() {
         "DATABASE=" \
         "CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
+    # A hosted panel keeps its SQLite copy in the nightly backup set, so the
+    # defaults are written here too for a server set up without provision.
+    step "Database backups"
+    backup_configure_defaults
+
     step "Adding the panel's queue worker"
     run_cmd install -d -m 0755 /var/log/supervisor
     write_file "$(worker_conf_path "$name" queue)" 0644 < <(worker_render "$name" queue "$php" "queue:work --sleep=3 --tries=1 --max-time=3600" 1)

@@ -19,6 +19,7 @@ MANDAL_PROVISION_STEPS=(
     php
     composer
     database
+    backups
     cache
     js
     supervisor
@@ -180,6 +181,13 @@ prov_composer() {
 prov_database() {
     step "Database ($(db_driver))"
     db_install
+}
+
+# Database backups are on by default: a local nightly dump, written once
+# and never over a user's own settings.
+prov_backups() {
+    step "Database backups"
+    backup_configure_defaults
 }
 
 prov_cache() {

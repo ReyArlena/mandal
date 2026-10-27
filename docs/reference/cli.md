@@ -16,7 +16,7 @@ Conventions:
 
 - Read commands print JSON, apart from `version` without `--json` and `app:env` or `app:compose` without `--from=`, which print the bare value or file. Write commands print what they do, one `+` line per step, and most accept `--dry-run`.
 - Write commands need root. The `mandal` user may run `sudo mandal` and nothing else.
-- Only one write command runs at a time; a second one waits up to 30 seconds for the lock (`/run/lock/mandal.lock`) and then gives up. `backup:run` has its own lock and fails at once when a backup is already running; `reboot` takes none.
+- Only one write command runs at a time; a second one waits up to 30 seconds for the lock (`/run/lock/mandal.lock`) and then gives up. `backup:run` and `app:backup` share their own lock and fail at once when a backup is already running; `reboot` takes none.
 - Every write command is recorded in `/var/log/mandal/actions.log` with the time, the Unix user and the panel that ran it.
 - Configuration files Mandal writes carry a `# managed-by: mandal` line. Files it has to change but did not write are backed up under `/var/backups/mandal/config` first.
 - Secrets (database passwords, `.env` contents, compose files) are passed as files, never as arguments.

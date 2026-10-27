@@ -109,6 +109,24 @@ class MandalClient
     }
 
     /**
+     * Run a mandal command whose stdout is handed to the callback chunk by
+     * chunk and never kept, for file downloads. Only the exit code and
+     * stderr come back in the result.
+     *
+     * @param  callable(string): void  $onOutput
+     */
+    public function stream(Server $server, string $arguments, callable $onOutput, int $timeoutSeconds = 3600): CommandResult
+    {
+        $connection = $this->ssh->connect($server);
+
+        try {
+            return $connection->stream($this->command($arguments, asRoot: true), $onOutput, $timeoutSeconds);
+        } finally {
+            $connection->disconnect();
+        }
+    }
+
+    /**
      * Upload a file into the SSH user's upload directory and run a mandal
      * command that consumes it. The command receives the remote path as
      * `--from=<path>`.

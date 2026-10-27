@@ -36,7 +36,20 @@ To deploy on every push, set the panel's **Public URL** in Settings (reachable f
 - **SSL**: requests a Let's Encrypt certificate with Certbot's nginx plugin after checking that the domain and every alias resolve to the server. Certbot edits the nginx site to add the certificate and the HTTPS redirect, and Mandal does not rewrite the site afterwards, so those lines stay.
 - **Workers**: Supervisor programs running an artisan command (`queue:work`, `horizon`, `reverb:start`, anything else) as the app user, with the number of processes. Buttons in the add form fill in a queue worker, Horizon, Reverb or `schedule:work` (the last only for apps whose crontab entry was removed, since Mandal already runs `schedule:run` every minute). Every worker restarts after each deploy; **Restart workers** restarts them all, and each row has its own **Restart** (Supervisor sends SIGTERM, which `queue:work` and Horizon treat as "finish the current job, then exit").
 - **Logs**: opens the Logs page on the app's Laravel log.
-- **Delete** removes everything the app created. Options keep the database or the home directory.
+- **Backups**: archives of `shared/`, see below.
+- **Delete** removes everything the app created, including its backup settings and local archives unless you keep the files. Options keep the database or the home directory.
+
+## Backups
+
+The **Backups** card on the app page archives `shared/` (storage, uploads and `.env`; releases are rebuilt from git) with tar and zstd. Set it up once the app has been deployed, so every production file is present; the card says so until then. App backups are off until you set them up.
+
+**Backup settings** has:
+
+- **Enable backups** for the schedule. **Back up now** runs regardless.
+- **Exclude**: tick directories and files from a two-level view of the app directory, with sizes, or type paths and globs on the **Patterns** tab (one per line, relative to the app directory; `**` matches across folders). The two stay in step: ticking adds a line, unticking removes it, and lines you typed stay as they are.
+- **Local** and **Remote** destinations with their own frequency and copies to keep, as for [database backups](./databases#backups). Remote uploads go to a destination from Settings; the form shows the full `s3://` path.
+
+Archives land under `/var/backups/mandal/apps/<app>/` and are listed newest first with **Download** (streamed from the server, or from the bucket for remote-only copies) and **Delete**. The panel raises a notification when a scheduled run fails.
 
 ## PHP version
 

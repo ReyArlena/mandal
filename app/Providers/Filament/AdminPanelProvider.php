@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use App\Filament\Catppuccin;
 use App\Filament\Pages\Settings;
+use App\Http\Controllers\AppBackupDownloadController;
 use App\Filament\ServerNavigation;
 use Filament\Actions\Action;
 use Filament\Auth\MultiFactor\App\AppAuthentication;
@@ -24,6 +25,7 @@ use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\Facades\Route;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class AdminPanelProvider extends PanelProvider
@@ -51,6 +53,13 @@ class AdminPanelProvider extends PanelProvider
             ->multiFactorAuthentication([
                 AppAuthentication::make()->recoverable(),
             ], isRequired: true)
+            // A plain download link cannot be a Livewire action, so it is a
+            // route inside the panel's authenticated group, behind the same
+            // sign-in and multi-factor middleware as every page.
+            ->authenticatedRoutes(fn (Panel $panel) => Route::get('servers/{server}/apps/{app}/backups/{file}', AppBackupDownloadController::class)
+                ->middleware($panel->isMultiFactorAuthenticationRequired() ? [$panel->getMultiFactorAuthenticationRequiredMiddleware()] : [])
+                ->where(['app' => '[a-z][a-z0-9-]{1,31}', 'file' => '[a-z][a-z0-9-]{1,31}-[0-9]{14}\.tar\.zst'])
+                ->name('servers.apps.backups.download'))
             ->colors([
                 'primary' => Catppuccin::Red,
                 'danger' => Catppuccin::Red,

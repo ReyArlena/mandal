@@ -2,6 +2,12 @@
 
 | Command | What it does |
 |---|---|
+| `app:backup` | Archive an app's files (--name=) to --destination=local, remote or all |
+| `app:backup-configure` | Set an app's backup destinations and excludes from --from=&lt;file&gt; (--name=) |
+| `app:backup-delete` | Delete one app archive (--name= --file= --where=local or remote) |
+| `app:backup-get` | Write one app archive to stdout (--name= --file=) |
+| `app:backup-list` | Show an app's backup settings, last run and archives as JSON (--name=) |
+| `app:backup-tree` | List an app's backup root two levels deep with sizes as JSON (--name=) |
 | `app:compose` | Print a Docker app's compose file, or replace it with --from=&lt;file&gt; |
 | `app:configure` | Change an app's repository, branch, releases to keep, or a Docker app's proxied port |
 | `app:control` | Start, stop or restart a Docker app (--name= --action=start/stop/restart) |
@@ -14,11 +20,14 @@
 | `app:releases` | List an app's releases as JSON |
 | `app:rollback` | Switch an app back to an earlier release |
 | `app:ssl` | Request a Let's Encrypt certificate for an app |
-| `backup:configure` | Set the backup schedule, retention and S3-compatible remote |
-| `backup:list` | List local and remote backups as JSON |
+| `backup:configure` | Set database backup destinations from --from=&lt;file&gt;, or write the --defaults once |
+| `backup:delete` | Delete one database backup (--database= --file= --where=local or remote) |
+| `backup:list` | List local and remote database backups as JSON |
+| `backup:remote` | Add or update an S3-compatible remote from --from=&lt;file&gt; (--name=), or --remove it |
+| `backup:remote-list` | List the remotes and which backups use them as JSON |
 | `backup:restore` | Restore a backup into a new database (--database= --file=) |
-| `backup:run` | Back up every database (or one with --database=) |
-| `backup:status` | Show the backup configuration and last run as JSON |
+| `backup:run` | Back up every database (or one with --database=) to --destination=local, remote or all |
+| `backup:status` | Show the backup configuration and last runs as JSON |
 | `cli:update` | Install a new version of the CLI from a tar.gz (--from=&lt;file&gt;) |
 | `component:update` | Update a standalone component (--component=cache/js/composer/docker) |
 | `db:access` | Set which users can use a database (--name=, --user= for each) |

@@ -265,6 +265,12 @@ docker_app_delete() {
     run_cmd rm -rf "$(docker_app_dir "$name")"
 }
 
+# Whether any container of the project is running (false without Docker).
+docker_app_running() {
+    has_cmd docker || return 1
+    [[ -n "$(docker compose --project-directory "$(docker_app_dir "$1")" --project-name "$1" ps -q --status running 2> /dev/null || true)" ]]
+}
+
 # JSON describing the app's containers, for the inventory.
 docker_app_status_json() {
     local name="$1"

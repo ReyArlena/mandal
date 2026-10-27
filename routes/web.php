@@ -9,7 +9,9 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 |
 | The panel itself is served by Filament at the site root (see
-| App\Providers\Filament\AdminPanelProvider). The routes here are the few
+| App\Providers\Filament\AdminPanelProvider), which also registers the app
+| backup download route inside its authenticated group so it carries the
+| panel's sign-in and multi-factor checks. The routes here are the few
 | that source providers call without a signed-in user.
 |
 */

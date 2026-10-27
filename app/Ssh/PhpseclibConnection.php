@@ -12,16 +12,50 @@ class PhpseclibConnection implements Connection
 
     public function run(string $command, ?callable $onOutput = null, int $timeoutSeconds = 60): CommandResult
     {
-        $this->session->setTimeout($timeoutSeconds);
-        $this->session->enableQuietMode();
-
         $output = '';
-        $result = $this->session->exec($command, function (string $chunk) use (&$output, $onOutput): void {
+
+        $result = $this->exec($command, function (string $chunk) use (&$output, $onOutput): void {
             $output .= $chunk;
 
             if ($onOutput !== null) {
                 $onOutput($chunk);
             }
+        }, $timeoutSeconds);
+
+        return new CommandResult(
+            command: $command,
+            exitCode: $result['exitCode'],
+            output: $output,
+            errorOutput: $result['errorOutput'],
+        );
+    }
+
+    public function stream(string $command, callable $onOutput, int $timeoutSeconds = 60): CommandResult
+    {
+        $result = $this->exec($command, $onOutput, $timeoutSeconds);
+
+        return new CommandResult(
+            command: $command,
+            exitCode: $result['exitCode'],
+            output: '',
+            errorOutput: $result['errorOutput'],
+        );
+    }
+
+    /**
+     * phpseclib keeps nothing itself when exec() is given a callback, so
+     * the callback decides whether output is collected or passed on.
+     *
+     * @param  callable(string): void  $onOutput
+     * @return array{exitCode: int, errorOutput: string}
+     */
+    private function exec(string $command, callable $onOutput, int $timeoutSeconds): array
+    {
+        $this->session->setTimeout($timeoutSeconds);
+        $this->session->enableQuietMode();
+
+        $result = $this->session->exec($command, function (string $chunk) use ($onOutput): void {
+            $onOutput($chunk);
         });
 
         if ($this->session->isTimeout()) {
@@ -33,14 +67,11 @@ class PhpseclibConnection implements Connection
         }
 
         $exitCode = $this->session->getExitStatus();
-        $errorOutput = (string) $this->session->getStdError();
 
-        return new CommandResult(
-            command: $command,
-            exitCode: is_int($exitCode) ? $exitCode : 1,
-            output: $output,
-            errorOutput: $errorOutput,
-        );
+        return [
+            'exitCode' => is_int($exitCode) ? $exitCode : 1,
+            'errorOutput' => (string) $this->session->getStdError(),
+        ];
     }
 
     public function upload(string $remotePath, string $contents, int $mode = 0644): void

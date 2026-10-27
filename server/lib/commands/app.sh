@@ -194,6 +194,7 @@ cmd_app_delete() {
     if [[ "$type" == "docker" ]]; then
         step "Removing Docker app $name"
         docker_app_delete "$name" "$keep_home"
+        app_backup_cleanup "$name" "$keep_home"
         run_cmd rm -f "$(app_conf_path "$name")"
         printf '\nApp %s removed.\n' "$name"
         return 0
@@ -225,6 +226,7 @@ cmd_app_delete() {
             run_cmd userdel --remove "$name"
         fi
     fi
+    app_backup_cleanup "$name" "$keep_home"
     run_cmd rm -f "$(app_conf_path "$name")"
     printf '\nApp %s removed.\n' "$name"
 }

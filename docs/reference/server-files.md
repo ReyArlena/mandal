@@ -8,13 +8,16 @@ Mandal's own state lives in two places:
 |---|---|
 | `/etc/mandal/server.conf` | Role drivers, SSH port, when and by which version the server was provisioned |
 | `/etc/mandal/apps/<app>.conf` | One manifest per app: type, domain, aliases, PHP version, repository, branch, database, proxy port and so on |
-| `/etc/mandal/backups.conf`, `/etc/mandal/rclone.conf` | Backup schedule and the S3 remote (root only) |
+| `/etc/mandal/backups/databases.conf`, `/etc/mandal/backups/app-<app>.conf` | Backup targets: enabled, local and remote destination with schedule and copies to keep, remote subfolder; app targets add `PAUSE=` and an `app-<app>.exclude` file with one path or glob per line |
+| `/etc/mandal/remotes/<slug>.conf` | A backup destination pushed from the panel's Settings: label, endpoint, region, bucket and path prefix (no secrets) |
+| `/etc/mandal/rclone.d/<slug>.conf` | The rclone config for that destination, with its keys (root only, `0600`) |
 | `/var/log/mandal/actions.log` | Every write command, with time, user and panel |
 | `/var/log/mandal/deploys/<app>/<timestamp>.log` | Full output of each deployment |
 | `/var/log/mandal/backups.log` | Output of scheduled backup runs |
 | `/var/cache/mandal/` | Cached component release lookups (six hours) |
 | `/var/backups/mandal/config/` | Copies of configuration files before Mandal changed them |
 | `/var/backups/mandal/db/` | Database dumps |
+| `/var/backups/mandal/apps/` | App archives |
 
 ## setup.sh
 
@@ -116,7 +119,7 @@ Runs `certbot --nginx --redirect --keep-until-expiring --expand` for the app's d
 
 ## app:delete
 
-Removes, in order, the nginx site, the PHP-FPM pool, every Supervisor program of the app, the database and its user (unless `--keep-database`), the crontab, the user and `/home/<app>` (unless `--keep-files`, which keeps the home and only deletes the user), the manifest. With a GitHub token, the deploy key and any webhook are removed from the repository.
+Removes, in order, the nginx site, the PHP-FPM pool, every Supervisor program of the app, the database and its user (unless `--keep-database`), the crontab, the user and `/home/<app>` (unless `--keep-files`, which keeps the home and only deletes the user), the app's backup settings (`/etc/mandal/backups/app-<app>.conf` and `.exclude`, with their lines in `/etc/cron.d/mandal-backups`) and its archives under `/var/backups/mandal/apps/<app>/` (kept with `--keep-files`), the manifest. With a GitHub token, the deploy key and any webhook are removed from the repository.
 
 ## Docker apps
 
@@ -136,7 +139,7 @@ Removes, in order, the nginx site, the PHP-FPM pool, every Supervisor program of
 | `app:compose --from=` | Replaces `compose.yml` and recreates the containers; the previous file is restored when the new one fails the check. A moved loopback port updates the nginx site when unambiguous |
 | `app:deploy` | `docker compose pull`, then `up -d --remove-orphans` |
 | `app:control` | `docker compose up -d`, `stop` or `restart` |
-| `app:delete` | `docker compose down --remove-orphans`, with `--volumes` unless `--keep-files`; the nginx site and `/srv/docker/<app>` removed |
+| `app:delete` | `docker compose down --remove-orphans`, with `--volumes` unless `--keep-files`; the nginx site and `/srv/docker/<app>` removed, plus the backup settings, cron lines and (unless `--keep-files`) archives as for a Laravel app |
 
 No system user is created for a Docker app, and no firewall rules are written: Docker publishes ports itself.
 
@@ -152,11 +155,28 @@ Nothing is written outside MariaDB. Databases and users that belong to an app ar
 
 ## Backups
 
+Every backup target (the server's databases, or one app) has a local and a remote destination, each with its own schedule and number of copies to keep. Remotes are S3-compatible destinations the panel pushes from its Settings.
+
 | Command | Changes |
 |---|---|
-| `backup:configure` | `/etc/mandal/backups.conf` (schedule, retention, bucket); `/etc/mandal/rclone.conf` (`0600`, the S3 credentials); `/etc/cron.d/mandal-backups` running `mandal backup:run` on the schedule as root |
-| `backup:run` | `/var/backups/mandal/db/<database>/<database>-<timestamp>.sql.zst` (`0600`); the panel's SQLite copied to `/var/backups/mandal/db/<app>-sqlite/`; upload to the remote; local and remote copies pruned to the retention; `/var/log/mandal/backups.log` appended. Lock `/run/lock/mandal-backup.lock` |
+| `backup:remote` | `/etc/mandal/remotes/<slug>.conf` (label, endpoint, region, bucket, prefix) and `/etc/mandal/rclone.d/<slug>.conf` (`0600`, the keys), both read from an uploaded file that is removed at once; installs `rclone` and `zstd` if missing; then `rclone lsd` on the bucket must succeed, otherwise the command fails but keeps the files so the keys can be corrected. `--remove` refuses while a target uses the remote; `--remove --force` clears `REMOTE=` on those targets (disabling one left without any destination) and prints `{"removed": true, "detached": [...], "disabled": [...]}` |
+| `backup:remote-list` | Nothing; lists the remotes with `used_by` |
+| `backup:configure` | `/etc/mandal/backups/databases.conf` from an uploaded file (`ENABLED`, `LOCAL`, `LOCAL_SCHEDULE`, `LOCAL_KEEP`, `REMOTE`, `REMOTE_SCHEDULE`, `REMOTE_KEEP`, `REMOTE_PATH`); `/etc/cron.d/mandal-backups`; `/var/backups/mandal/db` (`0700`). `--defaults` writes a local nightly backup (02:30, seven copies) only when the file does not exist yet; provisioning and `panel:install` run it |
+| `backup:run` | `/var/backups/mandal/db/<database>/<database>-<timestamp>.sql.zst` (`0600`); the panel's SQLite copied to `/var/backups/mandal/db/<app>-sqlite/`; with a remote, `rclone copy` to `<bucket>/<prefix>/<subfolder>/<database>/` and the remote pruned to `REMOTE_KEEP`; local copies pruned to `LOCAL_KEEP`, or the dump removed after the upload when local is off (`--destination=local` or `remote` serve one side only). A remote that cannot be reached is logged as `failed-remote` and the dump kept locally. `/var/log/mandal/backups.log` appended. Lock `/run/lock/mandal-backup.lock` |
 | `backup:restore` | A new database `<database>_restore_<time of the restore>` (or `--into=`), filled from the dump, with the original database's user granted all privileges on it. A backup that only exists remotely is downloaded first |
+| `backup:delete` | One dump removed locally, or `rclone deletefile` on the remote |
+| `backup:status` | Nothing; reports the database target, its last run and every app target with its last run |
+
+### App backups
+
+| Command | Changes |
+|---|---|
+| `app:backup-tree` | Nothing; lists the backup root (`/srv/docker/<app>` or `/home/<app>/shared`) two levels deep with sizes from `du` |
+| `app:backup-configure` | `/etc/mandal/backups/app-<app>.conf` (the keys above plus `PAUSE=`) and `/etc/mandal/backups/app-<app>.exclude` (one `EXCLUDE=` line of the upload per line, relative to the root, no leading slash or `..`); `/etc/cron.d/mandal-backups`; `/var/backups/mandal/apps` (`0700`) |
+| `app:backup` | `/var/backups/mandal/apps/<app>/<app>-<timestamp>.tar.zst` (`0600`) from `tar --zstd --anchored --wildcards --wildcards-match-slash --exclude-from=... -C <root> .`, so an exclude matches from the root only, `*` also matches `/`, and `**/name` matches at any depth; symlinks are stored as links. With `PAUSE=true` on a Docker app whose containers run, `docker compose pause` before and `unpause` after, also on failure. Refused when the filesystem has less free space than the newest archive plus 256 MB. Then the same upload, prune and `failed-remote` rules as `backup:run`; the run is logged as `ok app <app> <file> <size>` or `failed app <app>` |
+| `app:backup-list` | Nothing; the settings, last run and archives (local and remote) newest first |
+| `app:backup-delete` | One archive removed locally, or `rclone deletefile` on the remote |
+| `app:backup-get` | Nothing; writes the archive bytes to stdout (`cat` or `rclone cat`) and nothing else |
 
 ## Firewall
 

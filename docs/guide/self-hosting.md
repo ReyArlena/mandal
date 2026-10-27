@@ -39,7 +39,7 @@ The panel app is flagged in its manifest (`PANEL=true`). While it exists:
 - it cannot be deleted from the panel
 - the HTTP and HTTPS firewall rules cannot be deleted
 - rebooting from the panel warns that the panel goes offline
-- the panel's SQLite database lives under `shared/` so deploys keep it, and the nightly backup copies it along with the MariaDB dumps
+- the panel's SQLite database lives under `shared/` so deploys keep it, and the database backup (nightly by default) copies it along with the MariaDB dumps
 
 Keep a copy of `shared/database.sqlite` together with the `APP_KEY` from `shared/.env` somewhere else. Encrypted values (server private keys, the GitHub token) cannot be read without the key.
 

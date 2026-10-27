@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Fake rclone. Every call is appended to MANDAL_FAKE_RCLONE_LOG (without the
+# --config/--quiet prefix). MANDAL_FAKE_RCLONE_FAIL names subcommands that
+# fail (space separated), MANDAL_FAKE_RCLONE_LSF the lsf output,
+# MANDAL_FAKE_RCLONE_LSJSON the lsjson output and MANDAL_FAKE_RCLONE_CAT
+# what cat prints.
+args=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --config) shift 2 ;;
+    --quiet | -q) shift ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+[[ -n "${MANDAL_FAKE_RCLONE_LOG:-}" ]] && printf '%s\n' "${args[*]}" >> "$MANDAL_FAKE_RCLONE_LOG"
+cmd="${args[0]:-}"
+if [[ " ${MANDAL_FAKE_RCLONE_FAIL:-} " == *" $cmd "* ]]; then
+  echo "fake rclone: $cmd failed (403 Forbidden)" >&2
+  exit 1
+fi
+case "$cmd" in
+  lsd) ;;
+  lsf) [[ -n "${MANDAL_FAKE_RCLONE_LSF:-}" ]] && printf '%s\n' "$MANDAL_FAKE_RCLONE_LSF" ;;
+  lsjson) printf '%s\n' "${MANDAL_FAKE_RCLONE_LSJSON:-[]}" ;;
+  cat) printf '%s' "${MANDAL_FAKE_RCLONE_CAT:-remote-bytes}" ;;
+  copy | deletefile) ;;
+esac
+exit 0

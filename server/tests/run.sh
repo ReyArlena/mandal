@@ -33,6 +33,8 @@ export MANDAL_DRAGONFLY_CONF="${TMP}/dragonfly.conf"
 export MANDAL_BACKUP_DIR="${TMP}/backups"
 export MANDAL_BACKUP_CRON="${TMP}/cron.d/mandal-backups"
 export MANDAL_BACKUP_LOCK="${TMP}/backup.lock"
+export MANDAL_APP_BACKUP_DIR="${TMP}/app-backups"
+export MANDAL_BACKUP_LOG="${TMP}/log/backups.log"
 export MANDAL_NGINX_LOG_DIR="${TMP}/log/nginx"
 export MANDAL_SUPERVISOR_LOG_DIR="${TMP}/log/supervisor"
 export MANDAL_VAR_LOG="${TMP}/log"
@@ -48,7 +50,7 @@ mkdir -p "${MANDAL_APT_SOURCES_DIR}"
 # Only the fakes and a fixed set of real tools are on PATH, so whatever the
 # host has installed (bun, docker, nginx...) cannot leak into the results.
 mkdir -p "${TMP}/bin"
-for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch base64 sha256sum tar gzip getent stat flock curl seq xxd printf mkdir cp rm ln env install; do
+for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch base64 sha256sum tar gzip getent stat flock curl seq xxd printf mkdir cp rm ln env install du zstd; do
     if path="$(command -v "$tool" 2> /dev/null)"; then
         ln -s "$path" "${TMP}/bin/${tool}"
     fi
@@ -334,7 +336,7 @@ dry="$(MANDAL_DRY_RUN=1 provision_apply 2>&1)"
 dry_status=$?
 assert_eq "dry run completes" "0" "$dry_status"
 [[ "$dry_status" -eq 0 ]] || printf '%s\n' "$dry" | tail -n 8 | sed 's/^/      | /'
-for marker in "==> Base packages" "==> Swap" "fallocate -l 2048M /swapfile" "sysctl -q -p /etc/sysctl.d/60-mandal.conf" "==> nginx" "sites-available/mandal-default" "==> PHP" "+ PHP version: 8.5" "apt-get install" "php8.5-fpm" "update-alternatives --set php /usr/bin/php8.5" "==> Composer" "==> Database (mariadb)" "mariadb-server" "unix_socket" "==> Cache (dragonfly)" "dragonfly_amd64.deb" "--requirepass=" "==> JavaScript tooling (bun)" "bun-linux-x64.zip" "==> Docker" "docker.sources" "docker-compose-plugin" "==> fail2ban" "jail.d/mandal.local" "==> Automatic security updates" "apt.conf.d/52-mandal" "==> Firewall (ufw)" "ufw allow 2222/tcp" "ufw allow 443/tcp" "systemctl enable --now --quiet ufw" "==> SSH hardening" "10-mandal.conf" "Provisioning finished."; do
+for marker in "==> Base packages" "==> Swap" "fallocate -l 2048M /swapfile" "sysctl -q -p /etc/sysctl.d/60-mandal.conf" "==> nginx" "sites-available/mandal-default" "==> PHP" "+ PHP version: 8.5" "apt-get install" "php8.5-fpm" "update-alternatives --set php /usr/bin/php8.5" "==> Composer" "==> Database (mariadb)" "mariadb-server" "unix_socket" "==> Database backups" "write ${MANDAL_BACKUPS_CONF_DIR}/databases.conf" "==> Cache (dragonfly)" "dragonfly_amd64.deb" "--requirepass=" "==> JavaScript tooling (bun)" "bun-linux-x64.zip" "==> Docker" "docker.sources" "docker-compose-plugin" "==> fail2ban" "jail.d/mandal.local" "==> Automatic security updates" "apt.conf.d/52-mandal" "==> Firewall (ufw)" "ufw allow 2222/tcp" "ufw allow 443/tcp" "systemctl enable --now --quiet ufw" "==> SSH hardening" "10-mandal.conf" "Provisioning finished."; do
     if [[ "$dry" == *"$marker"* ]]; then pass; else fail "dry run mentions: $marker"; fi
 done
 [[ "$dry" == *"ufw --force enable"* ]] && fail "dry run does not re-enable an active ufw" || pass
@@ -563,45 +565,365 @@ assert_json "worker:list is empty for an app without workers" "$(cmd_worker_list
 # backups
 # ---------------------------------------------------------------------------
 
+export MANDAL_FAKE_RCLONE_LOG="${TMP}/rclone.log"
 assert_eq "restored copies are not backed up again" "shop" "$(MANDAL_FAKE_DBS=$'mysql\nshop\nshop_restore_20261027041515' backup_databases | tr '\n' ' ' | sed 's/ $//')"
 assert_json "backup status is unconfigured at first" "$(backup_status_json)" '.configured' "false"
+assert_json "backup status has no remote and no apps at first" "$(backup_status_json)" '(.remote | tostring) + "|" + (.apps | length | tostring)' "null|0"
 assert_json "inventory carries a backups section" "$(cmd_inventory)" '.backups.configured' "false"
 (cmd_backup_run --dry-run) > /dev/null 2>&1 && fail "backup:run refuses to run unconfigured" || pass
+mkdir -p "${MANDAL_ETC}"
+printf 'SCHEDULE=0 3 * * *\nKEEP_LOCAL=3\nREMOTE=true\nS3_BUCKET=old\n' > "${MANDAL_ETC}/backups.conf"
+assert_json "the old backups.conf does not count as configured" "$(backup_status_json)" '.configured' "false"
+rm -f "${MANDAL_ETC}/backups.conf"
 
-printf 'SCHEDULE=0 3 * * *\nKEEP_LOCAL=3\nKEEP_REMOTE=10\nREMOTE=true\nS3_BUCKET=my-backups\nS3_PATH=srv1\nS3_ENDPOINT=https://s3.example.com\nS3_REGION=auto\nS3_KEY=AKIAEXAMPLE\nS3_SECRET=sekret\n' > "${TMP}/backup.env"
+# remotes
+printf 'LABEL=RustFS\nENDPOINT=https://s3.example.com\nREGION=auto\nBUCKET=my-backups\nPATH=/srv1/\nKEY=AKIAEXAMPLE\nSECRET=sekret\n' > "${TMP}/remote.env"
+remote_dry="$(cmd_backup_remote --name=rustfs --from="${TMP}/remote.env" --dry-run 2>&1)"
+assert_eq "backup:remote dry run completes" "0" "$?"
+[[ "$remote_dry" == *"write ${MANDAL_REMOTES_DIR}/rustfs.conf (0644"* && "$remote_dry" == *"write ${MANDAL_RCLONE_DIR}/rustfs.conf (0600"* ]] && pass || fail "backup:remote writes the remote description and its rclone config"
+[[ "$remote_dry" != *"sekret"* ]] && pass || fail "backup:remote never prints the secret"
+[[ -f "${TMP}/remote.env" ]] && pass || fail "backup:remote dry run keeps the uploaded file"
+[[ "$(backup_render_rclone rustfs https://s3.example.com auto AKIA sek)" == *"[rustfs]"*"secret_access_key = sek"* ]] && pass || fail "rclone config carries the section and credentials"
+: > "$MANDAL_FAKE_RCLONE_LOG"
+(cmd_backup_remote --name=rustfs --from="${TMP}/remote.env") > /dev/null 2>&1
+assert_eq "backup:remote completes against the fake rclone" "0" "$?"
+[[ ! -f "${TMP}/remote.env" ]] && pass || fail "backup:remote removes the uploaded file"
+assert_eq "backup:remote checks the bucket with lsd" "lsd rustfs:my-backups" "$(cat "$MANDAL_FAKE_RCLONE_LOG")"
+assert_eq "backup:remote strips the slashes around the path" "srv1" "$(remote_get rustfs PATH)"
+assert_eq "the rclone config is root only" "600" "$(stat -c %a "${MANDAL_RCLONE_DIR}/rustfs.conf")"
+printf 'LABEL=Broken\nENDPOINT=https://s3.example.com\nBUCKET=nope\nKEY=a\nSECRET=b\n' > "${TMP}/remote2.env"
+broken="$(MANDAL_FAKE_RCLONE_FAIL=lsd cmd_backup_remote --name=broken --from="${TMP}/remote2.env" 2>&1)"
+assert_eq "backup:remote fails when the bucket cannot be listed" "1" "$?"
+[[ "$broken" == *"remote 'broken' was saved, but listing the bucket 'nope'"*"403 Forbidden"* ]] && pass || fail "backup:remote explains the failed check and that the files were kept"
+[[ -f "${MANDAL_REMOTES_DIR}/broken.conf" && -f "${MANDAL_RCLONE_DIR}/broken.conf" && ! -f "${TMP}/remote2.env" ]] && pass || fail "a failed check keeps the remote files and removes the upload"
+printf 'ENDPOINT=http://insecure\nBUCKET=b\nKEY=a\nSECRET=b\n' > "${TMP}/remote3.env"
+(cmd_backup_remote --name=plain --from="${TMP}/remote3.env" --dry-run) > /dev/null 2>&1 && fail "backup:remote requires an https endpoint" || pass
+(cmd_backup_remote --name=Bad_Name --from="${TMP}/remote3.env" --dry-run) > /dev/null 2>&1 && fail "backup:remote validates the slug" || pass
+(cmd_backup_remote --name=plain --dry-run) > /dev/null 2>&1 && fail "backup:remote requires a file" || pass
+assert_json "backup:remote-list lists every remote" "$(cmd_backup_remote_list)" 'map(.name) | join(",")' "broken,rustfs"
+assert_json "backup:remote-list carries the description" "$(cmd_backup_remote_list)" '.[1] | .label + "|" + .bucket + "|" + .path + "|" + .endpoint + "|" + .region' "RustFS|my-backups|srv1|https://s3.example.com|auto"
+assert_json "backup:remote-list shows an unused remote" "$(cmd_backup_remote_list)" '.[1].used_by | length' "0"
+assert_eq "remote_target joins bucket, prefix, subfolder and leaf" "rustfs:my-backups/srv1/prod/shop" "$(remote_target rustfs prod shop)"
+assert_eq "remote_target drops empty segments" "rustfs:my-backups/srv1/shop" "$(remote_target rustfs "" shop)"
+(cmd_backup_remote --name=broken --remove) > /dev/null 2>&1 && pass || fail "backup:remote --remove drops an unused remote"
+[[ ! -f "${MANDAL_REMOTES_DIR}/broken.conf" && ! -f "${MANDAL_RCLONE_DIR}/broken.conf" ]] && pass || fail "backup:remote --remove deletes both files"
+
+# configure with a file
+printf 'ENABLED=true\nLOCAL=true\nLOCAL_SCHEDULE=30 2 * * *\nLOCAL_KEEP=3\nREMOTE=rustfs\nREMOTE_SCHEDULE=30 3 * * *\nREMOTE_KEEP=10\nREMOTE_PATH=prod\n' > "${TMP}/backup.env"
 configure="$(cmd_backup_configure --from="${TMP}/backup.env" --dry-run 2>&1)"
 assert_eq "backup:configure dry run completes" "0" "$?"
-[[ "$configure" == *"write ${MANDAL_ETC}/backups.conf (0600"* && "$configure" == *"write ${MANDAL_ETC}/rclone.conf (0600"* && "$configure" == *"write ${MANDAL_BACKUP_CRON}"* ]] && pass || fail "backup:configure writes the config, rclone config and cron"
-[[ "$configure" != *"sekret"* ]] && pass || fail "backup:configure never prints the secret"
-[[ "$(backup_render_rclone https://s3.example.com auto AKIA sek)" == *"secret_access_key = sek"* ]] && pass || fail "rclone config carries the credentials"
-assert_eq "cron renders the schedule" "0 3 * * * root /opt/mandal/bin/mandal backup:run >> ${MANDAL_LOG_DIR}/backups.log 2>&1" "$(backup_render_cron '0 3 * * *' | tail -n 1)"
-printf 'SCHEDULE=0 3 * * *\nREMOTE=true\nS3_BUCKET=Bad Bucket\nS3_ENDPOINT=https://s3.example.com\nS3_KEY=a\nS3_SECRET=b\n' > "${TMP}/bad.env"
-(cmd_backup_configure --from="${TMP}/bad.env" --dry-run) > /dev/null 2>&1 && fail "backup:configure validates the bucket" || pass
+[[ "$configure" == *"write ${MANDAL_BACKUPS_CONF_DIR}/databases.conf (0644"* && "$configure" == *"write ${MANDAL_BACKUP_CRON}"* ]] && pass || fail "backup:configure writes the target conf and the cron file"
+printf 'ENABLED=true\nLOCAL=true\nREMOTE=missing\n' > "${TMP}/bad.env"
+(cmd_backup_configure --from="${TMP}/bad.env" --dry-run) > /dev/null 2>&1 && fail "backup:configure refuses an unknown remote" || pass
+printf 'REMOTE=rustfs\nREMOTE_PATH=/abs\n' > "${TMP}/bad.env"
+(cmd_backup_configure --from="${TMP}/bad.env" --dry-run) > /dev/null 2>&1 && fail "backup:configure refuses an absolute remote path" || pass
+printf 'LOCAL_KEEP=1000\n' > "${TMP}/bad.env"
+(cmd_backup_configure --from="${TMP}/bad.env" --dry-run) > /dev/null 2>&1 && fail "backup:configure limits the copies to keep" || pass
 (cmd_backup_configure --schedule='rm -rf' --dry-run) > /dev/null 2>&1 && fail "backup:configure validates the schedule" || pass
+(cmd_backup_configure --from="${TMP}/backup.env") > /dev/null 2>&1
+assert_eq "backup:configure completes" "0" "$?"
+[[ ! -f "${TMP}/backup.env" ]] && pass || fail "backup:configure removes the uploaded file"
+status="$(backup_status_json)"
+assert_json "backup status carries the local destination" "$status" '.configured | tostring' "true"
+assert_json "backup status carries the local destination" "$status" '.enabled | tostring' "true"
+assert_json "backup status local destination" "$status" '.local | .schedule + "|" + (.keep | tostring) + "|" + (.enabled | tostring)' "30 2 * * *|3|true"
+assert_json "backup status remote destination" "$status" '.remote | .name + "|" + .schedule + "|" + (.keep | tostring) + "|" + .path + "|" + .bucket + "|" + .prefix + "|" + .endpoint' "rustfs|30 3 * * *|10|prod|my-backups|srv1|https://s3.example.com"
+assert_json "backup:remote-list shows which backups use a remote" "$(cmd_backup_remote_list)" '.[0].used_by | join(",")' "databases"
+(cmd_backup_remote --name=rustfs --remove) > /dev/null 2>&1 && fail "backup:remote --remove is refused while a backup uses it" || pass
+[[ -f "${MANDAL_REMOTES_DIR}/rustfs.conf" ]] && pass || fail "a refused remove leaves the remote alone"
+cron_file="$(cat "$MANDAL_BACKUP_CRON")"
+[[ "$cron_file" == *"30 2 * * * root /opt/mandal/bin/mandal backup:run --destination=local >> ${MANDAL_BACKUP_LOG} 2>&1"*"30 3 * * * root /opt/mandal/bin/mandal backup:run --destination=remote >> ${MANDAL_BACKUP_LOG} 2>&1"* ]] && pass || fail "the cron file has one line per destination"
+assert_eq "the cron file has the header and two lines" "5" "$(wc -l < "$MANDAL_BACKUP_CRON")"
+printf 'LOCAL_SCHEDULE=0 4 * * *\nREMOTE=rustfs\nREMOTE_SCHEDULE=0 4 * * *\n' > "${TMP}/same.env"
+(cmd_backup_configure --from="${TMP}/same.env") > /dev/null 2>&1
+assert_eq "shared schedules merge into one cron line" "0 4 * * * root /opt/mandal/bin/mandal backup:run --destination=all >> ${MANDAL_BACKUP_LOG} 2>&1" "$(tail -n 1 "$MANDAL_BACKUP_CRON")"
+printf 'ENABLED=false\n' > "${TMP}/off.env"
+(cmd_backup_configure --from="${TMP}/off.env") > /dev/null 2>&1
+[[ ! -f "$MANDAL_BACKUP_CRON" ]] && pass || fail "the cron file is removed when nothing is enabled"
+assert_json "backup status shows disabled backups" "$(backup_status_json)" '.enabled' "false"
 
-# a configured server with existing local backups
+# shorthands, a configured server with existing local backups
 (cmd_backup_configure --schedule='30 2 * * *' --keep-local=2 --keep-remote=5 --no-remote) > /dev/null 2>&1
-assert_json "backup status reflects the configuration" "$(backup_status_json)" '.schedule + "|" + (.keep_local|tostring) + "|" + (.remote.enabled|tostring)' "30 2 * * *|2|false"
+assert_json "backup:configure shorthands set a local-only schedule" "$(backup_status_json)" '.local.schedule + "|" + (.local.keep | tostring) + "|" + (.remote | tostring)' "30 2 * * *|2|null"
+assert_eq "shorthands write a single local cron line" "30 2 * * * root /opt/mandal/bin/mandal backup:run --destination=local >> ${MANDAL_BACKUP_LOG} 2>&1" "$(tail -n 1 "$MANDAL_BACKUP_CRON")"
 mkdir -p "${MANDAL_BACKUP_DIR}/shop"
 for ts in 20261020020000 20261021020000 20261022020000; do printf 'x' > "${MANDAL_BACKUP_DIR}/shop/shop-${ts}.sql.zst"; done
 never_backed_up="$(set -eo pipefail; MANDAL_FAKE_DBS=$'mysql\nfresh' backup_list_json)"
 assert_eq "backup:list succeeds for a database with no backups yet" "0" "$?"
 assert_json "backup:list shows no files for a database never backed up" "$never_backed_up" '.[] | select(.database == "fresh") | .local | length' "0"
 assert_json "backup:list shows local files" "$(MANDAL_FAKE_DBS=$'mysql\nshop' backup_list_json)" '.[0].local | map(.file) | join(",")' "shop-20261020020000.sql.zst,shop-20261021020000.sql.zst,shop-20261022020000.sql.zst"
-MANDAL_DRY_RUN=1 backup_prune_local shop 2 > "${TMP}/prune.out"
+MANDAL_DRY_RUN=1 backup_prune_local "${MANDAL_BACKUP_DIR}/shop" 'shop-*' 2 > "${TMP}/prune.out"
 assert_eq "local pruning removes the oldest beyond the limit" "shop-20261020020000.sql.zst" "$(grep -oE 'shop-[0-9]+\.sql\.zst' "${TMP}/prune.out" | tr '\n' ' ' | sed 's/ $//')"
 
 run="$(MANDAL_FAKE_DBS=$'mysql\nshop' MANDAL_DRY_RUN=1 backup_run 2>&1)"
 assert_eq "backup:run dry run completes" "0" "$?"
 [[ "$run" == *"+ dump shop -> ${MANDAL_BACKUP_DIR}/shop/shop-"* && "$run" == *" ok shop "* ]] && pass || fail "backup:run dumps each database and logs the result"
-[[ "$run" != *"rclone"* ]] && pass || fail "backup:run skips the remote when disabled"
+[[ "$run" != *"rclone"* ]] && pass || fail "backup:run skips the remote when none is set"
 (MANDAL_FAKE_DBS=$'mysql\nshop' MANDAL_DRY_RUN=1 backup_run nope) > /dev/null 2>&1 && fail "backup:run fails for an unknown database" || pass
+(MANDAL_FAKE_DBS=$'mysql\nshop' MANDAL_DRY_RUN=1 backup_run "" remote) > /dev/null 2>&1 && fail "backup:run --destination=remote fails without a remote" || pass
 
-restore="$(cmd_backup_restore --database=shop --file=shop-20261021020000.sql.zst --dry-run 2>&1)"
+# runs with a remote
+printf 'LOCAL=true\nLOCAL_KEEP=5\nREMOTE=rustfs\nREMOTE_SCHEDULE=0 5 * * *\nREMOTE_KEEP=5\nREMOTE_PATH=prod\n' > "${TMP}/both.env"
+(cmd_backup_configure --from="${TMP}/both.env") > /dev/null 2>&1
+both="$(MANDAL_FAKE_DBS=$'mysql\nshop' MANDAL_DRY_RUN=1 backup_run "" all 2>&1)"
+assert_eq "backup:run to both destinations completes" "0" "$?"
+[[ "$both" == *"+ dump shop -> ${MANDAL_BACKUP_DIR}/shop/shop-"* && "$both" == *"rclone_cmd rustfs copy ${MANDAL_BACKUP_DIR}/shop/shop-"*" rustfs:my-backups/srv1/prod/shop/"* && "$both" == *"prune remote rustfs:my-backups/srv1/prod/shop (keep 5)"* ]] && pass || fail "backup:run keeps the dump locally and uploads it under the remote path"
+local_only="$(MANDAL_FAKE_DBS=$'mysql\nshop' MANDAL_DRY_RUN=1 backup_run "" local 2>&1)"
+[[ "$local_only" != *"rclone"* && "$local_only" == *"+ dump shop -> ${MANDAL_BACKUP_DIR}/shop/"* ]] && pass || fail "backup:run --destination=local skips the upload"
+remote_only="$(MANDAL_FAKE_DBS=$'mysql\nshop' MANDAL_DRY_RUN=1 backup_run "" remote 2>&1)"
+[[ "$remote_only" == *"+ dump shop -> ${MANDAL_BACKUP_DIR}/.tmp/shop/"* && "$remote_only" == *"rclone_cmd rustfs copy"* && "$remote_only" == *"rm -f ${MANDAL_BACKUP_DIR}/.tmp/shop/"* ]] && pass || fail "backup:run --destination=remote dumps to a scratch directory and removes it after the upload"
+printf 'LOCAL=false\nREMOTE=rustfs\nREMOTE_SCHEDULE=0 5 * * *\n' > "${TMP}/remote-only.env"
+(cmd_backup_configure --from="${TMP}/remote-only.env") > /dev/null 2>&1
+no_local="$(MANDAL_FAKE_DBS=$'mysql\nshop' MANDAL_DRY_RUN=1 backup_run "" all 2>&1)"
+[[ "$no_local" == *"${MANDAL_BACKUP_DIR}/.tmp/shop/"* && "$no_local" == *"rclone_cmd rustfs copy"* ]] && pass || fail "backup:run with local off only keeps the remote copy"
+assert_eq "the cron file carries only the remote line" "0 5 * * * root /opt/mandal/bin/mandal backup:run --destination=remote >> ${MANDAL_BACKUP_LOG} 2>&1" "$(tail -n 1 "$MANDAL_BACKUP_CRON")"
+printf 'LOCAL=true\nLOCAL_KEEP=5\nREMOTE=rustfs\nREMOTE_SCHEDULE=0 5 * * *\nREMOTE_KEEP=5\nREMOTE_PATH=prod\n' > "${TMP}/both.env"
+(cmd_backup_configure --from="${TMP}/both.env") > /dev/null 2>&1
+
+# a broken remote keeps the local copy and reports at the end
+remote_list_json > /dev/null
+mv "${MANDAL_RCLONE_DIR}/rustfs.conf" "${TMP}/rustfs.rclone"
+backup_run_real() {
+    # The real dump needs mariadb-dump and zstd; stand in with a plain file.
+    backup_dump() { printf '+ dump %s -> %s\n' "$1" "$2"; mkdir -p "$(dirname "$2")"; printf 'dump' > "$2"; }
+    backup_run "$@"
+}
+before="$(find "${MANDAL_BACKUP_DIR}/shop" -name 'shop-*.sql.zst' | wc -l)"
+: > "$MANDAL_BACKUP_LOG"
+broken_run="$(MANDAL_FAKE_DBS=$'mysql\nshop' backup_run_real "" all 2>&1 | tee -a "$MANDAL_BACKUP_LOG"; exit "${PIPESTATUS[0]}")"
+assert_eq "backup:run exits non-zero when the remote is unusable" "1" "$?"
+[[ "$broken_run" == *"failed-remote shop remote rustfs is missing its configuration"* && "$broken_run" == *"could not reach the remote 'rustfs'; the local copies were kept"* ]] && pass || fail "backup:run logs failed-remote and summarises at the end"
+assert_eq "the dump stays local when the remote is broken" "$((before + 1))" "$(find "${MANDAL_BACKUP_DIR}/shop" -name 'shop-*.sql.zst' | wc -l)"
+assert_json "backup status reports failed-remote as the last run" "$(backup_status_json)" '.last_run.status' "failed-remote"
+mv "${TMP}/rustfs.rclone" "${MANDAL_RCLONE_DIR}/rustfs.conf"
+printf 'LOCAL=false\nREMOTE=rustfs\n' > "${TMP}/remote-only.env"
+(cmd_backup_configure --from="${TMP}/remote-only.env") > /dev/null 2>&1
+upload_fail="$(MANDAL_FAKE_RCLONE_FAIL=copy MANDAL_FAKE_DBS=$'mysql\nshop' backup_run_real "" all 2>&1)"
+assert_eq "backup:run exits non-zero when the upload fails" "1" "$?"
+[[ "$upload_fail" == *"failed-remote shop upload to rustfs:my-backups/srv1/shop failed"* && "$upload_fail" == *"keeping ${MANDAL_BACKUP_DIR}/.tmp/shop/shop-"*" locally because the remote failed"* ]] && pass || fail "a failed upload keeps the scratch copy instead of deleting it"
+assert_eq "the scratch copy is really kept" "1" "$(find "${MANDAL_BACKUP_DIR}/.tmp/shop" -name 'shop-*.sql.zst' | wc -l)"
+rm -rf "${MANDAL_BACKUP_DIR}/.tmp"
+printf 'LOCAL=true\nLOCAL_KEEP=5\nREMOTE=rustfs\nREMOTE_SCHEDULE=0 5 * * *\nREMOTE_KEEP=5\nREMOTE_PATH=prod\n' > "${TMP}/both.env"
+(cmd_backup_configure --from="${TMP}/both.env") > /dev/null 2>&1
+: > "$MANDAL_BACKUP_LOG"
+
+# list with a remote, delete, restore
+assert_json "backup:list reads the remote through lsjson" "$(MANDAL_FAKE_RCLONE_LSJSON='[{"Name":"shop-20261019020000.sql.zst","Size":12,"ModTime":"2026-10-19T02:00:00Z"}]' MANDAL_FAKE_DBS=$'mysql\nshop' backup_list_json shop)" '.[0].remote[0].file + "|" + (.[0].remote[0].size | tostring)' "shop-20261019020000.sql.zst|12"
+: > "$MANDAL_FAKE_RCLONE_LOG"
+MANDAL_FAKE_DBS=$'mysql\nshop' backup_list_json shop > /dev/null
+assert_eq "backup:list asks the remote for the database folder" "lsjson rustfs:my-backups/srv1/prod/shop" "$(cat "$MANDAL_FAKE_RCLONE_LOG")"
+del="$(cmd_backup_delete --database=shop --file=shop-20261020020000.sql.zst --where=local --dry-run 2>&1)"
+assert_eq "backup:delete dry run completes" "0" "$?"
+[[ "$del" == *"rm -f ${MANDAL_BACKUP_DIR}/shop/shop-20261020020000.sql.zst"* ]] && pass || fail "backup:delete removes the local file"
+(cmd_backup_delete --database=shop --file=shop-20261021020000.sql.zst --where=local) > /dev/null 2>&1
+[[ ! -f "${MANDAL_BACKUP_DIR}/shop/shop-20261021020000.sql.zst" ]] && pass || fail "backup:delete really removes the local file"
+: > "$MANDAL_FAKE_RCLONE_LOG"
+(cmd_backup_delete --database=shop --file=shop-20261019020000.sql.zst --where=remote) > /dev/null 2>&1
+assert_eq "backup:delete removes a remote file with deletefile" "deletefile rustfs:my-backups/srv1/prod/shop/shop-20261019020000.sql.zst" "$(cat "$MANDAL_FAKE_RCLONE_LOG")"
+(cmd_backup_delete --database=shop --file='../etc/passwd' --where=local --dry-run) > /dev/null 2>&1 && fail "backup:delete validates the file name" || pass
+(cmd_backup_delete --database=shop --file=other-20261019020000.sql.zst --where=local --dry-run) > /dev/null 2>&1 && fail "backup:delete refuses a file of another database" || pass
+(cmd_backup_delete --database=shop --file=shop-20261019020000.sql.zst --where=elsewhere --dry-run) > /dev/null 2>&1 && fail "backup:delete validates --where" || pass
+
+restore="$(cmd_backup_restore --database=shop --file=shop-20261022020000.sql.zst --dry-run 2>&1)"
 assert_eq "backup:restore dry run completes" "0" "$?"
-[[ "$restore" == *"CREATE DATABASE IF NOT EXISTS \`shop_restore_"* && "$restore" == *"zstd -dc ${MANDAL_BACKUP_DIR}/shop/shop-20261021020000.sql.zst | mariadb shop_restore_"* && "$restore" == *"GRANT ALL PRIVILEGES ON \`shop_restore_"* ]] && pass || fail "backup:restore restores into a new database the app user can read"
+[[ "$restore" == *"CREATE DATABASE IF NOT EXISTS \`shop_restore_"* && "$restore" == *"zstd -dc ${MANDAL_BACKUP_DIR}/shop/shop-20261022020000.sql.zst | mariadb shop_restore_"* && "$restore" == *"GRANT ALL PRIVILEGES ON \`shop_restore_"* ]] && pass || fail "backup:restore restores into a new database the app user can read"
+remote_restore="$(cmd_backup_restore --database=shop --file=shop-20261019020000.sql.zst --dry-run 2>&1)"
+[[ "$remote_restore" == *"rclone_cmd rustfs copy rustfs:my-backups/srv1/prod/shop/shop-20261019020000.sql.zst"* ]] && pass || fail "backup:restore downloads a backup that only exists remotely"
 (cmd_backup_restore --database=shop --file='../etc/passwd' --dry-run) > /dev/null 2>&1 && fail "backup:restore validates the file name" || pass
 (cmd_backup_restore --database=shop --file=shop-20261021020000.sql.zst --into='shop;drop' --dry-run) > /dev/null 2>&1 && fail "backup:restore validates the target database" || pass
+
+# defaults, as written by provisioning
+rm -f "${MANDAL_BACKUPS_CONF_DIR}/databases.conf" "$MANDAL_BACKUP_CRON"
+defaults_dry="$(cmd_backup_configure --defaults --dry-run 2>&1)"
+assert_eq "backup:configure --defaults dry run completes" "0" "$?"
+[[ "$defaults_dry" == *"write ${MANDAL_BACKUPS_CONF_DIR}/databases.conf"* && "$defaults_dry" == *"write ${MANDAL_BACKUP_CRON}"* ]] && pass || fail "backup:configure --defaults writes the conf and the cron file"
+(cmd_backup_configure --defaults) > /dev/null 2>&1
+assert_eq "the defaults are a local nightly backup" "ENABLED=true|LOCAL=true|LOCAL_SCHEDULE=30 2 * * *|LOCAL_KEEP=7|REMOTE=|REMOTE_SCHEDULE=30 2 * * *|REMOTE_KEEP=30|REMOTE_PATH=" "$(grep -v '^#' "${MANDAL_BACKUPS_CONF_DIR}/databases.conf" | tr '\n' '|' | sed 's/|$//')"
+assert_eq "the defaults write the cron line" "30 2 * * * root /opt/mandal/bin/mandal backup:run --destination=local >> ${MANDAL_BACKUP_LOG} 2>&1" "$(tail -n 1 "$MANDAL_BACKUP_CRON")"
+again="$(cmd_backup_configure --defaults 2>&1)"
+[[ "$again" == *"databases.conf already exists, leaving it alone"* ]] && pass || fail "backup:configure --defaults never overwrites an existing conf"
+printf 'LOCAL=true\nLOCAL_KEEP=5\nREMOTE=rustfs\nREMOTE_SCHEDULE=0 5 * * *\nREMOTE_KEEP=5\nREMOTE_PATH=prod\n' > "${TMP}/both.env"
+(cmd_backup_configure --from="${TMP}/both.env") > /dev/null 2>&1
+
+# ---------------------------------------------------------------------------
+# app backups
+# ---------------------------------------------------------------------------
+
+export MANDAL_DOCKER_DIR="${TMP}/srv/docker"
+printf 'TYPE=docker\nDOMAIN=valheim.example.com\n' > "${MANDAL_APPS_DIR}/valheim.conf"
+vroot="${MANDAL_DOCKER_DIR}/valheim"
+mkdir -p "$vroot/valheim-data/steamcmd" "$vroot/valheim-data/saves" "$vroot/other/valheim-data" "$vroot/a/b/backups" "$vroot/backups" "$vroot/logs"
+printf 'services: {}\n' > "$vroot/compose.yml"
+printf 'KEY=1\n' > "$vroot/.env"
+printf 'abc' > "$vroot/valheim-data/steamcmd/steam.bin"
+printf 'save' > "$vroot/valheim-data/saves/world.db"
+printf 'z' > "$vroot/other/valheim-data/z"
+printf 'zip' > "$vroot/a/b/backups/f.zip"
+printf 'zip2' > "$vroot/backups/g.zip"
+printf 'log' > "$vroot/logs/app.log"
+ln -s /etc "$vroot/etclink"
+
+tree="$(cmd_app_backup_tree --name=valheim)"
+assert_eq "app:backup-tree completes" "0" "$?"
+assert_json "app:backup-tree reports the root" "$tree" '.root' "$vroot"
+assert_json "app:backup-tree lists the top level sorted, hidden files included" "$tree" '.entries | map(.path) | join(",")' ".env,a,backups,compose.yml,etclink,logs,other,valheim-data"
+assert_json "app:backup-tree types and file sizes" "$tree" '.entries[] | select(.path == "compose.yml") | .type + "|" + (.size | tostring) + "|" + (.children | length | tostring)' "file|13|0"
+assert_json "app:backup-tree sizes directories" "$tree" '.entries[] | select(.path == "valheim-data") | .type + "|" + (.size >= 7 | tostring)' "dir|true"
+assert_json "app:backup-tree lists children one level down" "$tree" '.entries[] | select(.path == "valheim-data") | .children | map(.path) | join(",")' "valheim-data/saves,valheim-data/steamcmd"
+assert_json "app:backup-tree does not list children of children" "$tree" '[.. | objects | .path? // empty] | map(select(. == "valheim-data/saves/world.db")) | length' "0"
+assert_json "app:backup-tree never follows symlinks" "$tree" '.entries[] | select(.path == "etclink") | .type + "|" + (.children | length | tostring)' "file|0"
+assert_json "app:backup-tree of a missing root is empty" "$(MANDAL_DOCKER_DIR="${TMP}/nowhere" cmd_app_backup_tree --name=valheim)" '.entries | length' "0"
+assert_json "app:backup-tree of a Laravel app is shared/" "$(cmd_app_backup_tree --name=shop)" '.root' "${MANDAL_HOME_DIR}/shop/shared"
+(cmd_app_backup_tree --name=nope) > /dev/null 2>&1 && fail "app:backup-tree refuses an unknown app" || pass
+
+# configure
+unset_list="$(cmd_app_backup_list --name=valheim)"
+assert_json "app:backup-list of an unconfigured app" "$unset_list" '(.configured | tostring) + "|" + (.config.enabled | tostring) + "|" + (.config.pause | tostring) + "|" + (.config.remote | tostring) + "|" + (.backups | length | tostring) + "|" + (.last_run | tostring)' "false|false|true|null|0|null"
+assert_json "app:backup-list of an unconfigured Laravel app does not pause" "$(cmd_app_backup_list --name=shop)" '.config.pause' "false"
+printf 'ENABLED=true\nLOCAL=true\nLOCAL_SCHEDULE=0 3 * * *\nLOCAL_KEEP=2\nREMOTE=rustfs\nREMOTE_SCHEDULE=0 4 * * 0\nREMOTE_KEEP=4\nREMOTE_PATH=games\nPAUSE=true\nEXCLUDE=valheim-data/steamcmd\nEXCLUDE=**/backups/*.zip\nEXCLUDE=logs/\nEXCLUDE=*.log\n' > "${TMP}/app-backup.env"
+aconf="$(cmd_app_backup_configure --name=valheim --from="${TMP}/app-backup.env" --dry-run 2>&1)"
+assert_eq "app:backup-configure dry run completes" "0" "$?"
+[[ "$aconf" == *"write ${MANDAL_BACKUPS_CONF_DIR}/app-valheim.conf (0644"* && "$aconf" == *"write ${MANDAL_BACKUPS_CONF_DIR}/app-valheim.exclude (0644"* && "$aconf" == *"write ${MANDAL_BACKUP_CRON}"* ]] && pass || fail "app:backup-configure writes the conf, the exclude file and the cron file"
+(cmd_app_backup_configure --name=valheim --from="${TMP}/app-backup.env") > /dev/null 2>&1
+assert_eq "app:backup-configure completes" "0" "$?"
+assert_eq "the exclude file holds the lines in order" "valheim-data/steamcmd|**/backups/*.zip|logs/|*.log" "$(tr '\n' '|' < "${MANDAL_BACKUPS_CONF_DIR}/app-valheim.exclude" | sed 's/|$//')"
+assert_eq "the app conf carries PAUSE" "true" "$(conf_get "${MANDAL_BACKUPS_CONF_DIR}/app-valheim.conf" PAUSE)"
+cron_file="$(cat "$MANDAL_BACKUP_CRON")"
+[[ "$cron_file" == *"0 3 * * * root /opt/mandal/bin/mandal app:backup --name=valheim --destination=local >> ${MANDAL_BACKUP_LOG} 2>&1"* && "$cron_file" == *"0 4 * * 0 root /opt/mandal/bin/mandal app:backup --name=valheim --destination=remote >> ${MANDAL_BACKUP_LOG} 2>&1"* && "$cron_file" == *"backup:run --destination=local"* ]] && pass || fail "the cron file lists database and app lines"
+assert_json "backup:remote-list shows every user of a remote" "$(cmd_backup_remote_list)" '.[0].used_by | join(",")' "databases,app:valheim"
+assert_json "backup:status lists apps with backups" "$(backup_status_json)" '.apps | map(.name + ":" + (.configured | tostring) + ":" + (.enabled | tostring) + ":" + (.last_run | tostring)) | join(",")' "valheim:true:true:null"
+printf 'EXCLUDE=/abs\n' > "${TMP}/bad-app.env"
+(cmd_app_backup_configure --name=valheim --from="${TMP}/bad-app.env" --dry-run) > /dev/null 2>&1 && fail "app:backup-configure refuses an absolute exclude" || pass
+printf 'EXCLUDE=a/../b\n' > "${TMP}/bad-app.env"
+(cmd_app_backup_configure --name=valheim --from="${TMP}/bad-app.env" --dry-run) > /dev/null 2>&1 && fail "app:backup-configure refuses .. in an exclude" || pass
+printf 'EXCLUDE=%s\n' "$(printf 'x%.0s' $(seq 1 201))" > "${TMP}/bad-app.env"
+(cmd_app_backup_configure --name=valheim --from="${TMP}/bad-app.env" --dry-run) > /dev/null 2>&1 && fail "app:backup-configure limits the exclude length" || pass
+printf 'REMOTE=nope\n' > "${TMP}/bad-app.env"
+(cmd_app_backup_configure --name=valheim --from="${TMP}/bad-app.env" --dry-run) > /dev/null 2>&1 && fail "app:backup-configure refuses an unknown remote" || pass
+printf 'ENABLED=true\nPAUSE=true\n' > "${TMP}/shop-backup.env"
+(cmd_app_backup_configure --name=shop --from="${TMP}/shop-backup.env") > /dev/null 2>&1
+assert_eq "a Laravel app never pauses" "false" "$(conf_get "${MANDAL_BACKUPS_CONF_DIR}/app-shop.conf" PAUSE)"
+[[ -f "${MANDAL_BACKUPS_CONF_DIR}/app-shop.exclude" && "$(tr -d '\n' < "${MANDAL_BACKUPS_CONF_DIR}/app-shop.exclude")" == "" ]] && pass || fail "an app without excludes gets an empty exclude file"
+
+# run: dry-run markers, pause, real tar
+mkdir -p "${TMP}/backup-bin"
+cat > "${TMP}/backup-bin/docker" <<'DOCKEREOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${MANDAL_FAKE_DOCKER_LOG}"
+if [[ "$*" == *"ps -q --status running"* ]]; then
+    printf '%s\n' "${MANDAL_FAKE_DOCKER_RUNNING:-}"
+fi
+DOCKEREOF
+chmod +x "${TMP}/backup-bin/docker"
+export MANDAL_FAKE_DOCKER_LOG="${TMP}/docker.log"
+arun="$(cmd_app_backup --name=valheim --dry-run 2>&1)"
+assert_eq "app:backup dry run completes" "0" "$?"
+[[ "$arun" == *"docker compose --progress plain --project-directory ${vroot} --project-name valheim pause"*"tar --zstd --anchored --wildcards --wildcards-match-slash --exclude-from=${MANDAL_BACKUPS_CONF_DIR}/app-valheim.exclude -C ${vroot} -cf ${MANDAL_APP_BACKUP_DIR}/valheim/valheim-"*".tar.zst ."*"--project-name valheim unpause"*" ok app valheim ${MANDAL_APP_BACKUP_DIR}/valheim/valheim-"*"rclone_cmd rustfs copy ${MANDAL_APP_BACKUP_DIR}/valheim/valheim-"*" rustfs:my-backups/srv1/games/valheim/"*"prune remote rustfs:my-backups/srv1/games/valheim (keep 4)"* ]] && pass || fail "app:backup pauses, archives, unpauses, uploads and prunes in that order"
+alocal="$(cmd_app_backup --name=valheim --destination=local --dry-run 2>&1)"
+[[ "$alocal" != *"rclone"* && "$alocal" == *"tar --zstd"* ]] && pass || fail "app:backup --destination=local skips the upload"
+aremote="$(cmd_app_backup --name=valheim --destination=remote --dry-run 2>&1)"
+[[ "$aremote" == *"-cf ${MANDAL_APP_BACKUP_DIR}/.tmp/valheim/valheim-"* && "$aremote" == *"rclone_cmd rustfs copy"* && "$aremote" == *"rm -f ${MANDAL_APP_BACKUP_DIR}/.tmp/valheim/"* ]] && pass || fail "app:backup --destination=remote archives to a scratch directory and removes it after the upload"
+(cmd_app_backup --name=api --dry-run) > /dev/null 2>&1 && fail "app:backup refuses an app without backup settings" || pass
+(cmd_app_backup --name=valheim --destination=sideways --dry-run) > /dev/null 2>&1 && fail "app:backup validates --destination" || pass
+
+: > "$MANDAL_FAKE_DOCKER_LOG"
+: > "$MANDAL_FAKE_RCLONE_LOG"
+: > "$MANDAL_BACKUP_LOG"
+(PATH="${TMP}/backup-bin:${PATH}" MANDAL_FAKE_DOCKER_RUNNING=abc123 cmd_app_backup --name=valheim) > /dev/null 2>&1
+assert_eq "app:backup completes with real tar" "0" "$?"
+archive="$(find "${MANDAL_APP_BACKUP_DIR}/valheim" -name 'valheim-*.tar.zst' | head -n 1)"
+[[ -n "$archive" ]] && pass || fail "app:backup writes an archive under the app backup directory"
+assert_eq "the archive is root only" "600" "$(stat -c %a "$archive")"
+assert_eq "the app backup directory is root only" "700" "$(stat -c %a "${MANDAL_APP_BACKUP_DIR}/valheim")"
+members="$(tar -tf "$archive" | sort | tr '\n' ' ')"
+[[ "$members" == *"./valheim-data/saves/world.db "* ]] && pass || fail "the archive keeps the files that are not excluded"
+[[ "$members" == *"./compose.yml "* && "$members" == *"./.env "* ]] && pass || fail "the archive keeps hidden files"
+[[ "$members" != *"./valheim-data/steamcmd"* ]] && pass || fail "a path exclude drops that directory"
+[[ "$members" == *"./other/valheim-data/z "* ]] && pass || fail "a path exclude is anchored at the root"
+[[ "$members" != *"f.zip"* && "$members" != *"g.zip"* ]] && pass || fail "**/ patterns match at any depth including the root"
+[[ "$members" != *"./logs/"* ]] && pass || fail "a trailing slash still excludes the directory"
+[[ "$members" != *"app.log"* ]] && pass || fail "a glob exclude matches at any depth"
+[[ "$members" == *"./etclink "* && "$members" != *"./etclink/"* ]] && pass || fail "a symlink out of the root is stored as a link"
+assert_eq "app:backup pauses and unpauses running containers" "ps|pause|unpause" "$(grep -oE 'ps -q|pause|unpause' "$MANDAL_FAKE_DOCKER_LOG" | sed 's/ -q//' | tr '\n' '|' | sed 's/|$//')"
+assert_eq "app:backup uploads the archive and prunes the remote" "copy ${archive} rustfs:my-backups/srv1/games/valheim/|lsf rustfs:my-backups/srv1/games/valheim" "$(tr '\n' '|' < "$MANDAL_FAKE_RCLONE_LOG" | sed 's/|$//')"
+grep -q " ok app valheim ${archive} $(stat -c %s "$archive")\$" "$MANDAL_BACKUP_LOG" && pass || fail "app:backup logs ok with the file and size"
+assert_json "backup:status carries the app's last run" "$(backup_status_json)" '.apps[] | select(.name == "valheim") | .last_run.status + "|" + (.last_run.rest | split(" ") | .[0:2] | join(" "))' "ok|app valheim"
+assert_json "backup:status lists every app with backup settings" "$(backup_status_json)" '.apps | map(.name) | join(",")' "shop,valheim"
+# Archive names carry the time to the second, so an older name stands in for an earlier run.
+mv "$archive" "${MANDAL_APP_BACKUP_DIR}/valheim/valheim-20260102000000.tar.zst"
+: > "$MANDAL_FAKE_DOCKER_LOG"
+(PATH="${TMP}/backup-bin:${PATH}" cmd_app_backup --name=valheim --destination=local) > /dev/null 2>&1
+[[ "$(grep -c pause "$MANDAL_FAKE_DOCKER_LOG")" == 0 ]] && pass || fail "app:backup does not pause when nothing is running"
+assert_eq "app:backup prunes local archives to LOCAL_KEEP" "2" "$(find "${MANDAL_APP_BACKUP_DIR}/valheim" -name 'valheim-*.tar.zst' | wc -l)"
+(PATH="${TMP}/backup-bin:${PATH}" MANDAL_BACKUP_FREE_MARGIN=$((1 << 50)) cmd_app_backup --name=valheim --destination=local) > /dev/null 2>&1 && fail "app:backup refuses when the filesystem is nearly full" || pass
+mv "$vroot" "${vroot}.away"
+gone="$(cmd_app_backup --name=valheim --destination=local 2>&1)"
+assert_eq "app:backup fails when the app directory is gone" "1" "$?"
+[[ "$gone" == *"failed app valheim missing ${vroot}"* ]] && pass || fail "app:backup logs the missing root"
+mv "${vroot}.away" "$vroot"
+mv "${MANDAL_REMOTES_DIR}/rustfs.conf" "${TMP}/rustfs.remote"
+abroken="$(PATH="${TMP}/backup-bin:${PATH}" cmd_app_backup --name=valheim 2>&1)"
+assert_eq "app:backup exits non-zero when the remote is unusable" "1" "$?"
+[[ "$abroken" == *"failed-remote app valheim remote rustfs is missing its configuration"* && "$abroken" == *" ok app valheim "* ]] && pass || fail "app:backup still archives locally and logs failed-remote"
+assert_json "backup:status reports the app's failed-remote" "$(backup_status_json)" '.apps[] | select(.name == "valheim") | .last_run.status' "failed-remote"
+assert_json "app:backup-list reports failed-remote as the last run" "$(MANDAL_REMOTES_DIR="${TMP}/no-remotes" cmd_app_backup_list --name=valheim)" '.last_run.status' "failed-remote"
+mv "${TMP}/rustfs.remote" "${MANDAL_REMOTES_DIR}/rustfs.conf"
+
+# list, get, delete
+alist="$(MANDAL_FAKE_RCLONE_LSJSON='[{"Name":"valheim-20260101000000.tar.zst","Size":99,"ModTime":"2026-01-01T00:00:00Z"}]' cmd_app_backup_list --name=valheim)"
+assert_eq "app:backup-list completes" "0" "$?"
+assert_json "app:backup-list carries the configuration" "$alist" '.config | (.enabled | tostring) + "|" + .local.schedule + "|" + (.local.keep | tostring) + "|" + .remote.name + "|" + .remote.path + "|" + .remote.bucket + "|" + .remote.prefix + "|" + (.pause | tostring) + "|" + (.exclude | join(","))' "true|0 3 * * *|2|rustfs|games|my-backups|srv1|true|valheim-data/steamcmd,**/backups/*.zip,logs/,*.log"
+assert_json "app:backup-list is configured" "$alist" '.configured' "true"
+assert_json "app:backup-list lists local and remote archives newest first" "$alist" '.backups | map(.where) | join(",")' "local,local,remote"
+assert_json "app:backup-list sorts by file name descending" "$alist" '.backups | map(.file) | . == (sort | reverse)' "true"
+assert_json "app:backup-list remote entries carry their size" "$alist" '.backups[-1] | .file + "|" + (.size | tostring)' "valheim-20260101000000.tar.zst|99"
+newest="$(jq -r '.backups[0].file' <<< "$alist")"
+got="$(cmd_app_backup_get --name=valheim --file="$newest" | sha256sum | cut -d' ' -f1)"
+assert_eq "app:backup-get writes only the archive bytes" "$(sha256sum < "${MANDAL_APP_BACKUP_DIR}/valheim/$newest" | cut -d' ' -f1)" "$got"
+: > "$MANDAL_FAKE_RCLONE_LOG"
+assert_eq "app:backup-get streams a remote archive with rclone cat" "remote-bytes" "$(cmd_app_backup_get --name=valheim --file=valheim-20260101000000.tar.zst)"
+assert_eq "app:backup-get asks the remote for the file" "cat rustfs:my-backups/srv1/games/valheim/valheim-20260101000000.tar.zst" "$(cat "$MANDAL_FAKE_RCLONE_LOG")"
+(cmd_app_backup_get --name=valheim --file='../x.tar.zst') > /dev/null 2>&1 && fail "app:backup-get validates the file name" || pass
+(cmd_app_backup_get --name=valheim --file='shop-20260101000000.tar.zst') > /dev/null 2>&1 && fail "app:backup-get refuses another app's archive" || pass
+adel="$(cmd_app_backup_delete --name=valheim --file="$newest" --where=local --dry-run 2>&1)"
+[[ "$adel" == *"rm -f ${MANDAL_APP_BACKUP_DIR}/valheim/${newest}"* ]] && pass || fail "app:backup-delete removes the local archive"
+(cmd_app_backup_delete --name=valheim --file="$newest" --where=local) > /dev/null 2>&1
+[[ ! -f "${MANDAL_APP_BACKUP_DIR}/valheim/${newest}" ]] && pass || fail "app:backup-delete really removes the archive"
+: > "$MANDAL_FAKE_RCLONE_LOG"
+(cmd_app_backup_delete --name=valheim --file=valheim-20260101000000.tar.zst --where=remote) > /dev/null 2>&1
+assert_eq "app:backup-delete removes a remote archive with deletefile" "deletefile rustfs:my-backups/srv1/games/valheim/valheim-20260101000000.tar.zst" "$(cat "$MANDAL_FAKE_RCLONE_LOG")"
+(cmd_app_backup_delete --name=valheim --file=valheim-20260101000000.tar.zst --where=nowhere) > /dev/null 2>&1 && fail "app:backup-delete validates --where" || pass
+
+# forced remote removal detaches the backups that use it
+printf 'LOCAL=false\nREMOTE=rustfs\n' > "${TMP}/remote-only.env"
+(cmd_backup_configure --from="${TMP}/remote-only.env") > /dev/null 2>&1
+force_dry="$(cmd_backup_remote --name=rustfs --remove --force --dry-run 2>&1 | tail -n 1)"
+assert_eq "backup:remote --remove --force dry run prints the plan" '{"removed":true,"detached":["databases","app:valheim"],"disabled":["databases"]}' "$force_dry"
+[[ -f "${MANDAL_REMOTES_DIR}/rustfs.conf" && "$(conf_get "${MANDAL_BACKUPS_CONF_DIR}/app-valheim.conf" REMOTE)" == rustfs ]] && pass || fail "the forced dry run changes nothing"
+force_out="$(cmd_backup_remote --name=rustfs --remove --force 2>&1 | tail -n 1)"
+assert_eq "backup:remote --remove --force reports what it detached" '{"removed":true,"detached":["databases","app:valheim"],"disabled":["databases"]}' "$force_out"
+[[ ! -f "${MANDAL_REMOTES_DIR}/rustfs.conf" && ! -f "${MANDAL_RCLONE_DIR}/rustfs.conf" ]] && pass || fail "the forced removal deletes the remote files"
+assert_eq "the forced removal clears the remote from each target" "|" "$(backup_target_get app:valheim REMOTE)|$(backup_target_get app:valheim REMOTE_PATH)"
+assert_eq "a target left without a destination is disabled" "false" "$(backup_target_get databases ENABLED)"
+assert_eq "a target that still has a local destination stays enabled" "true" "$(backup_target_get app:valheim ENABLED)"
+[[ "$(cat "$MANDAL_BACKUP_CRON")" != *"backup:run"* && "$(cat "$MANDAL_BACKUP_CRON")" == *"app:backup --name=valheim --destination=local"* ]] && pass || fail "the forced removal regenerates the cron file"
+assert_json "app:backup-list shows no remote after a forced removal" "$(cmd_app_backup_list --name=valheim)" '.config.remote | tostring' "null"
+(cmd_backup_remote --name=rustfs --remove) > /dev/null 2>&1 && fail "backup:remote --remove of a missing remote fails" || pass
+
+# app:delete cleans up
+adelete="$(cmd_app_delete --name=valheim --dry-run 2>&1)"
+assert_eq "app:delete of a Docker app with backups completes" "0" "$?"
+[[ "$adelete" == *"rm -f ${MANDAL_BACKUPS_CONF_DIR}/app-valheim.conf ${MANDAL_BACKUPS_CONF_DIR}/app-valheim.exclude"* && "$adelete" == *"rm -rf ${MANDAL_APP_BACKUP_DIR}/valheim"* ]] && pass || fail "app:delete removes the backup settings and archives"
+akeep="$(cmd_app_delete --name=valheim --keep-files --dry-run 2>&1)"
+[[ "$akeep" == *"rm -f ${MANDAL_BACKUPS_CONF_DIR}/app-valheim.conf"* && "$akeep" != *"rm -rf ${MANDAL_APP_BACKUP_DIR}/valheim"* ]] && pass || fail "app:delete --keep-files keeps the archives"
+sdelete="$(cmd_app_delete --name=shop --dry-run 2>&1)"
+[[ "$sdelete" == *"rm -f ${MANDAL_BACKUPS_CONF_DIR}/app-shop.conf ${MANDAL_BACKUPS_CONF_DIR}/app-shop.exclude"* ]] && pass || fail "app:delete of a Laravel app removes its backup settings"
+app_backup_cleanup valheim false > /dev/null 2>&1
+[[ ! -f "${MANDAL_BACKUPS_CONF_DIR}/app-valheim.conf" && ! -f "${MANDAL_BACKUPS_CONF_DIR}/app-valheim.exclude" && ! -d "${MANDAL_APP_BACKUP_DIR}/valheim" && "$(cat "$MANDAL_BACKUP_CRON" 2> /dev/null)" != *"valheim"* ]] && pass || fail "the cleanup really removes the backup settings, archives and cron lines"
+rm -f "${MANDAL_BACKUPS_CONF_DIR}/app-shop.conf" "${MANDAL_BACKUPS_CONF_DIR}/app-shop.exclude" "${MANDAL_APPS_DIR}/valheim.conf"
+rm -rf "$MANDAL_DOCKER_DIR"
+export MANDAL_DOCKER_DIR=/srv/docker
+(cmd_backup_configure --schedule='30 2 * * *' --keep-local=2 --keep-remote=5 --no-remote) > /dev/null 2>&1
 
 # ---------------------------------------------------------------------------
 # logs

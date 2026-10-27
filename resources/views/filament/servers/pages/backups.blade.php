@@ -1,6 +1,10 @@
 @php
+    use App\Backups\BackupTargetForm;
+
     $status = $this->status;
     $last = $status['last_run'] ?? null;
+    $local = $status['local'] ?? [];
+    $remote = $status['remote'] ?? null;
 @endphp
 
 <x-filament-panels::page>
@@ -17,27 +21,35 @@
             </div>
         </x-filament::section>
     @elseif (! ($status['configured'] ?? false))
-        <x-filament::section heading="Backups are not set up yet" description="Choose a schedule and, optionally, an S3-compatible bucket. Every database on the server is included.">
-            <p class="text-sm text-gray-500">Use "Set up backups" above to get started.</p>
+        <x-filament::section heading="Backups are not set up yet" description="Every database on the server is included. Choose how often to keep copies on the server and, optionally, in a destination from Settings.">
+            <p class="text-sm text-gray-500">Use "Set up backups" above to get started. Servers provisioned with this version start with a nightly local backup; older ones need their settings saved again after the update.</p>
         </x-filament::section>
     @else
         <x-filament::section heading="Schedule">
+            <x-slot name="afterHeader">
+                <x-filament::badge :color="($status['enabled'] ?? false) ? 'success' : 'gray'">{{ ($status['enabled'] ?? false) ? 'Enabled' : 'Disabled' }}</x-filament::badge>
+            </x-slot>
             <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
-                <dt class="text-gray-500 dark:text-gray-400">Runs</dt>
-                <dd class="font-mono">{{ $status['schedule'] }}</dd>
-                <dt class="text-gray-500 dark:text-gray-400">Keeps</dt>
-                <dd>{{ $status['keep_local'] }} local, {{ $status['keep_remote'] }} remote</dd>
+                <dt class="text-gray-500 dark:text-gray-400">Local</dt>
+                <dd>
+                    @if ($local['enabled'] ?? false)
+                        {{ ucfirst(BackupTargetForm::describeSchedule($local['schedule'] ?? null)) }}, keeps {{ $local['keep'] ?? 0 }}
+                        <span class="block font-mono text-xs text-gray-500">{{ $local['schedule'] ?? '' }}</span>
+                    @else
+                        <x-filament::badge color="gray">Off</x-filament::badge>
+                    @endif
+                </dd>
                 <dt class="text-gray-500 dark:text-gray-400">Remote</dt>
                 <dd>
-                    @if ($status['remote']['enabled'] ?? false)
-                        <span class="font-mono">{{ $status['remote']['bucket'] }}{{ ($status['remote']['path'] ?? '') !== '' ? '/' . $status['remote']['path'] : '' }}</span>
-                        <span class="block text-xs text-gray-500">{{ $status['remote']['endpoint'] }}</span>
+                    @if ($remote && ($remote['name'] ?? '') !== '')
+                        {{ \App\Models\BackupDestination::query()->where('slug', $remote['name'])->value('name') ?? $remote['name'] }}: {{ BackupTargetForm::describeSchedule($remote['schedule'] ?? null) }}, keeps {{ $remote['keep'] ?? 0 }}
+                        <span class="block font-mono text-xs text-gray-500">s3://{{ $remote['bucket'] ?? '' }}{{ ($remote['prefix'] ?? '') !== '' ? '/' . $remote['prefix'] : '' }}{{ ($remote['path'] ?? '') !== '' ? '/' . $remote['path'] : '' }}/</span>
                     @else
-                        <x-filament::badge color="gray">Local only</x-filament::badge>
+                        <x-filament::badge color="gray">None</x-filament::badge>
                     @endif
                 </dd>
                 <dt class="text-gray-500 dark:text-gray-400">Last run</dt>
-                <dd>
+                <dd class="sm:col-span-3">
                     @if ($last)
                         <x-filament::badge :color="($last['status'] ?? '') === 'ok' ? 'success' : 'danger'">{{ $last['status'] ?? 'unknown' }}</x-filament::badge>
                         <span class="ml-1 text-xs text-gray-500">{{ $last['at'] ?? '' }} {{ $last['rest'] ?? '' }}</span>
@@ -53,7 +65,6 @@
                 @php
                     $files = collect($entry['local'])->map(fn ($f) => $f + ['where' => 'local'])
                         ->concat(collect($entry['remote'])->map(fn ($f) => $f + ['where' => 'remote']))
-                        ->unique('file')
                         ->sortByDesc('file')
                         ->values();
                 @endphp
@@ -65,6 +76,7 @@
                             <span>{{ $file['modified'] ?? '' }}</span>
                             <x-filament::badge :color="$file['where'] === 'local' ? 'gray' : 'info'">{{ $file['where'] }}</x-filament::badge>
                             {{ ($this->restoreAction)(['database' => $entry['database'], 'file' => $file['file']]) }}
+                            {{ ($this->deleteBackupAction)(['database' => $entry['database'], 'file' => $file['file'], 'where' => $file['where']]) }}
                         </span>
                     </div>
                 @empty

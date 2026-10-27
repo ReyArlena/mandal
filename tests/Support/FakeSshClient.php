@@ -99,6 +99,13 @@ class FakeSshClient implements Connection, SshClient
         return new CommandResult($command, 127, '', "mandal: unknown command [{$command}]");
     }
 
+    public function stream(string $command, callable $onOutput, int $timeoutSeconds = 60): CommandResult
+    {
+        $result = $this->run($command, $onOutput, $timeoutSeconds);
+
+        return new CommandResult($command, $result->exitCode, '', $result->errorOutput);
+    }
+
     public function upload(string $remotePath, string $contents, int $mode = 0644): void
     {
         $this->uploads[$remotePath] = ['contents' => $contents, 'mode' => $mode];

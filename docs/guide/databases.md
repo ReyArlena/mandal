@@ -14,14 +14,22 @@ MariaDB's `root` authenticates through the Unix socket, so `sudo mariadb` on the
 
 ## Backups
 
-**Backups** is the second tab of the Databases page. It sets:
+**Backups** is the second tab of the Databases page. Every database on the server is dumped with `mariadb-dump` and compressed with zstd; when the server hosts the panel, the panel's SQLite database is copied into the same set. A freshly provisioned server already keeps a nightly local copy (02:30 UTC, seven copies); **Settings** changes that:
 
-- a nightly schedule (any cron expression) for dumping every database on the server with `mariadb-dump`, compressed with zstd
-- how many copies to keep locally and remotely
-- optionally an S3-compatible bucket to upload to: AWS S3, Backblaze B2, Cloudflare R2, Wasabi, MinIO, Hetzner and others
+- **Enable backups** switches the schedule on or off. **Back up now** works either way.
+- **Local** keeps copies under `/var/backups/mandal/db/<database>/` on the server, with its own frequency (hourly, every 6 hours, daily, weekly, or any cron line) and number of copies to keep.
+- **Remote** uploads to one of the [backup destinations](#backup-destinations) from Settings, with its own frequency and retention, into an optional subfolder. The form shows the full `s3://` path the files go to.
 
-Credentials are written to `/etc/mandal/rclone.conf` on the server, readable only by root; the panel never stores them. Dumps land under `/var/backups/mandal/db/<database>/`, and the run is logged to `/var/log/mandal/backups.log`. When the server hosts the panel, the panel's SQLite database is copied into the same backup set.
+The run is logged to `/var/log/mandal/backups.log`, and the page shows the last run. Any backup, local or remote, can be restored into a fresh database next to the live one for checking; restoring over a live database is left to you on purpose. **Delete** removes one copy.
 
-**Back up now** backs up every database at once (`mandal backup:run --database=` on the server does a single one). Any backup, local or remote, can be restored into a fresh database next to the live one for checking; restoring over a live database is left to you on purpose.
+The panel checks every server hourly and raises a notification when a scheduled run failed. The files involved are listed under [backups](../reference/server-files#backups).
 
-The files involved are listed under [backups](../reference/server-files#backups).
+### Backup destinations
+
+Destinations are S3-compatible buckets (AWS S3, Backblaze B2, Cloudflare R2, Wasabi, MinIO, Hetzner and others) added once under **Settings**, with an endpoint, bucket, optional path prefix, region and keys. The keys are stored encrypted in the panel and copied to a server only when a backup there starts using the destination; the server then keeps its own rclone config under `/etc/mandal/rclone.d/`, readable only by root. The local disk is always available and needs no setup.
+
+Removing a destination switches every server off that remote; a backup that had no other destination is disabled. Files already in the bucket stay.
+
+::: tip After updating
+Servers set up before destinations moved to Settings keep their old backup files but no longer run on a schedule. Open the Backups page and save the settings again, choosing a destination from Settings if you used a bucket before.
+:::

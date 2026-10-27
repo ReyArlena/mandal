@@ -16,12 +16,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Backup destinations (S3-compatible buckets) moved to **Settings**, stored encrypted in the panel and pushed to a server only when a backup there uses them (`backup:remote`, one rclone config per destination under `/etc/mandal/rclone.d/`). Database backups now have a local and a remote destination, each with its own schedule and copies to keep (`backup:configure --from=` with `ENABLED`, `LOCAL_*`, `REMOTE_*` keys; `backup:run --destination=local|remote|all`; the cron file carries one line per destination). A remote that cannot be reached no longer loses the backup: the copy stays local, the run is logged as `failed-remote`, and `backup:status` lists every app target with its last run so the panel can check a whole server in one call. Servers configured before this update keep their files but must save their backup settings again: the old `/etc/mandal/backups.conf` and `/etc/mandal/rclone.conf` are no longer read.
+- Database backups are on by default: provisioning (and `panel:install`) writes a local nightly backup at 02:30 keeping seven copies, unless the file already exists.
 - The `.env`, deploy script and compose file editors (and the compose and deploy script fields when creating an app) use Filament's code editor, with line numbers and YAML highlighting for compose files, instead of a plain text area.
 - Pulling a Docker app's images asks "Pull and restart?" and describes what `docker compose pull` and `up -d` do, instead of the Laravel deploy wording.
 - Adding a worker offers templates for a queue worker, Horizon, Reverb and `schedule:work` that fill in the form, and each worker on the app page has its own Restart button.
+- The Settings page's Public URL and GitHub token buttons moved into their sections' headers, next to the new Backup destinations section.
 
 ### Added
 
+- App backups: a **Backups** card on every app page archives a Docker app's project directory or a Laravel app's `shared/` with tar and zstd, with excludes picked from a two-level tree with sizes or typed as patterns, optional container pausing while archiving, local and remote destinations with their own schedules, **Back up now**, and archives listed newest first with **Download** and **Delete**. CLI: `app:backup-tree`, `app:backup-configure`, `app:backup`, `app:backup-list`, `app:backup-delete`, `app:backup-get`; `app:delete` removes the settings, cron lines and archives.
+- The panel checks every server hourly (`mandal:check-backups`) and raises a persistent notification for each failed scheduled backup run, once per run.
+- `backup:delete` removes one database backup (local or remote) from the Backups page, and `backup:remote --remove --force` detaches a destination from every backup that used it.
 - The deploy script can be edited from the panel: the create form starts with Mandal's default `deploy.sh`, the app page has a **Deploy script** editor with **Reset to default**, and the CLI gained `app:deploy-script` (print, `--from=`, `--reset`, `--default`). A syntax check with `bash -n` refuses a broken script.
 - The create form explains where a new app's database password ends up (the app's `.env`, readable from the app page).
 
