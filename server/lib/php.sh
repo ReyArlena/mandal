@@ -93,6 +93,14 @@ php_write_dropins() {
 expose_php = Off
 EOF
     done
+    # FPM accepts [global] from an included file, so php-fpm.conf stays
+    # untouched. With the default of 0 a reload kills workers at once and
+    # resets every request in flight, which every deploy would do.
+    write_file "$MANDAL_PHP_DIR/$version/fpm/pool.d/00-mandal-global.conf" 0644 <<'EOF'
+; managed-by: mandal
+[global]
+process_control_timeout = 10s
+EOF
 }
 
 php_install_version() {

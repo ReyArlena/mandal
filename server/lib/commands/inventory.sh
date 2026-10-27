@@ -146,7 +146,7 @@ php_pools_tsv() {
         [[ -f "$file" ]] || continue
         awk -v file="$file" '
             function flush() {
-                if (name != "") printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", name, user, listen, pm, managed, (managed != "" ? "app" : (marked ? "server" : "")), file
+                if (name != "" && name != "global") printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", name, user, listen, pm, managed, (managed != "" ? "app" : (marked ? "server" : "")), file
                 name = ""; user = ""; listen = ""; pm = ""
             }
             /^[[:space:]]*[#;][[:space:]]*managed-by:[[:space:]]*mandal/ {

@@ -172,6 +172,7 @@ assert_json "nginx ignores catch-all server names" "$nginx" '.sites[] | select(.
 php="$(inv_php)"
 assert_json "php lists versions" "$php" '.versions | join(",")' "8.3,8.5"
 assert_json "php lists pools across versions" "$php" '.pools | length' "3"
+assert_json "php does not list the [global] drop-in as a pool" "$php" '[.pools[].name] | index("global")' "null"
 assert_json "php reads the pool user" "$php" '.pools[] | select(.name == "shop") | .user' "shop"
 assert_json "php reads the pool socket" "$php" '.pools[] | select(.name == "shop") | .listen' "/run/php/php8.5-fpm-shop.sock"
 assert_json "php tags the pool version" "$php" '.pools[] | select(.name == "shop") | .php' "8.5"
@@ -782,6 +783,7 @@ assert_json "php:available lists versions with completeness" "$(cmd_php_availabl
 assert_json "php:list shows installed versions and their apps" "$(cmd_php_list)" 'map(select(.version == "8.5")) | .[0].apps | sort | join(",")' "api,shop"
 install="$(cmd_php_install --version=8.4 --dry-run 2>&1)"
 [[ "$install" == *"php8.4-fpm"* && "$install" == *"systemctl enable --now --quiet php8.4-fpm"* ]] && pass || fail "php:install installs the packages and starts fpm"
+[[ "$install" == *"write ${MANDAL_PHP_DIR}/8.4/fpm/pool.d/00-mandal-global.conf"* ]] && pass || fail "php:install gives FPM a process_control_timeout so reloads finish requests in flight"
 (cmd_php_remove --version=8.5 --dry-run) > /dev/null 2>&1 && fail "php:remove refuses a version apps use" || pass
 remove="$(php_default_version() { echo 8.5; }; cmd_php_remove --version=8.3 --dry-run 2>&1)"
 [[ "$remove" == *"apt-get remove --purge"*"php8.3-*"* ]] && pass || fail "php:remove purges an unused version"

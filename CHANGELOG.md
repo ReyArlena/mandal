@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Deploys reset requests that were in flight, because the PHP-FPM reload after switching releases killed workers at once (`process_control_timeout` defaults to 0; the panel's own task page showed "Error while loading page" while deploying itself). Provisioning and `php:install` now write `pool.d/00-mandal-global.conf` with a 10 s timeout, and the inventory no longer lists that `[global]` drop-in as a pool.
 - Deployed apps had their `APP_NAME` replaced by the app's slug (the panel showed "mandal-panel" instead of "Mandal"): the deploy environment exported `APP_NAME` for `deploy.sh`, and `artisan optimize` cached it over the value in `.env`. The variable is now `MANDAL_APP`.
 - `install.sh` failed at its last step on a fresh server because nothing had created the `mandal` SSH user: `key:add` now creates the user and its sudo rule when they are missing.
 - The panel's queue worker stayed in Supervisor's FATAL state after `install.sh`, since it was added before the first release existed. Deploys now start any of the app's Supervisor processes that is not running.

@@ -40,7 +40,7 @@ Run once per server from the panel's **Setup command**. Idempotent.
 | Swap | `/swapfile` (2 GiB, `0600`) and a line in `/etc/fstab`, only when no swap exists |
 | Kernel | `/etc/sysctl.d/60-mandal.conf` |
 | nginx | `nginx` package; `/etc/nginx/conf.d/mandal.conf` (global settings); `/etc/nginx/sites-available/mandal-default` linked into `sites-enabled` as the catch-all server, unless the stock `default` site is enabled and has been edited, in which case it is left as the catch-all |
-| PHP | The ondrej PPA through `add-apt-repository ppa:ondrej/php` when it has packages for the release; `php<version>-*` packages; `/etc/php/<version>/<sapi>/conf.d/99-mandal.ini`; `update-alternatives` for `php`, `phar`, `phpize`, `php-config` |
+| PHP | The ondrej PPA through `add-apt-repository ppa:ondrej/php` when it has packages for the release; `php<version>-*` packages; `/etc/php/<version>/<sapi>/conf.d/99-mandal.ini`; `/etc/php/<version>/fpm/pool.d/00-mandal-global.conf` (`process_control_timeout = 10s`, so FPM reloads finish requests in flight); `update-alternatives` for `php`, `phar`, `phpize`, `php-config` |
 | Composer | `/usr/local/bin/composer`, installer verified against its published signature |
 | Database | `mariadb-server`, `mariadb-client`; `/etc/mysql/mariadb.conf.d/60-mandal.cnf` (`bind-address = 127.0.0.1`); root switched to Unix socket auth, anonymous users and the `test` database removed |
 | Cache | Dragonfly `.deb` from its GitHub releases; `/etc/dragonfly/dragonfly.conf` with a generated password; the password also in `/etc/mandal/cache.conf` (`0600`) for app `.env` files |
@@ -162,7 +162,7 @@ Nothing is written outside MariaDB. Databases and users that belong to an app ar
 
 | Command | Changes |
 |---|---|
-| `php:install` | `php<v>-*` packages; `/etc/php/<v>/{cli,fpm}/conf.d/99-mandal.ini`; `php<v>-fpm` enabled |
+| `php:install` | `php<v>-*` packages; `/etc/php/<v>/{cli,fpm}/conf.d/99-mandal.ini`; `/etc/php/<v>/fpm/pool.d/00-mandal-global.conf`; `php<v>-fpm` enabled |
 | `php:default` | `update-alternatives --set` for `php`, `phar`, `phar.phar`, `phpize`, `php-config` |
 | `php:remove` | The version's packages purged; refused while an app uses it |
 
