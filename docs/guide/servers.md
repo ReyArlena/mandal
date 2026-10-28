@@ -34,7 +34,7 @@ The full list of files is in [files changed on the server](../reference/server-f
 
 ## Moving around
 
-The server switcher next to the logo moves between servers and keeps you on the same page. Inside a server the sidebar lists its pages: overview, Apps, Inventory, PHP, Firewall, Databases, Logs, Updates, Tasks and Edit. Elsewhere it lists the servers. Panel settings and your profile are in the user menu.
+The server switcher next to the logo moves between servers and keeps you on the same page. Inside a server, tabs above the page title list its pages: overview, Apps, Inventory, PHP, Firewall, Databases, Logs, Updates, Tasks and Edit. The servers list itself has no tabs; its table shows every server. Panel settings and your profile are in the user menu.
 
 The **Inventory** page shows what is on the server: services, PHP versions and pools, nginx sites, databases, Supervisor programs, certificates, firewall rules, Docker and the apps Mandal manages. It is read from the server on each visit and cached for 20 seconds.
 

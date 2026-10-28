@@ -1,4 +1,4 @@
-{{-- Databases and Backups share one sidebar entry; these tabs move between them. --}}
+{{-- Databases and Backups share one server tab; these tabs move between them. --}}
 @php
     use App\Filament\Resources\Servers\ServerResource;
 @endphp

@@ -14,23 +14,21 @@ use App\Filament\Resources\Servers\Pages\ServerUpdates;
 use App\Filament\Resources\Servers\Pages\ViewServer;
 use App\Filament\Resources\Servers\ServerResource;
 use App\Models\Server;
-use Filament\Navigation\NavigationBuilder;
 use Filament\Navigation\NavigationItem;
-use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Collection;
 
 use function Filament\Support\original_request;
 
 /**
- * The sidebar follows the server being looked at: inside a server it lists
- * that server's sections, everywhere else it lists the servers. The server
- * switcher in the top bar uses the same lookup to keep you in the section
- * you are on when you switch.
+ * The tab bar above the page title lists the sections of the server being
+ * looked at; outside a server there is none, as the servers table and the
+ * switcher already list every server. The server switcher in the top bar
+ * uses the same lookup to keep you in the section you are on when you switch.
  */
 class ServerNavigation
 {
     /**
-     * Sections of a server in sidebar order, keyed by resource page name.
+     * Sections of a server in tab order, keyed by resource page name.
      *
      * @var array<string, class-string>
      */
@@ -66,11 +64,16 @@ class ServerNavigation
      */
     private const array SERVER_WIDE_CHILD_PAGES = ['backups'];
 
-    public static function build(NavigationBuilder $builder): NavigationBuilder
+    /**
+     * The sections of the open server, or none outside a server.
+     *
+     * @return array<NavigationItem>
+     */
+    public static function items(): array
     {
         $server = static::currentServer();
 
-        return $builder->items($server === null ? static::serverItems() : static::sectionItems($server));
+        return $server === null ? [] : static::sectionItems($server);
     }
 
     /**
@@ -142,28 +145,6 @@ class ServerNavigation
         }
 
         return $items;
-    }
-
-    /**
-     * @return array<NavigationItem>
-     */
-    private static function serverItems(): array
-    {
-        $page = static::currentPage();
-
-        return [
-            NavigationItem::make('All servers')
-                ->icon(Heroicon::OutlinedServerStack)
-                ->url(ServerResource::getUrl('index'))
-                ->isActiveWhen(fn (): bool => $page === 'index'),
-            ...static::servers()->map(fn (Server $server): NavigationItem => NavigationItem::make($server->name)
-                ->icon(Heroicon::OutlinedServer)
-                ->url(ServerResource::getUrl('view', ['record' => $server]))),
-            NavigationItem::make('Add server')
-                ->icon(Heroicon::OutlinedPlus)
-                ->url(ServerResource::getUrl('create'))
-                ->isActiveWhen(fn (): bool => $page === 'create'),
-        ];
     }
 
     /**

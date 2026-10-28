@@ -25,3 +25,28 @@
     --gray-900: oklch(0.435 0.043 279.325); /* text */
     --gray-950: oklch(0.391 0.041 280.63);
 }
+
+/* Without a sidebar the top bar is the only place for the server switcher,
+   so keep it on small screens too; phones drop the logo to make room. */
+.fi-topbar-start {
+    display: flex;
+    margin-inline-end: 0.75rem;
+}
+
+@media (width < 40rem) {
+    .fi-topbar-start > a:has(> .fi-logo),
+    .fi-topbar-start > .fi-logo {
+        display: none;
+    }
+}
+
+/* The server tabs stay in the page container, but the line under them runs
+   the full width of the window (.fi-layout clips the overflow). */
+.fi-server-tabs {
+    --line: var(--gray-200);
+    border-image: linear-gradient(var(--line), var(--line)) 0 0 1 0 / 0 0 1px 0 / 0 100vw;
+}
+
+.dark .fi-server-tabs {
+    --line: color-mix(in oklab, white 10%, transparent);
+}

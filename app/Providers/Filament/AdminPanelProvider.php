@@ -5,14 +5,12 @@ namespace App\Providers\Filament;
 use App\Filament\Catppuccin;
 use App\Filament\Pages\Settings;
 use App\Http\Controllers\AppBackupDownloadController;
-use App\Filament\ServerNavigation;
 use Filament\Actions\Action;
 use Filament\Auth\MultiFactor\App\AppAuthentication;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
-use Filament\Navigation\NavigationBuilder;
 use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
@@ -47,9 +45,10 @@ class AdminPanelProvider extends PanelProvider
                     ->icon(Heroicon::OutlinedCog6Tooth)
                     ->url(fn (): string => Settings::getUrl()),
             ])
-            ->navigation(fn (NavigationBuilder $builder): NavigationBuilder => ServerNavigation::build($builder))
+            ->navigation(false)
+            ->breadcrumbs(false)
+            ->renderHook(PanelsRenderHook::PAGE_START, fn (): View => view('filament.server-navigation'))
             ->renderHook(PanelsRenderHook::TOPBAR_LOGO_AFTER, fn (): View => view('filament.server-switcher'))
-            ->renderHook(PanelsRenderHook::SIDEBAR_NAV_START, fn (): View => view('filament.server-switcher', ['placement' => 'sidebar']))
             ->multiFactorAuthentication([
                 AppAuthentication::make()->recoverable(),
             ], isRequired: true)

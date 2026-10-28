@@ -226,18 +226,6 @@ class ServerApp extends Page
         return $this->appName;
     }
 
-    public function getBreadcrumbs(): array
-    {
-        $server = $this->server();
-
-        return [
-            ServerResource::getUrl() => 'Servers',
-            ServerResource::getUrl('view', ['record' => $server]) => $server->name,
-            ServerResource::getUrl('apps', ['record' => $server]) => 'Apps',
-            $this->appName,
-        ];
-    }
-
     protected function getHeaderActions(): array
     {
         return [

@@ -44,17 +44,4 @@ class ViewTask extends Page
     {
         return Task::query()->findOrFail($this->taskId);
     }
-
-    public function getBreadcrumbs(): array
-    {
-        /** @var Server $server */
-        $server = $this->getRecord();
-
-        return [
-            ServerResource::getUrl() => 'Servers',
-            ServerResource::getUrl('view', ['record' => $server]) => $server->name,
-            ServerResource::getUrl('tasks', ['record' => $server]) => 'Tasks',
-            $this->getTitle(),
-        ];
-    }
 }

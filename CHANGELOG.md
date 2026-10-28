@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pulling a Docker app's images asks "Pull and restart?" and describes what `docker compose pull` and `up -d` do, instead of the Laravel deploy wording.
 - Adding a worker offers templates for a queue worker, Horizon, Reverb and `schedule:work` that fill in the form, and each worker on the app page has its own Restart button.
 - The Settings page's Public URL and GitHub token buttons moved into their sections' headers, next to the new Backup destinations section.
+- The sidebar and breadcrumbs are gone: a server's pages are tabs above the page title, and the servers list has none since its table shows every server. On small screens the server switcher moved from the sidebar drawer to the top bar, which drops the logo on phones to make room.
 
 ### Added
 

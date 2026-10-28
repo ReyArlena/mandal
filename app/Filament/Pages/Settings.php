@@ -28,7 +28,7 @@ class Settings extends Page
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCog6Tooth;
 
     /**
-     * Reached from the user menu; the sidebar is for servers.
+     * Reached from the user menu, not the server tabs.
      */
     protected static bool $shouldRegisterNavigation = false;
 

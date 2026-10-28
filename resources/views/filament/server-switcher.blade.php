@@ -5,15 +5,10 @@
 
     $current = ServerNavigation::currentServer();
     $servers = ServerNavigation::servers();
-    // The top bar hides its logo area below the lg breakpoint, so the
-    // sidebar drawer carries the switcher on small screens instead.
-    $inSidebar = ($placement ?? 'topbar') === 'sidebar';
 @endphp
 
-<div @class(['flex items-center gap-x-3', 'ms-3' => ! $inSidebar, 'mb-4 lg:hidden' => $inSidebar])>
-    @unless ($inSidebar)
-        <span class="text-gray-300 dark:text-gray-600" aria-hidden="true">/</span>
-    @endunless
+<div class="flex min-w-0 items-center gap-x-3 sm:ms-3">
+    <span class="hidden text-gray-300 sm:inline dark:text-gray-600" aria-hidden="true">/</span>
 
     <x-filament::dropdown placement="bottom-start" teleport>
         <x-slot name="trigger">
@@ -23,9 +18,9 @@
             >
                 @if ($current)
                     <x-filament::icon :icon="Heroicon::Server" class="h-4 w-4" :style="'color: var(--'.$current->statusColor().'-500)'" />
-                    <span>{{ $current->name }}</span>
+                    <span class="max-w-32 truncate sm:max-w-none">{{ $current->name }}</span>
                 @else
-                    <span class="text-gray-500 dark:text-gray-400">Choose a server</span>
+                    <span class="whitespace-nowrap text-gray-500 dark:text-gray-400">Choose a server</span>
                 @endif
                 <x-filament::icon :icon="Heroicon::ChevronUpDown" class="h-4 w-4 text-gray-400" />
             </button>
