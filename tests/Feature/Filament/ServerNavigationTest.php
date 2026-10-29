@@ -4,7 +4,6 @@ use App\Filament\ServerNavigation;
 use App\Models\Server;
 use App\Models\User;
 use Filament\Facades\Filament;
-use Filament\Navigation\NavigationBuilder;
 use Filament\Navigation\NavigationItem;
 use Illuminate\Http\Request;
 
@@ -21,17 +20,6 @@ function openPage(string $url): void
     app()->instance('originalRequest', $request);
 }
 
-/**
- * @return array<NavigationItem>
- */
-function sidebarItems(): array
-{
-    return collect(ServerNavigation::build(new NavigationBuilder)->getNavigation())
-        ->flatMap(fn ($group) => $group->getItems())
-        ->values()
-        ->all();
-}
-
 beforeEach(function () {
     $this->actingAs(User::factory()->create());
     Filament::setCurrentPanel(Filament::getPanel('admin'));
@@ -39,15 +27,15 @@ beforeEach(function () {
     $this->db = Server::factory()->provisioned()->create(['name' => 'db-1']);
 });
 
-it('lists the server sections in the sidebar inside a server', function () {
+it('lists the server sections as tabs inside a server', function () {
     openPage("/servers/{$this->web->getKey()}/php");
 
-    $items = sidebarItems();
+    $items = ServerNavigation::items();
 
     expect(collect($items)->map(fn (NavigationItem $item): string => (string) $item->getLabel())->all())
-        ->toBe(['View', 'Apps', 'Inventory', 'PHP', 'Firewall', 'Databases', 'Logs', 'Updates', 'Tasks', 'Edit'])
+        ->toBe(['Server', 'Apps', 'PHP', 'Firewall', 'Databases', 'Logs', 'Updates', 'Tasks', 'Edit'])
         ->and(collect($items)->filter(fn (NavigationItem $item): bool => $item->isActive())->map(fn (NavigationItem $item): string => (string) $item->getLabel())->values()->all())->toBe(['PHP'])
-        ->and($items[3]->getUrl())->toEndWith("/servers/{$this->web->getKey()}/php");
+        ->and($items[2]->getUrl())->toEndWith("/servers/{$this->web->getKey()}/php");
 });
 
 it('keeps the parent section active on app and task pages', function () {
@@ -61,11 +49,10 @@ it('keeps the parent section active on app and task pages', function () {
     expect(ServerNavigation::currentSection())->toBe('databases');
 });
 
-it('lists the servers in the sidebar outside a server', function () {
+it('shows no tabs outside a server', function () {
     openPage('/settings');
 
-    expect(collect(sidebarItems())->map(fn (NavigationItem $item): string => (string) $item->getLabel())->all())
-        ->toBe(['All servers', 'db-1', 'web-1', 'Add server'])
+    expect(ServerNavigation::items())->toBe([])
         ->and(ServerNavigation::currentServer())->toBeNull();
 });
 
@@ -102,15 +89,6 @@ it('asks to choose a server outside one', function () {
     expect(view('filament.server-switcher')->render())->toContain('Choose a server');
 });
 
-it('carries the switcher in the sidebar drawer on small screens only', function () {
-    openPage("/servers/{$this->web->getKey()}/logs");
-
-    expect(view('filament.server-switcher', ['placement' => 'sidebar'])->render())
-        ->toContain('lg:hidden')
-        ->toContain('web-1')
-        ->and(view('filament.server-switcher')->render())->not->toContain('lg:hidden');
-});
-
-it('offers settings in the user menu instead of the sidebar', function () {
+it('offers settings in the user menu', function () {
     expect(Filament::getPanel('admin')->getUserMenuItems())->toHaveKey('settings');
 });

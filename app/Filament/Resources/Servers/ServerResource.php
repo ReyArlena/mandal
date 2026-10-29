@@ -10,7 +10,6 @@ use App\Filament\Resources\Servers\Pages\ServerApps;
 use App\Filament\Resources\Servers\Pages\ServerBackups;
 use App\Filament\Resources\Servers\Pages\ServerDatabases;
 use App\Filament\Resources\Servers\Pages\ServerFirewall;
-use App\Filament\Resources\Servers\Pages\ServerInventory;
 use App\Filament\Resources\Servers\Pages\ServerLogs;
 use App\Filament\Resources\Servers\Pages\ServerPhp;
 use App\Filament\Resources\Servers\Pages\ServerTasks;
@@ -58,7 +57,6 @@ class ServerResource extends Resource
             'view' => ViewServer::route('/{record}'),
             'apps' => ServerApps::route('/{record}/apps'),
             'app' => ServerApp::route('/{record}/apps/{app}'),
-            'inventory' => ServerInventory::route('/{record}/inventory'),
             'php' => ServerPhp::route('/{record}/php'),
             'firewall' => ServerFirewall::route('/{record}/firewall'),
             'databases' => ServerDatabases::route('/{record}/databases'),

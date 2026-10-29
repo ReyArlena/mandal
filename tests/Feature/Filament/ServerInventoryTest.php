@@ -1,6 +1,6 @@
 <?php
 
-use App\Filament\Resources\Servers\Pages\ServerInventory;
+use App\Filament\Resources\Servers\Pages\ViewServer;
 use App\Models\Server;
 use App\Models\User;
 use App\Ssh\SshClient;
@@ -20,7 +20,7 @@ it('shows what the CLI reports about the server', function () {
     $server = Server::factory()->withPinnedHostKey()->create();
     $this->ssh->respondWithJson('inventory', $this->inventory);
 
-    livewire(ServerInventory::class, ['record' => $server->getRouteKey()])
+    livewire(ViewServer::class, ['record' => $server->getRouteKey()])
         ->assertOk()
         ->assertSee('Ubuntu 26.04.1 LTS')
         ->assertSee('shop.example.com')
@@ -39,7 +39,7 @@ it('labels sites mandal writes for the server itself', function () {
     ]];
     $this->ssh->respondWithJson('inventory', $this->inventory);
 
-    livewire(ServerInventory::class, ['record' => $server->getRouteKey()])
+    livewire(ViewServer::class, ['record' => $server->getRouteKey()])
         ->assertOk()
         ->assertSee('mandal-default')
         ->assertDontSee('unmanaged');
@@ -48,7 +48,7 @@ it('labels sites mandal writes for the server itself', function () {
 it('explains when the server has never been connected', function () {
     $server = Server::factory()->create();
 
-    livewire(ServerInventory::class, ['record' => $server->getRouteKey()])
+    livewire(ViewServer::class, ['record' => $server->getRouteKey()])
         ->assertOk()
         ->assertSee('has not been connected yet');
 
@@ -59,7 +59,7 @@ it('shows the SSH error when the server cannot be read', function () {
     $server = Server::factory()->withPinnedHostKey()->create();
     $this->ssh->connectionFailure = new SshException('Could not connect to 203.0.113.10:22: timed out');
 
-    livewire(ServerInventory::class, ['record' => $server->getRouteKey()])
+    livewire(ViewServer::class, ['record' => $server->getRouteKey()])
         ->assertOk()
         ->assertSee('Inventory is unavailable')
         ->assertSee('timed out');
@@ -69,7 +69,7 @@ it('refreshes past the cache', function () {
     $server = Server::factory()->withPinnedHostKey()->create();
     $this->ssh->respondWithJson('inventory', $this->inventory);
 
-    livewire(ServerInventory::class, ['record' => $server->getRouteKey()])
+    livewire(ViewServer::class, ['record' => $server->getRouteKey()])
         ->callAction('refresh')
         ->assertOk();
 

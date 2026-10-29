@@ -6,7 +6,6 @@ use App\Filament\Resources\Servers\Pages\EditServer;
 use App\Filament\Resources\Servers\Pages\ServerApps;
 use App\Filament\Resources\Servers\Pages\ServerDatabases;
 use App\Filament\Resources\Servers\Pages\ServerFirewall;
-use App\Filament\Resources\Servers\Pages\ServerInventory;
 use App\Filament\Resources\Servers\Pages\ServerLogs;
 use App\Filament\Resources\Servers\Pages\ServerPhp;
 use App\Filament\Resources\Servers\Pages\ServerTasks;
@@ -35,7 +34,6 @@ class ServerNavigation
     public const array SECTIONS = [
         'view' => ViewServer::class,
         'apps' => ServerApps::class,
-        'inventory' => ServerInventory::class,
         'php' => ServerPhp::class,
         'firewall' => ServerFirewall::class,
         'databases' => ServerDatabases::class,
