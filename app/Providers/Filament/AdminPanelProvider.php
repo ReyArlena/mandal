@@ -55,10 +55,17 @@ class AdminPanelProvider extends PanelProvider
             // A plain download link cannot be a Livewire action, so it is a
             // route inside the panel's authenticated group, behind the same
             // sign-in and multi-factor middleware as every page.
-            ->authenticatedRoutes(fn (Panel $panel) => Route::get('servers/{server}/apps/{app}/backups/{file}', AppBackupDownloadController::class)
-                ->middleware($panel->isMultiFactorAuthenticationRequired() ? [$panel->getMultiFactorAuthenticationRequiredMiddleware()] : [])
-                ->where(['app' => '[a-z][a-z0-9-]{1,31}', 'file' => '[a-z][a-z0-9-]{1,31}-[0-9]{14}\.tar\.zst'])
-                ->name('servers.apps.backups.download'))
+            ->authenticatedRoutes(function (Panel $panel): void {
+                Route::get('servers/{server}/apps/{app}/backups/{file}', AppBackupDownloadController::class)
+                    ->middleware($panel->isMultiFactorAuthenticationRequired() ? [$panel->getMultiFactorAuthenticationRequiredMiddleware()] : [])
+                    ->where(['app' => '[a-z][a-z0-9-]{1,31}', 'file' => '[a-z][a-z0-9-]{1,31}-[0-9]{14}\.tar\.zst'])
+                    ->name('servers.apps.backups.download');
+
+                // Inventory became part of the Server tab; keep old links working.
+                Route::permanentRedirect('servers/{record}/inventory', '/servers/{record}')
+                    ->where('record', '[0-9]+')
+                    ->name('servers.inventory');
+            })
             ->colors([
                 'primary' => Catppuccin::Red,
                 'danger' => Catppuccin::Red,

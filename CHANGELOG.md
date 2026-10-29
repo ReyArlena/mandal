@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- "Test connection" asked to confirm the host key on every click, even once it was pinned: a custom modal heading alone makes Filament open the modal. It now connects straight away when the key is pinned and only asks the first time.
 - Deploys reset requests that were in flight, because the PHP-FPM reload after switching releases killed workers at once (`process_control_timeout` defaults to 0; the panel's own task page showed "Error while loading page" while deploying itself). Provisioning and `php:install` now write `pool.d/00-mandal-global.conf` with a 10 s timeout, and the inventory no longer lists that `[global]` drop-in as a pool.
 - Deployed apps had their `APP_NAME` replaced by the app's slug (the panel showed "mandal-panel" instead of "Mandal"): the deploy environment exported `APP_NAME` for `deploy.sh`, and `artisan optimize` cached it over the value in `.env`. The variable is now `MANDAL_APP`.
 - `install.sh` failed at its last step on a fresh server because nothing had created the `mandal` SSH user: `key:add` now creates the user and its sudo rule when they are missing.
@@ -23,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Adding a worker offers templates for a queue worker, Horizon, Reverb and `schedule:work` that fill in the form, and each worker on the app page has its own Restart button.
 - The Settings page's Public URL and GitHub token buttons moved into their sections' headers, next to the new Backup destinations section.
 - The sidebar and breadcrumbs are gone: a server's pages are tabs above the page title, and the servers list has none since its table shows every server. On small screens the server switcher moved from the sidebar drawer to the top bar, which drops the logo on phones to make room.
-- The server overview and Inventory are one **Server** tab: connection details and the panel's public key on top, the inventory below, with Inventory's Refresh button next to the server's actions. The page title is the server's name, and the old `/servers/{id}/inventory` address is gone.
+- The server overview and Inventory are one **Server** tab: connection details and the panel's public key on top, the inventory below, with Inventory's Refresh button next to the server's actions. The page title is the server's name, and the old `/servers/{id}/inventory` address redirects to it.
 
 ### Added
 

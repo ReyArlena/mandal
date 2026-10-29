@@ -393,6 +393,9 @@ class ViewServer extends ViewRecord
             ->label('Test connection')
             ->icon(Heroicon::OutlinedSignal)
             ->requiresConfirmation(fn (Server $record): bool => ! $record->hasPinnedHostKey())
+            // A custom heading alone makes Filament open the modal, so hide
+            // it outright once the key is pinned.
+            ->modalHidden(fn (Server $record): bool => $record->hasPinnedHostKey())
             ->modalHeading('Confirm the server\'s host key')
             ->modalDescription(function (Server $record, SshClient $ssh): string {
                 try {
