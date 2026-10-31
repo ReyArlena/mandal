@@ -38,11 +38,13 @@ The server switcher next to the logo moves between servers and keeps you on the 
 
 The **Server** tab shows the connection details and the panel's public key, then what is on the server: services, PHP versions and pools, nginx sites, databases, Supervisor programs, certificates, firewall rules, Docker and the apps Mandal manages. It is read from the server on each visit and cached for 20 seconds; **Refresh** reads it again.
 
-Only one task runs per server at a time. A second one is refused with a message rather than queued behind the first.
+Only one task runs per server at a time. A second one is refused with a message rather than queued behind the first. Every task page has **Copy output** to put the whole log on the clipboard.
+
+**Benchmark** times what the panel spends on the server and changes nothing. It lists the panel's own setup (PHP, opcache, cached config and routes, debug, drivers, the `sodium` and `gmp` extensions phpseclib's SSH crypto uses), times the SSH connection, a no-op round trip and the cost of `sudo`, reads the inventory fresh and from the cache, then runs `mandal benchmark` on the server: the cost of starting a process, each inventory collector on its own and every read command a page runs, slowest first. It takes about a minute and ends with a JSON block to share when reporting a slow panel.
 
 ## Keeping the CLI current
 
-Every connection records the server's CLI build. When it differs from the panel's, the servers list shows an **Update required** badge in its CLI column, every user gets a persistent notification in the bell menu and the server page offers **Update CLI**, which uploads the panel's copy over SFTP and installs it with `mandal cli:update`. `php artisan mandal:check-updates` runs hourly and checks every connected server, so the scheduler must be running.
+Every connection records the server's CLI build. When it differs from the panel's, the servers list shows an **Update required** badge in its CLI column, every user gets a persistent notification in the bell menu and the server page enables **Update CLI** (greyed out with the current build otherwise), which uploads the panel's copy over SFTP and installs it with `mandal cli:update`. `php artisan mandal:check-updates` runs hourly and checks every connected server, so the scheduler must be running.
 
 ## Several panels, one server
 

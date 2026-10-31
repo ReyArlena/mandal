@@ -9,10 +9,13 @@
 MANDAL_COMMANDS+=("inventory|Show everything on this server as JSON|read")
 MANDAL_COMMANDS+=("app:list|List apps and their manifests as JSON|read")
 
+# The inventory's sections, in output order; each has a collector inv_<name>.
+MANDAL_INVENTORY_SECTIONS=(mandal system services php nginx database cache js supervisor certificates firewall fail2ban docker apps backups)
+
 cmd_inventory() {
     load_all_drivers
     local dir section
-    local -a sections=(mandal system services php nginx database cache js supervisor certificates firewall fail2ban docker apps backups) args=()
+    local -a sections=("${MANDAL_INVENTORY_SECTIONS[@]}") args=()
     # Read once for the Docker section and every Docker app.
     local MANDAL_DOCKER_CONTAINERS
     MANDAL_DOCKER_CONTAINERS="$(docker_containers_json)"

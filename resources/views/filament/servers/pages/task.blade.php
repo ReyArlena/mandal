@@ -19,6 +19,16 @@
             @if (! $task->isFinished())
                 <x-filament::loading-indicator class="h-4 w-4" />
             @endif
+            <x-filament::button
+                size="xs"
+                color="gray"
+                icon="heroicon-o-clipboard-document"
+                class="ms-auto"
+                x-data="{ copied: false }"
+                x-on:click="navigator.clipboard.writeText(document.getElementById('task-output').innerText).then(() => { copied = true; setTimeout(() => copied = false, 2000) })"
+            >
+                <span x-text="copied ? 'Copied' : 'Copy output'">Copy output</span>
+            </x-filament::button>
         </div>
 
         {{-- The output box keeps one height and follows new lines while the
@@ -38,6 +48,7 @@
             }"
         >
             <pre
+                id="task-output"
                 x-ref="output"
                 x-on:scroll="following = atBottom()"
                 class="h-[70vh] overflow-auto rounded-lg bg-gray-950 p-4 font-mono text-xs leading-relaxed text-gray-100"

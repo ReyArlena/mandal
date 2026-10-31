@@ -18,6 +18,7 @@ enum TaskType: string implements HasLabel
     case Restore = 'restore';
     case Updates = 'updates';
     case Php = 'php';
+    case Benchmark = 'benchmark';
 
     public function getLabel(): string
     {
@@ -34,6 +35,7 @@ enum TaskType: string implements HasLabel
             self::Restore => 'Restore backup',
             self::Updates => 'Install updates',
             self::Php => 'PHP version',
+            self::Benchmark => 'Benchmark',
         };
     }
 }

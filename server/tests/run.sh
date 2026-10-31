@@ -1586,6 +1586,26 @@ rm -f "${MANDAL_APPS_DIR}/mandal-panel.conf"; rm -rf "${MANDAL_HOME_DIR}/mandal-
 MANDAL_OS_RELEASE="${FIXTURES}/os-release-debian" bash -c 'source "'"${MANDAL_ROOT}"'/lib/core.sh"; mandal_load_commands; load_all_drivers; is_root(){ return 0; }; MANDAL_DRY_RUN=1 provision_apply' > /dev/null 2>&1
 assert_eq "provisioning refuses an unsupported OS" "1" "$?"
 
+# benchmark: read-only timings the panel's Benchmark task reports
+export MANDAL_BENCH_SPAWNS=5
+assert_json "benchmark counts the process starts" "$(bench_process_start)" '(.count | tostring) + "|" + ((.seconds >= 0) | tostring) + "|" + ((.per_process_ms >= 0) | tostring)' "5|true|true"
+bcollectors="$(bench_collectors)"
+assert_json "benchmark times every collector and the shared docker ps" "$bcollectors" 'length' "$(( ${#MANDAL_INVENTORY_SECTIONS[@]} + 1 ))"
+assert_json "benchmark lists collectors slowest first" "$bcollectors" '. == sort_by(-.seconds)' "true"
+assert_json "benchmark records a failing command's exit code" "$(bench_command no:such-command)" '.command + "|" + (.exit_code != 0 | tostring)' "no:such-command|true"
+assert_json "benchmark runs a command through a fresh CLI" "$(bench_command version --json)" '.command + "|" + (.exit_code | tostring)' "version --json|0"
+printf 'TYPE=laravel\nDOMAIN=bench.example.com\nPHP=8.5\n' > "${MANDAL_APPS_DIR}/benchapp.conf"
+printf 'TYPE=docker\nPROXY=false\n' > "${MANDAL_APPS_DIR}/benchdock.conf"
+bcommands="$(bench_commands)"
+assert_json "benchmark covers the page reads" "$bcommands" '[.[].command] | (index("inventory") != null) and (index("updates:status") != null) and (index("db:list") != null)' "true"
+assert_json "benchmark covers each app's reads" "$bcommands" '[.[].command | select(test("benchapp"))] | sort | join(",")' "app:backup-list --name=benchapp,app:releases --name=benchapp,worker:list --app=benchapp"
+assert_json "benchmark skips Laravel-only reads for docker apps" "$bcommands" '[.[].command | select(test("benchdock"))] | join(",")' "app:backup-list --name=benchdock"
+rm -f "${MANDAL_APPS_DIR}/benchapp.conf" "${MANDAL_APPS_DIR}/benchdock.conf"
+bench="$(cmd_benchmark)"
+assert_json "benchmark reports the build, vcpus and every part" "$bench" '(.build == "'"$(mandal_build_hash)"'" | tostring) + "|" + (.vcpus > 0 | tostring) + "|" + ([has("process_start", "collectors", "commands", "load")] | all | tostring)' "true|true|true"
+(cmd_benchmark --fast) > /dev/null 2>&1 && fail "benchmark refuses unknown options" || pass
+unset MANDAL_BENCH_SPAWNS
+
 # ---------------------------------------------------------------------------
 
 printf '\n%d passed, %d failed\n' "$PASSED" "$FAILED"

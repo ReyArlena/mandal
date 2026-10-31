@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Benchmark** on the Server tab times what the panel spends on a server: the panel's setup (opcache, caches, debug, drivers, the extensions phpseclib uses), the SSH connection, a no-op round trip and `sudo`, the inventory fresh and from the cache, and the new read-only `mandal benchmark` (process start cost, each inventory collector, every read command a page runs). The task output ends with a JSON block to share.
+- Task pages have a **Copy output** button.
+
 ### Changed
 
 - `inventory` and `updates:status` run their collectors at once instead of one after another. Most of their time is spent starting processes (`systemctl`, `docker`, `fail2ban-client`, `supervisorctl`), so on a slow VPS the inventory took 8-9 s; it now takes about as long as its slowest part.

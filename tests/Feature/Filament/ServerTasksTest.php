@@ -82,7 +82,8 @@ it('shows a task with its output and polls while it runs', function () {
         ->assertSee('==> Base packages')
         ->assertSeeHtml('wire:poll.2s')
         ->assertSeeHtml('x-ref="output"')
-        ->assertSee('Jump to present');
+        ->assertSee('Jump to present')
+        ->assertSee('Copy output');
 });
 
 it('stops polling once the task has finished', function () {

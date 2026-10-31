@@ -28,6 +28,7 @@
 | `backup:restore` | Restore a backup into a new database (--database= --file=) |
 | `backup:run` | Back up every database (or one with --database=) to --destination=local, remote or all |
 | `backup:status` | Show the backup configuration and last runs as JSON |
+| `benchmark` | Time the CLI's start, the inventory collectors and the read commands the panel runs, as JSON |
 | `cli:update` | Install a new version of the CLI from a tar.gz (--from=&lt;file&gt;) |
 | `component:update` | Update a standalone component (--component=cache/js/composer/docker) |
 | `db:access` | Set which users can use a database (--name=, --user= for each) |
