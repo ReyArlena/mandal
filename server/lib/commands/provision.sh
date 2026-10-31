@@ -8,7 +8,7 @@
 MANDAL_COMMANDS+=("provision|Provision the server, or inspect it first with --check|write")
 
 MANDAL_SUPPORTED_OS_ID="ubuntu"
-MANDAL_SUPPORTED_OS_VERSIONS=("26.04")
+MANDAL_SUPPORTED_OS_VERSIONS=("24.04" "26.04")
 
 cmd_provision() {
     local check=false arg

@@ -279,7 +279,7 @@ assert_json "check notes the enabled stock nginx site" "$check" '.notes | length
 assert_json "check does not mention cloud-init when absent" "$check" '.notes | map(select(test("cloud-init"))) | length' "0"
 
 check="$(MANDAL_OS_RELEASE="${FIXTURES}/os-release-noble" provision_check)"
-assert_json "check rejects Ubuntu 24.04" "$check" '.os.supported' "false"
+assert_json "check accepts Ubuntu 24.04" "$check" '.os.supported' "true"
 
 check="$(MANDAL_OS_RELEASE="${FIXTURES}/os-release-debian" provision_check)"
 assert_json "check rejects other distributions" "$check" '.os.supported' "false"
@@ -356,6 +356,11 @@ assert_eq "dry run completes without the PHP PPA" "0" "$?"
 [[ "$no_ppa" == *"PHP PPA has no packages for resolute yet"* ]] && pass || fail "the PHP PPA is skipped when it has no packages for the release"
 [[ "$no_ppa" == *"add-apt-repository"* ]] && fail "no PPA is added for an unsupported release" || pass
 [[ "$no_ppa" == *"docker.sources"* && "$no_ppa" == *"+ PHP version: 8.5"* ]] && pass || fail "the rest of provisioning runs without the PHP PPA"
+noble="$(MANDAL_OS_RELEASE="${FIXTURES}/os-release-noble" MANDAL_DRY_RUN=1 provision_apply 2>&1)"
+assert_eq "dry run completes on Ubuntu 24.04" "0" "$?"
+[[ "$noble" == *"add-apt-repository -y ppa:ondrej/php"* ]] && pass || fail "the PHP PPA is added on Ubuntu 24.04"
+[[ "$noble" == *"docker.sources"* ]] && pass || fail "the Docker repository is added on Ubuntu 24.04"
+assert_eq "apt sources follow the Ubuntu 24.04 codename" "noble" "$(MANDAL_OS_RELEASE="${FIXTURES}/os-release-noble" os_codename)"
 
 ngx="${TMP}/nginx-resolute"
 mkdir -p "$ngx"

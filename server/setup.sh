@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Mandal server setup. Run as root on a fresh Ubuntu 26.04 server, with the
+# Mandal server setup. Run as root on a fresh Ubuntu 24.04 or 26.04 server, with the
 # command the panel shows under "Setup command":
 #
 #   curl -fsSL https://github.com/ReyArlena/mandal/releases/latest/download/setup.sh \

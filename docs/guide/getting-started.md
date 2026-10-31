@@ -6,7 +6,7 @@ There are two ways to run the panel.
 
 ## Hosted on a managed server (recommended)
 
-Point a domain at a fresh Ubuntu 26.04 server and run, as root:
+Point a domain at a fresh Ubuntu 24.04 or 26.04 server and run, as root:
 
 ```bash
 curl -fsSL https://github.com/ReyArlena/mandal/releases/latest/download/install.sh | sudo bash -s -- --domain=panel.example.com

@@ -1,6 +1,6 @@
 # Servers
 
-Mandal supports Ubuntu 26.04 LTS. Each server gets its own Ed25519 key pair when it is added; the private key is stored encrypted with the panel's `APP_KEY`. The first time Mandal connects it shows the server's host key fingerprint for you to confirm, then pins it. If that key ever changes, Mandal refuses to connect until you accept the new one.
+Mandal supports Ubuntu 24.04 and 26.04 LTS. Each server gets its own Ed25519 key pair when it is added; the private key is stored encrypted with the panel's `APP_KEY`. The first time Mandal connects it shows the server's host key fingerprint for you to confirm, then pins it. If that key ever changes, Mandal refuses to connect until you accept the new one.
 
 ## Adding a server
 

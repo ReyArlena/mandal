@@ -5,13 +5,13 @@
 [![Release](https://img.shields.io/github/v/release/ReyArlena/mandal?sort=semver)](https://github.com/ReyArlena/mandal/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A self-hosted panel for managing Laravel and Docker servers. Mandal connects to your servers over SSH, provisions a native stack on Ubuntu 26.04 (nginx, PHP, MariaDB, Dragonfly, Bun, Supervisor, Certbot, Docker, ufw, fail2ban) and manages apps, deployments, databases, backups, updates and logs. The server is always the source of truth: Mandal reads live state through its own CLI rather than keeping a copy.
+A self-hosted panel for managing Laravel and Docker servers. Mandal connects to your servers over SSH, provisions a native stack on Ubuntu 24.04 or 26.04 (nginx, PHP, MariaDB, Dragonfly, Bun, Supervisor, Certbot, Docker, ufw, fail2ban) and manages apps, deployments, databases, backups, updates and logs. The server is always the source of truth: Mandal reads live state through its own CLI rather than keeping a copy.
 
 **Documentation: [reyarlena.github.io/mandal](https://reyarlena.github.io/mandal/)**
 
 ## Install
 
-Point a domain at a fresh Ubuntu 26.04 server and run as root:
+Point a domain at a fresh Ubuntu 24.04 or 26.04 server and run as root:
 
 ```bash
 curl -fsSL https://github.com/ReyArlena/mandal/releases/latest/download/install.sh | sudo bash -s -- --domain=panel.example.com

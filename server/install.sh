@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Mandal panel installer and updater. Run as root on a fresh Ubuntu 26.04
+# Mandal panel installer and updater. Run as root on a fresh Ubuntu 24.04 or 26.04
 # server to host the panel on it:
 #
 #   curl -fsSL https://github.com/ReyArlena/mandal/releases/latest/download/install.sh \

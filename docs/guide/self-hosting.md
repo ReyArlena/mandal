@@ -4,7 +4,7 @@ The usual way to run Mandal is on a server it manages. The panel is then an ordi
 
 ## Installing
 
-Point a domain at a fresh Ubuntu 26.04 server and run as root:
+Point a domain at a fresh Ubuntu 24.04 or 26.04 server and run as root:
 
 ```bash
 curl -fsSL https://github.com/ReyArlena/mandal/releases/latest/download/install.sh | sudo bash -s -- --domain=panel.example.com
