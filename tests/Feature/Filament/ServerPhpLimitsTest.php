@@ -28,6 +28,18 @@ it('shows each version\'s limits and the nginx body limit', function () {
         ->assertActionVisible('nginxBodySize');
 });
 
+it('marks limits PHP still sets itself', function () {
+    $this->ssh->respondWithJson('php:list', [
+        ['version' => '8.5', 'apps' => [], 'package' => '8.5.12-1', 'default' => true, 'limits' => ['upload_max_filesize' => '2M', 'post_max_size' => '8M', 'memory_limit' => '128M', 'max_execution_time' => '30', 'max_input_time' => '60', 'managed' => false]],
+    ]);
+
+    livewire(ServerPhp::class, ['record' => $this->server->getRouteKey()])
+        ->assertSee('upload 2M, post 8M, memory 128M, 30s/60s')
+        ->assertSee('PHP defaults')
+        ->mountAction('limits', arguments: ['version' => '8.5'])
+        ->assertActionDataSet(['upload_max_filesize' => '2M', 'post_max_size' => '8M']);
+});
+
 it('saves a version\'s limits through php:limits', function () {
     $this->ssh->respondTo('php:limits', "PHP 8.5 limits: ...\n");
 

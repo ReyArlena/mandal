@@ -26,6 +26,9 @@
                             <span class="font-mono" title="upload_max_filesize, post_max_size, memory_limit, max_execution_time, max_input_time">
                                 upload {{ $version['limits']['upload_max_filesize'] }}, post {{ $version['limits']['post_max_size'] }}, memory {{ $version['limits']['memory_limit'] }}, {{ $version['limits']['max_execution_time'] }}s/{{ $version['limits']['max_input_time'] }}s
                             </span>
+                            @if (($version['limits']['managed'] ?? true) === false)
+                                <x-filament::badge color="warning" tooltip="Mandal has not set these yet, so PHP's own apply. Save Limits to set them.">PHP defaults</x-filament::badge>
+                            @endif
                             {{ ($this->limitsAction)(['version' => $version['version']]) }}
                         @endif
                         @unless ($version['default'] ?? false)

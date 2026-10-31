@@ -182,9 +182,12 @@ class ServerPhp extends Page
             ->label('Limits')
             ->link()
             ->modalHeading(fn (array $arguments): string => "PHP {$arguments['version']} limits")
-            ->modalDescription('For PHP-FPM, so every app on this version, and the panel\'s own uploads only when the panel runs on this server. post_max_size must be at least upload_max_filesize. nginx has its own limit on request bodies, below on this page. Saving reloads PHP-FPM, which finishes requests in flight first.')
+            ->modalDescription('For PHP-FPM, so every app on this version, and the panel\'s own uploads only when the panel runs on this server. The fields show what PHP-FPM uses now; Mandal\'s defaults are 1G, 1G, 256M, 300 and 300. post_max_size must be at least upload_max_filesize. nginx has its own limit on request bodies, below on this page. Saving reloads PHP-FPM, which finishes requests in flight first.')
             ->modalSubmitActionLabel('Save and reload')
-            ->fillForm(fn (array $arguments): array => (array) (collect($this->installed)->firstWhere('version', $arguments['version'] ?? null)['limits'] ?? []))
+            ->fillForm(fn (array $arguments): array => array_intersect_key(
+                (array) (collect($this->installed)->firstWhere('version', $arguments['version'] ?? null)['limits'] ?? []),
+                array_flip(self::LIMITS),
+            ))
             ->schema([
                 Grid::make(2)->schema([
                     TextInput::make('upload_max_filesize')

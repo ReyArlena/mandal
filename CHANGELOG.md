@@ -20,13 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The New app form checks the name, domain, aliases and compose file as you type and disables **Create app** while one is wrong: names an app, compose project or (for Laravel apps) database already uses, reserved system names, domains an nginx site already answers to (with or without www.), and `container_name` in the compose file.
 - A successful Start or Restart of a Docker app offers **Follow container logs**, which opens the Logs page on its containers with live refresh on. The Logs page's Live/Tail button is now a **Live refresh** toggle, and `live=1` in its address turns it on.
 - The New app form picks **Laravel** or **Docker** with tabs carrying their logos, instead of a dropdown. The default compose file has a commented example of handing a mounted folder to the user an image runs as, with a one-off service the app waits for.
-- New servers and new PHP versions accept 1 GB uploads: PHP-FPM gets `upload_max_filesize` and `post_max_size` of `1G`, `memory_limit` `256M` and 300 s for `max_execution_time` and `max_input_time`, and nginx `client_max_body_size 1g` instead of `64m`. Existing servers get them with **Provision again**; values changed on the PHP page are kept.
+- New servers and new PHP versions accept 1 GB uploads: PHP-FPM gets `upload_max_filesize` and `post_max_size` of `1G`, `memory_limit` `256M` and 300 s for `max_execution_time` and `max_input_time`, and nginx `client_max_body_size 1g` instead of `64m`. On a server set up before this, the PHP page shows PHP's own values with a **PHP defaults** badge; set them with **Limits** and raise nginx's limit in its section.
 - `inventory` and `updates:status` run their collectors at once instead of one after another. Most of their time is spent starting processes (`systemctl`, `docker`, `fail2ban-client`, `supervisorctl`), so on a slow VPS the inventory took 8-9 s; it now takes about as long as its slowest part.
 - The inventory reads Docker with one `docker ps --all` for the Docker section and every Docker app, taking compose projects from the container labels instead of `docker compose ls` and one `docker compose ps` per app, and Docker's version from its package.
 - The Server tab always shows **Update CLI** once a server is connected, disabled with "Up to date (build ...)" when the server already runs the panel's build, instead of hiding it.
 
 ### Fixed
 
+- Task and log output showed terminal colour codes as text (`[32;1mDONE`, `[0m`) from commands run with `--ansi` and from programs such as SteamCMD. They are stripped, and **Copy output** copies clean text.
+- **Copy output** could sit next to the task status instead of on the right, depending on the theme build.
 - Tasks that upload a file first (creating an app, which also uploads the compose file or deploy script) showed the command's stderr only once it finished, so a long `docker compose pull` looked hung. It now streams with the rest of the output.
 - `updates:status`, `provision` and `provision --check` hung when run by hand from a terminal: reading Composer's version as root made Composer ask "Continue as root/super user?". The version is now read as `nobody`, without plugins and with no terminal to ask on.
 

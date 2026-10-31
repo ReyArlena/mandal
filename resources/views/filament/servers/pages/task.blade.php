@@ -19,21 +19,24 @@
             @if (! $task->isFinished())
                 <x-filament::loading-indicator class="h-4 w-4" />
             @endif
-            @if ($logsUrl = $this->containerLogsUrl())
-                <x-filament::button tag="a" :href="$logsUrl" size="xs" icon="heroicon-o-document-text" class="ms-auto">
-                    Follow container logs
+            {{-- Pushed right with an inline style, so it does not depend on
+                 which utility classes the theme build kept. --}}
+            <div class="flex items-center gap-2" style="margin-inline-start: auto">
+                @if ($logsUrl = $this->containerLogsUrl())
+                    <x-filament::button tag="a" :href="$logsUrl" size="xs" icon="heroicon-o-document-text">
+                        Follow container logs
+                    </x-filament::button>
+                @endif
+                <x-filament::button
+                    size="xs"
+                    color="gray"
+                    icon="heroicon-o-clipboard-document"
+                    x-data="{ copied: false }"
+                    x-on:click="navigator.clipboard.writeText(document.getElementById('task-output').innerText).then(() => { copied = true; setTimeout(() => copied = false, 2000) })"
+                >
+                    <span x-text="copied ? 'Copied' : 'Copy output'">Copy output</span>
                 </x-filament::button>
-            @endif
-            <x-filament::button
-                size="xs"
-                color="gray"
-                icon="heroicon-o-clipboard-document"
-                :class="$logsUrl ? null : 'ms-auto'"
-                x-data="{ copied: false }"
-                x-on:click="navigator.clipboard.writeText(document.getElementById('task-output').innerText).then(() => { copied = true; setTimeout(() => copied = false, 2000) })"
-            >
-                <span x-text="copied ? 'Copied' : 'Copy output'">Copy output</span>
-            </x-filament::button>
+            </div>
         </div>
 
         {{-- The output box keeps one height and follows new lines while the
@@ -57,7 +60,7 @@
                 x-ref="output"
                 x-on:scroll="following = atBottom()"
                 class="h-[70vh] overflow-auto rounded-lg bg-gray-950 p-4 font-mono text-xs leading-relaxed text-gray-100"
-            >{{ $task->output !== '' ? $task->output : 'Waiting for output...' }}</pre>
+            >{{ $task->output !== '' ? \App\Support\Terminal::plain($task->output) : 'Waiting for output...' }}</pre>
             <button
                 type="button"
                 x-show="! following"

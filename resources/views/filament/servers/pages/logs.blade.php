@@ -106,7 +106,7 @@
                             x-ref="output"
                             x-on:scroll="following = atBottom()"
                             class="h-[70vh] overflow-auto rounded-lg bg-gray-950 p-4 font-mono text-xs leading-relaxed text-gray-100"
-                        >@forelse ($this->result['lines'] ?? [] as $line){{ $line }}
+                        >@forelse ($this->result['lines'] ?? [] as $line){{ \App\Support\Terminal::plain($line) }}
 @empty{{ 'No lines match.' }}@endforelse</pre>
                         <button
                             type="button"

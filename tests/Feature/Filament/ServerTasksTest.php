@@ -116,3 +116,14 @@ it('links a started Docker app to its container logs with live refresh on', func
     livewire(ViewTask::class, ['record' => $server->getRouteKey(), 'task' => $stopped->getKey()])
         ->assertDontSee('Follow container logs');
 });
+
+it('shows output without terminal colour codes', function () {
+    $server = Server::factory()->withPinnedHostKey()->create();
+    $task = Task::factory()->for($server)->succeeded()->create(['output' => "  livewire/livewire \e[90m.\e[39m \e[90m.\e[39m  \e[32;1mDONE\e[39;22m\n\e]0;title\x07Loading Steam API...\e[0mOK\n"]);
+
+    livewire(ViewTask::class, ['record' => $server->getRouteKey(), 'task' => $task->getKey()])
+        ->assertSee('livewire/livewire . .  DONE')
+        ->assertSee('Loading Steam API...OK')
+        ->assertDontSee('[32;1m')
+        ->assertDontSee('[0m');
+});

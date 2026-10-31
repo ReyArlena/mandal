@@ -91,19 +91,38 @@ php_version_installed() {
 MANDAL_PHP_LIMITS=(upload_max_filesize post_max_size memory_limit max_execution_time max_input_time)
 declare -gA MANDAL_PHP_LIMIT_DEFAULTS=([upload_max_filesize]=1G [post_max_size]=1G [memory_limit]=256M [max_execution_time]=300 [max_input_time]=300)
 
-# php_limit version key: the value in the version's FPM drop-in, or the default.
+# PHP's own values from php.ini-production, for when php-fpm cannot say.
+declare -gA MANDAL_PHP_INI_DEFAULTS=([upload_max_filesize]=2M [post_max_size]=8M [memory_limit]=128M [max_execution_time]=30 [max_input_time]=60)
+
+# php_limit_set version key: the value the version's FPM drop-in sets, if any.
+php_limit_set() {
+    sed -nE "s/^$2[[:space:]]*=[[:space:]]*([^[:space:];]+).*/\1/p" "$MANDAL_PHP_DIR/$1/fpm/conf.d/99-mandal.ini" 2> /dev/null | tail -n 1
+}
+
+# php_limit version key: the value in the drop-in, or Mandal's default, for
+# writing the drop-in.
 php_limit() {
     local value
-    value="$(sed -nE "s/^$2[[:space:]]*=[[:space:]]*([^[:space:];]+).*/\1/p" "$MANDAL_PHP_DIR/$1/fpm/conf.d/99-mandal.ini" 2> /dev/null | tail -n 1)"
+    value="$(php_limit_set "$1" "$2")"
     printf '%s\n' "${value:-${MANDAL_PHP_LIMIT_DEFAULTS[$2]}}"
 }
 
+# The limits PHP-FPM actually runs with: the drop-in's where it sets them,
+# PHP's own otherwise (a server set up before Mandal managed them), and
+# whether Mandal set all of them: {upload_max_filesize, ..., managed}
 php_limits_json() {
-    local key args=()
+    local version="$1" key value managed=true info="" args=()
     for key in "${MANDAL_PHP_LIMITS[@]}"; do
-        args+=(--arg "$key" "$(php_limit "$1" "$key")")
+        value="$(php_limit_set "$version" "$key")"
+        if [[ -z "$value" ]]; then
+            managed=false
+            [[ -n "$info" ]] || info="$({ "php-fpm${version}" -i 2> /dev/null || true; } | tr -d '\r')"
+            value="$(awk -F' => ' -v key="$key" '$1 == key { print $2; exit }' <<< "$info")"
+            value="${value:-${MANDAL_PHP_INI_DEFAULTS[$key]}}"
+        fi
+        args+=(--arg "$key" "$value")
     done
-    jq -n "${args[@]}" '$ARGS.named'
+    jq -n "${args[@]}" --argjson managed "$managed" '$ARGS.named'
 }
 
 # A PHP size such as 1G, 512M or 8388608 in bytes; -1 (no limit) stays -1.
