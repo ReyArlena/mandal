@@ -1,6 +1,6 @@
 # Testing with Incus
 
-The unit tests cover most of the CLI without a server, but anything the fakes stand in for (`useradd`, `sudo`, `apt`, systemd, SFTP uploads, `docker compose`, a real `mandal` run) needs an Ubuntu 26.04 machine. [Incus](https://linuxcontainers.org/incus/) gives you one in seconds: a system container runs full systemd, SSH, ufw and fail2ban, and a VM adds a real kernel for swap, reboot and kernel-update tests. A panel running on your laptop connects to the instance by IP like any real server.
+The unit tests cover most of the CLI without a server, but anything the fakes stand in for (`useradd`, `sudo`, `apt`, systemd, SFTP uploads, `docker compose`, a real `mandal` run) needs an Ubuntu 24.04 or 26.04 machine. [Incus](https://linuxcontainers.org/incus/) gives you one in seconds: a system container runs full systemd, SSH, ufw and fail2ban, and a VM adds a real kernel for swap, reboot and kernel-update tests. A panel running on your laptop connects to the instance by IP like any real server.
 
 ## Installing Incus
 
@@ -46,7 +46,10 @@ incus exec mandal-test -- bash -c 'apt-get update && apt-get install -y openssh-
 incus snapshot create mandal-test fresh
 ```
 
-`security.nesting=true` is what lets Docker run inside the container. Ubuntu 26.04 notes: it uses sudo-rs, uutils coreutils and a socket-activated `ssh.socket`; ufw is not preinstalled; while the ondrej PPA has no packages for the release, provisioning uses Ubuntu's own PHP 8.5.
+`security.nesting=true` is what lets Docker run inside the container. Use `images:ubuntu/24.04/cloud` for a 24.04 box; test a change that touches packages, SSH or backups on both releases.
+
+- Ubuntu 26.04 uses sudo-rs, uutils coreutils and a socket-activated `ssh.socket`; ufw is not preinstalled; while the ondrej PPA has no packages for the release, provisioning uses Ubuntu's own PHP 8.5.
+- Ubuntu 24.04 uses classic sudo and GNU coreutils, gets PHP 8.5 from the ondrej PPA, MariaDB 10.11, nginx 1.24 and rclone 1.60. SSH is socket-activated too, so `/run/sshd` is missing until the first SSH connection; a box set up with `incus exec` and nothing else is the case that catches it. fail2ban's package prints Python `SyntaxWarning` lines while it installs; they are harmless.
 
 Throwaway box for a run, and its cleanup:
 
