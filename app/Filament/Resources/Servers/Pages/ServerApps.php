@@ -8,22 +8,32 @@ use App\Enums\WwwMode;
 use App\Filament\Resources\Servers\Concerns\ManagesApps;
 use App\Filament\Resources\Servers\ServerResource;
 use App\Jobs\CreateApp;
+use App\Mandal\ComposeImport;
+use App\Mandal\InvalidImport;
 use App\Mandal\MandalClient;
 use App\Models\Server;
 use App\Ssh\SshException;
 use BackedEnum;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\CodeEditor;
 use Filament\Forms\Components\CodeEditor\Enums\Language;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 /**
  * The apps on a server, read from its manifests, with create and delete.
@@ -192,6 +202,34 @@ class ServerApps extends Page
                     ->notIn(array_column($this->apps, 'name'))
                     ->helperText('2 to 32 lower-case letters, digits or hyphens. Used for the system user, database and directories.')
                     ->placeholder('shop'),
+                Section::make('Import backup (optional)')
+                    ->description('Start from a .zip or .tar.gz of an existing project folder.')
+                    ->collapsible()
+                    ->collapsed()
+                    ->compact()
+                    ->visible(fn (callable $get): bool => $get('type') === 'docker')
+                    ->schema([
+                        FileUpload::make('import')
+                            ->hiddenLabel()
+                            ->helperText(fn (): string => 'Its compose file (compose.yaml, compose.yml, docker-compose.yaml or docker-compose.yml) fills the field below and is saved as compose.yml; a .env fills the environment variables, and every other file is copied into /srv/docker/<name> before the containers start. Max upload size to this panel: '.ComposeImport::human(ComposeImport::maxUploadBytes()).' (set by the panel\'s own PHP; on a panel Mandal hosts, raise it on that server\'s PHP page).')
+                            ->disk('local')
+                            ->directory('imports')
+                            ->visibility('private')
+                            ->storeFileNamesIn('import_name')
+                            ->maxSize(intdiv(ComposeImport::maxUploadBytes(), 1024))
+                            ->rules(['extensions:zip,gz,tgz', fn (): Closure => function (string $attribute, mixed $value, Closure $fail): void {
+                                if ($value instanceof TemporaryUploadedFile) {
+                                    try {
+                                        ComposeImport::inspect($value->getRealPath());
+                                    } catch (InvalidImport $exception) {
+                                        $fail($exception->getMessage());
+                                    }
+                                }
+                            }])
+                            ->validationMessages(['extensions' => 'Choose a .zip or .tar.gz file.'])
+                            ->live()
+                            ->afterStateUpdated(fn (mixed $state, Set $set, Get $get, FileUpload $component) => $this->readImport($state, $set, $get, $component)),
+                    ]),
                 CodeEditor::make('compose')
                     ->wrap()
                     ->label('Compose file')
@@ -286,6 +324,8 @@ class ServerApps extends Page
 
                 if ($type === 'docker') {
                     $options += [
+                        'import' => is_string($data['import'] ?? null) ? $data['import'] : null,
+                        'import_name' => is_string($data['import_name'] ?? null) ? $data['import_name'] : null,
                         'compose' => (string) $data['compose'],
                         'proxy' => $proxy,
                         'port' => $proxy ? (string) $data['port'] : null,
@@ -304,5 +344,36 @@ class ServerApps extends Page
 
                 $this->queueTask(TaskType::CreateApp, CreateApp::class, $options, "Creating {$data['name']}");
             });
+    }
+
+    /**
+     * Checks an uploaded backup as soon as it arrives and fills the compose
+     * file, environment and, when still empty, the name from it.
+     */
+    private function readImport(mixed $state, Set $set, Get $get, FileUpload $component): void
+    {
+        $file = collect(is_array($state) ? $state : [$state])->first(fn (mixed $file): bool => $file instanceof TemporaryUploadedFile);
+
+        if (! $file instanceof TemporaryUploadedFile) {
+            return;
+        }
+
+        try {
+            $import = ComposeImport::inspect($file->getRealPath());
+        } catch (InvalidImport $exception) {
+            throw ValidationException::withMessages([$component->getStatePath() => $exception->getMessage()]);
+        }
+
+        $set('compose', $import->compose);
+
+        if ($import->env !== null && trim((string) $get('env')) === '') {
+            $set('env', $import->envLines());
+        }
+
+        $name = Str::slug(preg_replace('/\.(zip|tar\.gz|tgz)$/i', '', $file->getClientOriginalName()) ?? '');
+
+        if (trim((string) $get('name')) === '' && preg_match(self::APP_NAME_PATTERN, $name) && ! in_array($name, array_column($this->apps, 'name'), true)) {
+            $set('name', $name);
+        }
     }
 }

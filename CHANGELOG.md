@@ -11,9 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Benchmark** on the Server tab times what the panel spends on a server: the panel's setup (opcache, caches, debug, drivers, the extensions phpseclib uses), the SSH connection, a no-op round trip and `sudo`, the inventory fresh and from the cache, and the new read-only `mandal benchmark` (process start cost, each inventory collector, every read command a page runs). The task output ends with a JSON block to share.
 - Task pages have a **Copy output** button.
+- **Import backup** in the New app form: a `.zip` or `.tar.gz` of a Docker project folder fills the compose file (whichever of `compose.yaml`, `compose.yml`, `docker-compose.yaml` or `docker-compose.yml` it holds, saved as `compose.yml`), the environment variables from its `.env` and the name, after checking for links, paths outside the folder, the unpacked size and the compose file. Creating the app uploads the other files with progress in the task output and unpacks them into the project before the containers start (`app:create --files=<file.tar.gz>`). The upload limit is shown under the field.
+- PHP-FPM limits per version on the PHP page (`php:limits`): `upload_max_filesize`, `post_max_size`, `memory_limit`, `max_execution_time` and `max_input_time`, written to the version's `99-mandal.ini`. nginx's `client_max_body_size` for every site can be changed there too (`nginx:limits`), and the inventory reports it.
 
 ### Changed
 
+- New servers and new PHP versions accept 1 GB uploads: PHP-FPM gets `upload_max_filesize` and `post_max_size` of `1G`, `memory_limit` `256M` and 300 s for `max_execution_time` and `max_input_time`, and nginx `client_max_body_size 1g` instead of `64m`. Existing servers get them with **Provision again**; values changed on the PHP page are kept.
 - `inventory` and `updates:status` run their collectors at once instead of one after another. Most of their time is spent starting processes (`systemctl`, `docker`, `fail2ban-client`, `supervisorctl`), so on a slow VPS the inventory took 8-9 s; it now takes about as long as its slowest part.
 - The inventory reads Docker with one `docker ps --all` for the Docker section and every Docker app, taking compose projects from the container labels instead of `docker compose ls` and one `docker compose ps` per app, and Docker's version from its package.
 - The Server tab always shows **Update CLI** once a server is connected, disabled with "Up to date (build ...)" when the server already runs the panel's build, instead of hiding it.

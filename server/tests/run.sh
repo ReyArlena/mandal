@@ -371,6 +371,40 @@ ngx_dry="$(MANDAL_NGINX_DIR="$ngx" MANDAL_DRY_RUN=1 prov_nginx 2>&1)"
 [[ "$ngx_dry" == *"nginx.conf already sets server_tokens; leaving it there"* ]] && pass || fail "conf.d does not repeat a directive nginx.conf sets"
 [[ "$ngx_dry" == *"already sets client_max_body_size"* ]] && fail "conf.d still sets directives nginx.conf leaves out" || pass
 
+# nginx body size: 1 GB by default, nginx:limits records another value
+MANDAL_NGINX_DIR="$ngx" nginx_write_mandal_conf > /dev/null
+assert_eq "conf.d allows 1 GB request bodies by default" "client_max_body_size 1g;" "$(grep client_max_body_size "${ngx}/conf.d/mandal.conf")"
+assert_json "the body size in effect comes from conf.d" "$(MANDAL_NGINX_DIR="$ngx" nginx_body_size_json)" '.value + "|" + (.managed | tostring)' "1g|true"
+nlimits_conf="${TMP}/nlimits-server.conf"
+: > "$nlimits_conf"
+nlimits="$(MANDAL_NGINX_DIR="$ngx" MANDAL_SERVER_CONF="$nlimits_conf" MANDAL_DRY_RUN=1 cmd_nginx_limits --client-max-body-size=2G 2>&1)"
+[[ "$nlimits" == *"conf.d/mandal.conf"* && "$nlimits" == *"accepts request bodies up to 2g"* ]] && pass || fail "nginx:limits rewrites conf.d with the new size"
+(MANDAL_NGINX_DIR="$ngx" cmd_nginx_limits --client-max-body-size=lots) > /dev/null 2>&1 && fail "nginx:limits validates the size" || pass
+conf_set "$nlimits_conf" NGINX_CLIENT_MAX_BODY_SIZE 512m
+assert_eq "provisioning keeps a recorded body size" "512m" "$(MANDAL_SERVER_CONF="$nlimits_conf" nginx_body_size)"
+printf 'http {\n\tclient_max_body_size 20m;\n}\n' > "${ngx}/nginx.conf"
+(MANDAL_NGINX_DIR="$ngx" MANDAL_DRY_RUN=1 cmd_nginx_limits --client-max-body-size=2g) > /dev/null 2>&1 && fail "nginx:limits refuses when nginx.conf sets the size" || pass
+assert_json "the body size reads nginx.conf when it sets it" "$(MANDAL_NGINX_DIR="$ngx" nginx_body_size_json)" '.value + "|" + (.managed | tostring)' "20m|false"
+assert_json "the nginx inventory reports the body size" "$(inv_nginx)" '.client_max_body_size | has("value") and has("managed")' "true"
+
+# PHP-FPM limits per version, kept in 99-mandal.ini
+phpl="${TMP}/php-limits"
+mkdir -p "${phpl}/8.5/fpm/conf.d"
+assert_eq "PHP limits default to a 1 GB upload" "1G 1G 256M 300 300" "$(for k in "${MANDAL_PHP_LIMITS[@]}"; do MANDAL_PHP_DIR="$phpl" php_limit 8.5 "$k"; done | tr '\n' ' ' | sed 's/ $//')"
+MANDAL_PHP_DIR="$phpl" php_write_dropins 8.5 memory_limit=512M > /dev/null
+assert_eq "the FPM drop-in carries every limit" "upload_max_filesize = 1G|post_max_size = 1G|memory_limit = 512M|max_execution_time = 300|max_input_time = 300" "$(grep -E '^(upload|post|memory|max_)' "${phpl}/8.5/fpm/conf.d/99-mandal.ini" | tr '\n' '|' | sed 's/|$//')"
+assert_eq "the CLI drop-in keeps PHP's own limits" "0" "$(grep -c memory_limit "${phpl}/8.5/cli/conf.d/99-mandal.ini")"
+MANDAL_PHP_DIR="$phpl" php_write_dropins 8.5 > /dev/null
+assert_eq "rewriting the drop-ins keeps a changed limit" "512M" "$(MANDAL_PHP_DIR="$phpl" php_limit 8.5 memory_limit)"
+assert_eq "php sizes convert to bytes" "1073741824 536870912 8192 -1" "$(php_size_bytes 1G) $(php_size_bytes 512M) $(php_size_bytes 8K) $(php_size_bytes -1)"
+plimits="$(MANDAL_PHP_DIR="$phpl" MANDAL_DRY_RUN=1 cmd_php_limits --version=8.5 --upload-max-filesize=2g --post-max-size=2G --max-execution-time=600 2>&1)"
+[[ "$plimits" == *"upload_max_filesize=2G post_max_size=2G memory_limit=512M max_execution_time=600 max_input_time=300"* ]] && pass || fail "php:limits changes the given limits and keeps the rest"
+(MANDAL_PHP_DIR="$phpl" MANDAL_DRY_RUN=1 cmd_php_limits --version=8.5 --upload-max-filesize=2G) > /dev/null 2>&1 && fail "php:limits refuses post_max_size below upload_max_filesize" || pass
+(MANDAL_PHP_DIR="$phpl" MANDAL_DRY_RUN=1 cmd_php_limits --version=8.5 --memory-limit=lots) > /dev/null 2>&1 && fail "php:limits validates sizes" || pass
+(MANDAL_PHP_DIR="$phpl" MANDAL_DRY_RUN=1 cmd_php_limits --version=8.5 --max-input-time=-5) > /dev/null 2>&1 && fail "php:limits validates seconds" || pass
+(MANDAL_PHP_DIR="$phpl" MANDAL_DRY_RUN=1 cmd_php_limits --version=8.5 --memory-limit=-1) > /dev/null 2>&1 && pass || fail "php:limits accepts no memory limit"
+(MANDAL_DRY_RUN=1 cmd_php_limits --version=8.5) > /dev/null 2>&1 && fail "php:limits wants a limit to change" || pass
+
 skip="$(MANDAL_DRY_RUN=1 MANDAL_SKIP_SSH_HARDENING=1 provision_apply 2>&1)"
 [[ "$skip" == *"skipped (--skip-ssh-hardening)"* ]] && pass || fail "ssh hardening can be skipped"
 
@@ -1156,6 +1190,7 @@ del="$(cmd_firewall_delete --number=3 --dry-run 2>&1)"
 
 assert_json "php:available lists versions with completeness" "$(cmd_php_available)" 'map(select(.version == "8.6")) | .[0].complete' "false"
 assert_json "php:list shows installed versions and their apps" "$(cmd_php_list)" 'map(select(.version == "8.5")) | .[0].apps | sort | join(",")' "api,shop"
+assert_json "php:list carries each version's FPM limits" "$(cmd_php_list)" 'map(select(.version == "8.5")) | .[0].limits | .upload_max_filesize + "/" + .memory_limit' "1G/256M"
 install="$(cmd_php_install --version=8.4 --dry-run 2>&1)"
 [[ "$install" == *"php8.4-fpm"* && "$install" == *"systemctl enable --now --quiet php8.4-fpm"* ]] && pass || fail "php:install installs the packages and starts fpm"
 [[ "$install" == *"write ${MANDAL_PHP_DIR}/8.4/fpm/pool.d/00-mandal-global.conf"* ]] && pass || fail "php:install gives FPM a process_control_timeout so reloads finish requests in flight"
@@ -1434,8 +1469,29 @@ assert_eq "docker app:create without a proxy completes" "0" "$?"
 : > "${TMP}/empty.yml"
 (cmd_app_create --name=tool --type=docker --from="${TMP}/empty.yml" --dry-run) > /dev/null 2>&1 && fail "docker app:create rejects an empty compose file" || pass
 
-(PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_COMPOSE_PORTS='[]' docker_app_create webx "$compose_file" true 20200 naked-only webx.example.com "") > /dev/null 2>&1 && fail "docker_app_create fails when the proxied port is not published" || pass
+(PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_COMPOSE_PORTS='[]' docker_app_create webx "$compose_file" true 20200 naked-only webx.example.com "" "") > /dev/null 2>&1 && fail "docker_app_create fails when the proxied port is not published" || pass
 [[ ! -e "${MANDAL_DOCKER_DIR}/webx" ]] && pass || fail "docker_app_create removes the project directory after a failed check"
+
+# docker_unpack_files: the files of an imported backup
+mkdir -p "${TMP}/import-src/savegame" "${TMP}/import-dest"
+printf 'world\n' > "${TMP}/import-src/savegame/world0.ksd"
+printf '{}\n' > "${TMP}/import-src/server.json"
+tar -czf "${TMP}/import-good.tar.gz" -C "${TMP}/import-src" .
+unpacked="$(docker_unpack_files "${TMP}/import-dest" "${TMP}/import-good.tar.gz" 2>&1)"
+[[ "$unpacked" == *"unpack ${TMP}/import-good.tar.gz into ${TMP}/import-dest ("*" files, "* && -f "${TMP}/import-dest/savegame/world0.ksd" ]] && pass || fail "docker_unpack_files unpacks files and folders"
+(docker_unpack_files "${TMP}/import-dest" "${FIXTURES}/import/traversal.tar.gz") > /dev/null 2>&1 && fail "docker_unpack_files refuses paths outside the directory" || pass
+[[ ! -e "${TMP}/escaped.txt" ]] && pass || fail "docker_unpack_files writes nothing outside the directory"
+ln -s /etc/passwd "${TMP}/import-src/link"
+tar -czf "${TMP}/import-link.tar.gz" -C "${TMP}/import-src" .
+(docker_unpack_files "${TMP}/import-dest" "${TMP}/import-link.tar.gz") > /dev/null 2>&1 && fail "docker_unpack_files refuses symlinks" || pass
+printf 'not a tarball' > "${TMP}/import-bad.tar.gz"
+(docker_unpack_files "${TMP}/import-dest" "${TMP}/import-bad.tar.gz") > /dev/null 2>&1 && fail "docker_unpack_files refuses a broken archive" || pass
+assert_eq "docker_human_size reads like the task output" "512 B|1.5 KB|19.1 MB" "$(docker_human_size 512)|$(docker_human_size 1536)|$(docker_human_size 20027801)"
+dfiles="$(PATH="${TMP}/compose-bin:${PATH}" cmd_app_create --name=gamex --type=docker --from="$compose_file" --files="${TMP}/import-good.tar.gz" --dry-run 2>&1)"
+[[ "$dfiles" == *"unpack ${TMP}/import-good.tar.gz into ${MANDAL_DOCKER_DIR}/gamex"* ]] && pass || fail "app:create --files unpacks the files into the project"
+(cmd_app_create --name=lara --domain=lara.example.com --files="${TMP}/import-good.tar.gz" --dry-run) > /dev/null 2>&1 && fail "app:create refuses --files for a Laravel app" || pass
+(PATH="${TMP}/compose-bin:${PATH}" cmd_app_create --name=gamex --type=docker --from="$compose_file" --files="${TMP}/missing.tar.gz" --dry-run) > /dev/null 2>&1 && fail "app:create refuses a missing --files archive" || pass
+rm -rf "${TMP}/import-src" "${TMP}/import-dest"
 
 mkdir -p "${MANDAL_DOCKER_DIR}/tool"
 cp "$compose_file" "${MANDAL_DOCKER_DIR}/tool/compose.yml"

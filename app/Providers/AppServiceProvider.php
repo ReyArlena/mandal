@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Mandal\ComposeImport;
 use App\Ssh\PhpseclibSshClient;
 use App\Ssh\SshClient;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -25,5 +26,12 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         RateLimiter::for('webhooks', fn (Request $request): Limit => Limit::perMinute(30)->by($request->route('token') ?? $request->ip()));
+
+        // Backup imports are the panel's only uploads; Livewire's own limit
+        // (12 MB, five minutes) would refuse them long before PHP does.
+        config([
+            'livewire.temporary_file_upload.rules' => ['required', 'file', 'max:'.intdiv(ComposeImport::bytes((string) config('mandal.imports.max_upload')), 1024)],
+            'livewire.temporary_file_upload.max_upload_time' => 30,
+        ]);
     }
 }

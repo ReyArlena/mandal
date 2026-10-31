@@ -26,18 +26,21 @@ Usage: mandal app:create --name=<name> --domain=<domain> [options]
   --proxy                 Docker apps: serve the domain through nginx
   --port=<port>           Docker apps: the port a service publishes on 127.0.0.1 for nginx
   --env=KEY=value         Docker apps: environment variable for .env (repeatable)
+  --files=<file.tar.gz>   Docker apps: files to unpack into the project directory
+                          before the compose file runs (removed once used)
   --dry-run               Print what would happen without doing it
 EOF
 }
 
 cmd_app_create() {
     local name="" domain="" www="redirect-to-naked" php="" repo="" branch="main" keep=5 database=true clone=ssh arg
-    local type="laravel" compose="" proxy=false port="" aliases=() env=()
+    local type="laravel" compose="" files="" proxy=false port="" aliases=() env=()
     for arg in "$@"; do
         case "$arg" in
             --name=*) name="${arg#*=}" ;;
             --type=*) type="${arg#*=}" ;;
             --from=*) compose="${arg#*=}" ;;
+            --files=*) files="${arg#*=}" ;;
             --proxy) proxy=true ;;
             --port=*) port="${arg#*=}" ;;
             --env=*) env+=("${arg#*=}") ;;
@@ -78,9 +81,11 @@ cmd_app_create() {
     require_root
     load_all_drivers
 
+    [[ -z "$files" || "$type" == "docker" ]] || die 64 "--files is only for Docker apps"
     if [[ "$type" == "docker" ]]; then
         [[ -n "$compose" ]] || die 64 "--from=<compose file> is required for a Docker app"
         validate_compose_file "$compose"
+        [[ -z "$files" || -r "$files" ]] || die 66 "cannot read $files"
         if [[ "$proxy" == true ]]; then
             [[ -n "$port" ]] || die 64 "--port is required with --proxy (the port a service publishes on 127.0.0.1)"
             validate_proxy_port "$port"
@@ -98,8 +103,8 @@ cmd_app_create() {
             audit "app:create $name (docker)"
         fi
         step "Creating Docker app $name"
-        docker_app_create "$name" "$compose" "$proxy" "$port" "$www" "$domain" "${aliases[*]:-}" "${env[@]}"
-        dry_run || rm -f "$compose"
+        docker_app_create "$name" "$compose" "$proxy" "$port" "$www" "$domain" "${aliases[*]:-}" "$files" "${env[@]}"
+        dry_run || rm -f "$compose" ${files:+"$files"}
         app_write_manifest "$name" \
             "TYPE=docker" \
             "DOMAIN=$domain" \

@@ -42,7 +42,7 @@ Run once per server from the panel's **Setup command**. Idempotent.
 | Clock | `timedatectl set-timezone UTC`, NTP on |
 | Swap | `/swapfile` (2 GiB, `0600`) and a line in `/etc/fstab`, only when no swap exists |
 | Kernel | `/etc/sysctl.d/60-mandal.conf` |
-| nginx | `nginx` package; `/etc/nginx/conf.d/mandal.conf` (global settings); `/etc/nginx/sites-available/mandal-default` linked into `sites-enabled` as the catch-all server, unless the stock `default` site is enabled and has been edited, in which case it is left as the catch-all |
+| nginx | `nginx` package; `/etc/nginx/conf.d/mandal.conf` (`server_tokens off` and `client_max_body_size 1g`, or the size `nginx:limits` recorded, each left out when `nginx.conf` sets it); `/etc/nginx/sites-available/mandal-default` linked into `sites-enabled` as the catch-all server, unless the stock `default` site is enabled and has been edited, in which case it is left as the catch-all |
 | PHP | The ondrej PPA through `add-apt-repository ppa:ondrej/php` when it has packages for the release; `php<version>-*` packages; `/etc/php/<version>/<sapi>/conf.d/99-mandal.ini`; `/etc/php/<version>/fpm/pool.d/00-mandal-global.conf` (`process_control_timeout = 10s`, so FPM reloads finish requests in flight); `update-alternatives` for `php`, `phar`, `phpize`, `php-config` |
 | Composer | `/usr/local/bin/composer`, installer verified against its published signature |
 | Database | `mariadb-server`, `mariadb-client`; `/etc/mysql/mariadb.conf.d/60-mandal.cnf` (`bind-address = 127.0.0.1`); root switched to Unix socket auth, anonymous users and the `test` database removed |
@@ -128,6 +128,7 @@ Removes, in order, the nginx site, the PHP-FPM pool, every Supervisor program of
 | Action | Path |
 |---|---|
 | Project | `/srv/docker/<app>/` (`0750`, root) |
+| Imported files (`--files`) | The `.tar.gz` the panel built from an imported backup, unpacked into the project as root (`--no-same-owner`, file modes kept) after checking that it only holds files and folders inside the project and fits on the disk; the uploaded archive is removed |
 | Compose file | `/srv/docker/<app>/compose.yml` (`0640`), checked with `docker compose config` before anything starts; the directory is removed again if the check fails |
 | Environment | `/srv/docker/<app>/.env` (`0600`) |
 | Containers | `docker compose --project-name <app> pull`, then `up -d --remove-orphans` |
@@ -186,7 +187,9 @@ Every backup target (the server's databases, or one app) has a local and a remot
 
 | Command | Changes |
 |---|---|
-| `php:install` | `php<v>-*` packages; `/etc/php/<v>/{cli,fpm}/conf.d/99-mandal.ini`; `/etc/php/<v>/fpm/pool.d/00-mandal-global.conf`; `php<v>-fpm` enabled |
+| `php:install` | `php<v>-*` packages; `/etc/php/<v>/{cli,fpm}/conf.d/99-mandal.ini` (`expose_php = Off`; FPM also `upload_max_filesize = 1G`, `post_max_size = 1G`, `memory_limit = 256M`, `max_execution_time = 300`, `max_input_time = 300`, kept when the file already sets other values); `/etc/php/<v>/fpm/pool.d/00-mandal-global.conf`; `php<v>-fpm` enabled |
+| `php:limits` | The limits in `/etc/php/<v>/fpm/conf.d/99-mandal.ini`, then `php<v>-fpm` reloaded; refuses a `post_max_size` below `upload_max_filesize` |
+| `nginx:limits` | `NGINX_CLIENT_MAX_BODY_SIZE` in `/etc/mandal/server.conf` and `client_max_body_size` in `/etc/nginx/conf.d/mandal.conf`, then nginx tested and reloaded; refused when `nginx.conf` sets the directive itself |
 | `php:default` | `update-alternatives --set` for `php`, `phar`, `phar.phar`, `phpize`, `php-config` |
 | `php:remove` | The version's packages purged; refused while an app uses it |
 

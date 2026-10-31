@@ -129,25 +129,38 @@ class MandalClient
     /**
      * Upload a file into the SSH user's upload directory and run a mandal
      * command that consumes it. The command receives the remote path as
-     * `--from=<path>`.
+     * `--from=<path>`. Local files in $files are copied next to it and passed
+     * the same way under their own option, `['--files' => '/tmp/x.tar.gz']`;
+     * $onUpload hears how far each has got.
      *
      * @param  (callable(string): void)|null  $onOutput
+     * @param  array<string, string>  $files
+     * @param  (callable(string, int, int): void)|null  $onUpload  option, bytes sent, bytes in all
      */
-    public function runWithUpload(Server $server, string $arguments, string $contents, string $extension = '', ?callable $onOutput = null, int $timeoutSeconds = 60): CommandResult
+    public function runWithUpload(Server $server, string $arguments, string $contents, string $extension = '', ?callable $onOutput = null, int $timeoutSeconds = 60, array $files = [], ?callable $onUpload = null): CommandResult
     {
         $connection = $this->ssh->connect($server);
         $remote = self::UPLOAD_DIR.'/'.Str::random(16).$extension;
+        $uploaded = [$remote];
 
         try {
             $connection->upload($remote, $contents, 0600);
-            $absolute = $connection->run('printf %s "$HOME"', timeoutSeconds: 15)->output;
-            $path = rtrim(trim($absolute), '/').'/'.$remote;
+            $home = rtrim(trim($connection->run('printf %s "$HOME"', timeoutSeconds: 15)->output), '/');
+            $arguments .= ' --from='.escapeshellarg($home.'/'.$remote);
 
-            return $connection->run($this->command($arguments.' --from='.escapeshellarg($path), asRoot: true), $onOutput, $timeoutSeconds);
+            foreach ($files as $option => $local) {
+                $file = self::UPLOAD_DIR.'/'.Str::random(16).'-'.basename($local);
+                $uploaded[] = $file;
+                $size = (int) filesize($local);
+                $connection->uploadFile($file, $local, 0600, $onUpload === null ? null : fn (int $sent) => $onUpload($option, $sent, $size));
+                $arguments .= ' '.$option.'='.escapeshellarg($home.'/'.$file);
+            }
+
+            return $connection->run($this->command($arguments, asRoot: true), $onOutput, $timeoutSeconds);
         } finally {
-            // The file can hold secrets. The CLI removes it once used, but not
-            // when it refuses the command, so it is always removed here too.
-            rescue(fn () => $connection->run('rm -f -- '.escapeshellarg($remote), timeoutSeconds: 15), report: false);
+            // The files can hold secrets. The CLI removes them once used, but
+            // not when it refuses the command, so they are always removed here too.
+            rescue(fn () => $connection->run('rm -f -- '.implode(' ', array_map('escapeshellarg', $uploaded)), timeoutSeconds: 15), report: false);
             $connection->disconnect();
         }
     }

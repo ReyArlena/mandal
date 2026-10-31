@@ -111,6 +111,16 @@ class FakeSshClient implements Connection, SshClient
         $this->uploads[$remotePath] = ['contents' => $contents, 'mode' => $mode];
     }
 
+    public function uploadFile(string $remotePath, string $localPath, int $mode = 0644, ?callable $onProgress = null): void
+    {
+        $contents = (string) file_get_contents($localPath);
+        $this->uploads[$remotePath] = ['contents' => $contents, 'mode' => $mode];
+
+        if ($onProgress !== null) {
+            $onProgress(strlen($contents));
+        }
+    }
+
     public function disconnect(): void {}
 
     public function ran(string $commandFragment): bool

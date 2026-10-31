@@ -7,6 +7,7 @@ MANDAL_COMMANDS+=("php:list|Installed PHP versions, the CLI default and which ap
 MANDAL_COMMANDS+=("php:install|Install a PHP version with every extension Laravel needs (--version=8.4)|write")
 MANDAL_COMMANDS+=("php:default|Make a version the CLI default (--version=8.4)|write")
 MANDAL_COMMANDS+=("php:remove|Remove a PHP version no app uses (--version=8.3)|write")
+MANDAL_COMMANDS+=("php:limits|Change a version's PHP-FPM limits (--version=8.5 [--upload-max-filesize=1G] [--post-max-size=1G] [--memory-limit=256M] [--max-execution-time=300] [--max-input-time=300])|write")
 
 php_parse_version() {
     local arg
@@ -46,7 +47,67 @@ cmd_php_list() {
         printf '%s\t%s\t%s\n' "$v" "$(php_apps_using "$v" | tr '\n' ' ' | sed 's/ $//')" "$(package_version "php${v}-cli")"
     done | json_tsv version apps package | jq --arg default "$(php_default_version)" '
         map(.apps |= (split(" ") | map(select(length > 0))) | . + {default: (.version == $default)})
-    '
+    ' | php_list_add_limits
+}
+
+# Adds each version's FPM limits to the php:list rows.
+php_list_add_limits() {
+    local list version limits='{}'
+    list="$(cat)"
+    for version in $(jq -r '.[].version' <<< "$list"); do
+        limits="$(jq --arg v "$version" --argjson l "$(php_limits_json "$version")" '. + {($v): $l}' <<< "$limits")"
+    done
+    jq --argjson limits "$limits" 'map(. + {limits: $limits[.version]})' <<< "$list"
+}
+
+cmd_php_limits() {
+    local arg version="" key value pairs=()
+    for arg in "$@"; do
+        case "$arg" in
+            --version=*) version="${arg#*=}" ;;
+            --upload-max-filesize=* | --post-max-size=* | --memory-limit=* | --max-execution-time=* | --max-input-time=*)
+                key="${arg%%=*}"
+                key="${key#--}"
+                pairs+=("${key//-/_}=${arg#*=}")
+                ;;
+            --dry-run) export MANDAL_DRY_RUN=1 ;;
+            *) die 64 "unknown option '$arg'" ;;
+        esac
+    done
+    [[ -n "$version" ]] || die 64 "--version is required"
+    validate_php_version "$version"
+    [[ ${#pairs[@]} -gt 0 ]] || die 64 "give at least one limit to change"
+    local -A limits=()
+    for key in "${MANDAL_PHP_LIMITS[@]}"; do
+        limits[$key]="$(php_limit "$version" "$key")"
+    done
+    for arg in "${pairs[@]}"; do
+        key="${arg%%=*}"
+        value="${arg#*=}"
+        case "$key" in
+            max_execution_time | max_input_time) validate_php_seconds "$key" "$value" ;;
+            *)
+                value="${value^^}"
+                validate_php_size "$key" "$value"
+                ;;
+        esac
+        limits[$key]="$value"
+    done
+    [[ "$(php_size_bytes "${limits[post_max_size]}")" -ge "$(php_size_bytes "${limits[upload_max_filesize]}")" ]] \
+        || die 2 "post_max_size (${limits[post_max_size]}) must be at least upload_max_filesize (${limits[upload_max_filesize]}), or uploads that size fail"
+    require_root
+    php_version_installed "$version" || dry_run || die "PHP $version is not installed"
+    if ! dry_run; then
+        with_lock
+        audit "php:limits $version ${pairs[*]}"
+    fi
+    pairs=()
+    for key in "${MANDAL_PHP_LIMITS[@]}"; do
+        pairs+=("$key=${limits[$key]}")
+    done
+    php_write_dropins "$version" "${pairs[@]}"
+    service_reload_or_restart "php${version}-fpm"
+    printf 'PHP %s limits: %s\n' "$version" "${pairs[*]}"
 }
 
 cmd_php_install() {

@@ -4,10 +4,14 @@ namespace App\Jobs;
 
 use App\Enums\SourceProviderType;
 use App\Enums\WwwMode;
+use App\Mandal\ComposeImport;
+use App\Mandal\InvalidImport;
 use App\Mandal\MandalClient;
 use App\Models\Server;
 use App\Sources\SourceProviders;
 use App\Ssh\CommandResult;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use Throwable;
 
@@ -16,6 +20,11 @@ use Throwable;
  */
 class CreateApp extends RunMandalTask
 {
+    /**
+     * The imported backup's files, repacked for `app:create --files`.
+     */
+    private ?string $packed = null;
+
     public function arguments(): string
     {
         $options = $this->task->options ?? [];
@@ -93,6 +102,67 @@ class CreateApp extends RunMandalTask
         }
 
         return ['contents' => $script."\n", 'extension' => '.sh'];
+    }
+
+    /**
+     * A Docker app started from an imported backup gets the backup's files,
+     * repacked without its compose file and .env (the form supplies those).
+     */
+    protected function files(): array
+    {
+        $options = $this->task->options ?? [];
+        $import = $options['import'] ?? null;
+
+        if (($options['type'] ?? 'laravel') !== 'docker' || ! is_string($import) || $import === '') {
+            return [];
+        }
+
+        $path = self::importPath($import);
+        $name = (string) ($options['import_name'] ?? basename($import));
+
+        if ($path === null) {
+            throw new InvalidImport("The uploaded backup {$name} is no longer on the panel; create the app again.");
+        }
+
+        $this->task->appendOutput("Reading {$name}\n");
+        $archive = ComposeImport::inspect($path);
+        $this->task->appendOutput(sprintf("Packing %d files (%s) for the server\n", $archive->files, ComposeImport::human($archive->bytes)));
+        $this->packed = storage_path('app/private/imports/task-'.$this->task->getKey().'-files.tar.gz');
+        $this->task->appendOutput('Packed '.ComposeImport::human($archive->repack($this->packed))."\n");
+
+        return ['--files' => $this->packed];
+    }
+
+    /**
+     * The upload and its repacked copy are removed whatever happened; the
+     * files now live on the server, or the app has to be created again.
+     */
+    protected function cleanUp(): void
+    {
+        if ($this->packed !== null) {
+            File::delete($this->packed);
+        }
+
+        $import = $this->task->options['import'] ?? null;
+
+        if (is_string($import) && ($path = self::importPath($import)) !== null) {
+            File::delete($path);
+        }
+    }
+
+    /**
+     * Where an upload saved under imports/ on the local disk is, if it is
+     * still there.
+     */
+    public static function importPath(string $import): ?string
+    {
+        if (! preg_match('#^imports/[A-Za-z0-9._-]+$#', $import) || str_contains($import, '..')) {
+            return null;
+        }
+
+        $path = Storage::disk('local')->path($import);
+
+        return is_file($path) ? $path : null;
     }
 
     /**

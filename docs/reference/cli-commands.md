@@ -47,11 +47,13 @@
 | `key:remove` | Remove a panel's key by its fingerprint (--fingerprint=SHA256:...) |
 | `logs:read` | Read a log source as JSON (--source=&lt;id&gt; [--lines=] [--grep=] [--since=] [--level=] [--after=]) |
 | `logs:sources` | List readable log sources as JSON (--app=&lt;name&gt; to filter) |
+| `nginx:limits` | Change nginx's request body limit for every site (--client-max-body-size=1g) |
 | `panel:install` | Create an app for hosting the panel on this server (--name= --domain= --repo=) |
 | `panel:update` | Update the hosted panel and the CLI to a release (--version=&lt;tag&gt;, default: the latest) |
 | `php:available` | PHP versions the package source offers, as JSON |
 | `php:default` | Make a version the CLI default (--version=8.4) |
 | `php:install` | Install a PHP version with every extension Laravel needs (--version=8.4) |
+| `php:limits` | Change a version's PHP-FPM limits (--version=8.5 [--upload-max-filesize=1G] [--post-max-size=1G] [--memory-limit=256M] [--max-execution-time=300] [--max-input-time=300]) |
 | `php:list` | Installed PHP versions, the CLI default and which apps use each, as JSON |
 | `php:remove` | Remove a PHP version no app uses (--version=8.3) |
 | `provision` | Provision the server, or inspect it first with --check |

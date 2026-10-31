@@ -81,8 +81,39 @@ EOF
 prov_nginx() {
     step "nginx"
     apt_install nginx
+    nginx_write_mandal_conf
+    nginx_default_server
+    nginx_check_and_reload
+}
+
+# nginx's request body limit for every site. Uploads through the panel pass
+# it before PHP sees them, so it defaults to 1 GB like PHP's upload limit
+# (nginx's own default is 1 MB). `nginx:limits` records another value.
+MANDAL_NGINX_BODY_SIZE_DEFAULT="1g"
+
+nginx_body_size() {
+    local size
+    size="$(server_conf_get NGINX_CLIENT_MAX_BODY_SIZE 2> /dev/null || true)"
+    printf '%s\n' "${size:-$MANDAL_NGINX_BODY_SIZE_DEFAULT}"
+}
+
+# The size in effect and whether Mandal sets it: {value, managed}
+nginx_body_size_json() {
+    local value managed=true
+    if nginx_conf_sets client_max_body_size; then
+        managed=false
+        value="$(sed -nE 's/^[[:space:]]*client_max_body_size[[:space:]]+([^;[:space:]]+).*/\1/p' "$MANDAL_NGINX_DIR/nginx.conf" | tail -n 1)"
+    else
+        value="$(sed -nE 's/^[[:space:]]*client_max_body_size[[:space:]]+([^;[:space:]]+).*/\1/p' "$MANDAL_NGINX_DIR/conf.d/mandal.conf" 2> /dev/null | tail -n 1)"
+    fi
+    jq -n --arg value "${value:-1m}" --argjson managed "$managed" '{value: $value, managed: $managed}'
+}
+
+# Mandal's settings for every site, each left out when nginx.conf already
+# sets it: nginx refuses a directive set twice in the same block.
+nginx_write_mandal_conf() {
     local settings="" directive
-    for directive in "server_tokens off" "client_max_body_size 64m"; do
+    for directive in "server_tokens off" "client_max_body_size $(nginx_body_size)"; do
         if nginx_conf_sets "${directive%% *}"; then
             printf '+ nginx.conf already sets %s; leaving it there\n' "${directive%% *}"
         else
@@ -94,8 +125,6 @@ prov_nginx() {
 # managed-by: mandal
 ${settings}
 EOF
-    nginx_default_server
-    nginx_check_and_reload
 }
 
 # Whether nginx.conf itself sets a directive. nginx refuses a directive set

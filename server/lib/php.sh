@@ -85,14 +85,70 @@ php_version_installed() {
     package_installed "php$1-fpm"
 }
 
+# The PHP-FPM limits Mandal manages per version in 99-mandal.ini, with their
+# defaults: big enough for a 1 GB upload through the panel. The CLI keeps
+# PHP's own (no time limit), so artisan and queue workers are unaffected.
+MANDAL_PHP_LIMITS=(upload_max_filesize post_max_size memory_limit max_execution_time max_input_time)
+declare -gA MANDAL_PHP_LIMIT_DEFAULTS=([upload_max_filesize]=1G [post_max_size]=1G [memory_limit]=256M [max_execution_time]=300 [max_input_time]=300)
+
+# php_limit version key: the value in the version's FPM drop-in, or the default.
+php_limit() {
+    local value
+    value="$(sed -nE "s/^$2[[:space:]]*=[[:space:]]*([^[:space:];]+).*/\1/p" "$MANDAL_PHP_DIR/$1/fpm/conf.d/99-mandal.ini" 2> /dev/null | tail -n 1)"
+    printf '%s\n' "${value:-${MANDAL_PHP_LIMIT_DEFAULTS[$2]}}"
+}
+
+php_limits_json() {
+    local key args=()
+    for key in "${MANDAL_PHP_LIMITS[@]}"; do
+        args+=(--arg "$key" "$(php_limit "$1" "$key")")
+    done
+    jq -n "${args[@]}" '$ARGS.named'
+}
+
+# A PHP size such as 1G, 512M or 8388608 in bytes; -1 (no limit) stays -1.
+php_size_bytes() {
+    awk -v s="$1" 'BEGIN {
+        if (s == "-1") { print -1; exit }
+        n = s + 0; u = toupper(substr(s, length(s)))
+        if (u == "K") n *= 1024; else if (u == "M") n *= 1048576; else if (u == "G") n *= 1073741824
+        printf "%.0f\n", n
+    }'
+}
+
+validate_php_size() {
+    [[ "$2" =~ ^[1-9][0-9]{0,5}[KMG]?$ || ("$1" == memory_limit && "$2" == "-1") ]] \
+        || die 2 "$1 must be a size such as 512M or 1G"
+}
+
+validate_php_seconds() {
+    [[ "$2" =~ ^[0-9]{1,6}$ ]] || die 2 "$1 must be a number of seconds (0 for no limit)"
+}
+
+# php_write_dropins version [key=value...]: rewrites the drop-ins, keeping
+# each limit's current value unless a new one is given.
 php_write_dropins() {
-    local version="$1" sapi
-    for sapi in fpm cli; do
-        write_file "$MANDAL_PHP_DIR/$version/$sapi/conf.d/99-mandal.ini" 0644 <<'EOF'
+    local version="$1" key pair lines=""
+    shift
+    local -A limits=()
+    for key in "${MANDAL_PHP_LIMITS[@]}"; do
+        limits[$key]="$(php_limit "$version" "$key")"
+    done
+    for pair in "$@"; do
+        limits[${pair%%=*}]="${pair#*=}"
+    done
+    for key in "${MANDAL_PHP_LIMITS[@]}"; do
+        lines+="$key = ${limits[$key]}"$'\n'
+    done
+    write_file "$MANDAL_PHP_DIR/$version/fpm/conf.d/99-mandal.ini" 0644 <<EOF
+; managed-by: mandal
+expose_php = Off
+${lines%$'\n'}
+EOF
+    write_file "$MANDAL_PHP_DIR/$version/cli/conf.d/99-mandal.ini" 0644 <<'EOF'
 ; managed-by: mandal
 expose_php = Off
 EOF
-    done
     # FPM accepts [global] from an included file, so php-fpm.conf stays
     # untouched. With the default of 0 a reload kills workers at once and
     # resets every request in flight, which every deploy would do.

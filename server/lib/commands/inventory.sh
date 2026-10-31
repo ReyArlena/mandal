@@ -241,8 +241,8 @@ inv_nginx() {
             }')"
         sites="$(jq -n --argjson a "$sites" --argjson b "$row" '$a + [$b]')"
     done
-    jq -n --argjson installed "$installed" --arg version "$version" --argjson config_ok "$config_ok" --argjson sites "$sites" \
-        '{installed: $installed, version: $version, config_ok: $config_ok, sites: $sites}'
+    jq -n --argjson installed "$installed" --arg version "$version" --argjson config_ok "$config_ok" --argjson sites "$sites" --argjson body_size "$(nginx_body_size_json)" \
+        '{installed: $installed, version: $version, config_ok: $config_ok, client_max_body_size: $body_size, sites: $sites}'
 }
 
 # ---------------------------------------------------------------------------

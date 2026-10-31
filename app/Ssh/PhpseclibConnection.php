@@ -89,6 +89,21 @@ class PhpseclibConnection implements Connection
         $this->session->chmod($mode, $remotePath);
     }
 
+    public function uploadFile(string $remotePath, string $localPath, int $mode = 0644, ?callable $onProgress = null): void
+    {
+        $directory = dirname($remotePath);
+
+        if ($directory !== '.' && ! $this->session->is_dir($directory)) {
+            $this->session->mkdir($directory, -1, true);
+        }
+
+        if (! $this->session->put($remotePath, $localPath, SFTP::SOURCE_LOCAL_FILE, progressCallback: $onProgress)) {
+            throw new SshException("Could not write {$remotePath}: ".($this->session->getLastSFTPError() ?: 'unknown error'));
+        }
+
+        $this->session->chmod($mode, $remotePath);
+    }
+
     public function disconnect(): void
     {
         $this->session->disconnect();

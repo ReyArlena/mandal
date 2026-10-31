@@ -28,5 +28,13 @@ interface Connection
      */
     public function upload(string $remotePath, string $contents, int $mode = 0644): void;
 
+    /**
+     * Copy a local file to the server without reading it into memory. The
+     * callback receives the bytes sent so far.
+     *
+     * @param  (callable(int): void)|null  $onProgress
+     */
+    public function uploadFile(string $remotePath, string $localPath, int $mode = 0644, ?callable $onProgress = null): void;
+
     public function disconnect(): void;
 }

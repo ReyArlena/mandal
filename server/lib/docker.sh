@@ -178,12 +178,44 @@ docker_write_proxy() {
     nginx_check_and_reload
 }
 
-# docker_app_create name compose_file proxy port mode domain aliases env...
+# docker_unpack_files dir archive: unpacks the .tar.gz of files the panel
+# built from an imported backup into the project directory. Only plain files
+# and folders with paths inside the directory are accepted, and they must
+# fit on the disk.
+docker_unpack_files() {
+    local dir="$1" archive="$2" names listing needed free
+    names="$(tar -tzf "$archive" 2> /dev/null)" || die "$archive is not a readable .tar.gz"
+    listing="$(tar -tzvf "$archive" 2> /dev/null)"
+    if grep -Eq '^/|(^|/)\.\.(/|$)' <<< "$names"; then
+        die "the files archive has paths outside the project directory"
+    fi
+    if [[ -n "$listing" ]] && awk '{ print substr($1, 1, 1) }' <<< "$listing" | grep -qv '^[-d]$'; then
+        die "the files archive may only hold files and folders, not links or devices"
+    fi
+    needed="$(awk '{ s += $3 } END { printf "%.0f", s }' <<< "$listing")"
+    free="$(df -PB1 "$(dirname "$dir")" 2> /dev/null | awk 'NR == 2 { print $4 }')"
+    if [[ -n "$free" && "$needed" -ge "$free" ]]; then
+        die "the files need $(docker_human_size "$needed") but only $(docker_human_size "$free") is free"
+    fi
+    printf '+ unpack %s into %s (%s files, %s)\n' "$archive" "$dir" "$(grep -c '^-' <<< "$listing" || true)" "$(docker_human_size "$needed")"
+    dry_run && return 0
+    tar -xzf "$archive" -C "$dir" --no-same-owner --no-overwrite-dir
+}
+
+docker_human_size() {
+    awk -v b="$1" 'BEGIN { split("B KB MB GB TB", u); i = 1; while (b >= 1024 && i < 5) { b /= 1024; i++ } printf (i == 1 ? "%d %s" : "%.1f %s"), b, u[i] }'
+}
+
+# docker_app_create name compose_file proxy port mode domain aliases files env...
 docker_app_create() {
-    local name="$1" compose="$2" proxy="$3" port="$4" mode="$5" domain="$6" aliases="$7" dir
-    shift 7
+    local name="$1" compose="$2" proxy="$3" port="$4" mode="$5" domain="$6" aliases="$7" files="$8" dir
+    shift 8
     dir="$(docker_app_dir "$name")"
     run_cmd install -d -m 0750 "$dir"
+    if [[ -n "$files" ]] && ! (docker_unpack_files "$dir" "$files"); then
+        dry_run || rm -rf "$dir"
+        die "app '$name' was not created"
+    fi
     write_file "$dir/.env" 0600 < <(printf '%s\n' "$@")
     write_file "$dir/compose.yml" 0640 < "$compose"
     # The check dies on failure, so it runs in a subshell and the files

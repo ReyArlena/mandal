@@ -2,6 +2,12 @@
 
 Choose **Docker compose project** in the New app form for anything that is not Laravel, from a web app to a game server. Paste the compose file and any environment variables. Mandal writes them to `/srv/docker/<app>` (`compose.yml` and `.env`), checks the file with `docker compose config` and starts the project with `docker compose up -d`. The compose file runs as root, so it can do anything on the server; only paste files you trust. The form starts from a template that sets `security_opt: [no-new-privileges:true]`.
 
+## Importing a backup
+
+**Import backup (optional)**, folded under the name field, takes a `.zip` or `.tar.gz` of a project folder, up to the size shown under the field: the smallest of the panel's own PHP `upload_max_filesize` and `post_max_size` and its import limit (1 GB by default). The archive goes to the panel, so it is the panel's PHP that counts, not the target server's. The archive is checked as soon as it arrives: only files and folders, no links or paths leaving the folder, at most 20 GB unpacked, and a compose file at the top or inside a single top-level folder, found under Compose's own names (`compose.yaml`, `compose.yml`, `docker-compose.yaml`, `docker-compose.yml`). Its contents fill the compose field and are saved as `compose.yml`; a `.env` fills the environment variables, and the name is suggested from the file name. Creating the app packs the remaining files, uploads them with the compose file (progress in the task output) and unpacks them into `/srv/docker/<app>` before the containers start. The files belong to root with their modes kept, so an image that runs as another user may need its folders handed over to that user.
+
+When the panel runs on the server, the upload also passes nginx (`client_max_body_size`) and that server's PHP-FPM limits; raise them on the **PHP** page for larger archives. `MANDAL_IMPORT_MAX_UPLOAD` and `MANDAL_IMPORT_MAX_UNPACKED` in the panel's `.env` change its own limits.
+
 ## With or without nginx
 
 Tick **Serve a domain through nginx** for HTTP apps. Give the domain and the port a service publishes on `127.0.0.1` (for example `127.0.0.1:20000:80` in `ports:`), and nginx proxies the domain to it with websocket support. SSL works as for Laravel apps. The port must be a loopback port the compose file actually publishes; Mandal checks before writing the site.
