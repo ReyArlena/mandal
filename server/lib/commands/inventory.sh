@@ -11,23 +11,15 @@ MANDAL_COMMANDS+=("app:list|List apps and their manifests as JSON|read")
 
 cmd_inventory() {
     load_all_drivers
-    jq -n \
-        --argjson mandal "$(inv_mandal)" \
-        --argjson system "$(inv_system)" \
-        --argjson services "$(inv_services)" \
-        --argjson php "$(inv_php)" \
-        --argjson nginx "$(inv_nginx)" \
-        --argjson database "$(inv_database)" \
-        --argjson cache "$(inv_cache)" \
-        --argjson js "$(inv_js)" \
-        --argjson supervisor "$(inv_supervisor)" \
-        --argjson certificates "$(inv_certificates)" \
-        --argjson firewall "$(inv_firewall)" \
-        --argjson fail2ban "$(inv_fail2ban)" \
-        --argjson docker "$(inv_docker)" \
-        --argjson apps "$(inv_apps)" \
-        --argjson backups "$(inv_backups)" \
-        '$ARGS.named'
+    local dir section
+    local -a sections=(mandal system services php nginx database cache js supervisor certificates firewall fail2ban docker apps backups) args=()
+    dir="$(mktemp -d)"
+    run_parallel "$dir" "${sections[@]/#/inv_}"
+    for section in "${sections[@]}"; do
+        args+=(--argjson "$section" "$(< "$dir/inv_$section")")
+    done
+    rm -rf "$dir"
+    jq -n "${args[@]}" '$ARGS.named'
 }
 
 cmd_app_list() {

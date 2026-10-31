@@ -93,6 +93,24 @@ is_root() {
     [[ "${EUID:-$(id -u)}" -eq 0 ]]
 }
 
+# run_parallel dir function...
+# Runs the functions at once, leaving each one's output in dir/<function>.
+# Collectors spend most of their time starting processes, so on a slow
+# server the total is the slowest of them instead of their sum. errexit is
+# off in each, as it would be inside $( ).
+run_parallel() {
+    local dir="$1" fn pid
+    local -a pids=()
+    shift
+    for fn in "$@"; do
+        ( set +e; "$fn" > "$dir/$fn" ) &
+        pids+=("$!")
+    done
+    for pid in "${pids[@]}"; do
+        wait "$pid" || true
+    done
+}
+
 require_root() {
     is_root || die 77 "this command must be run as root (use sudo)"
 }

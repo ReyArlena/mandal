@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `inventory` and `updates:status` run their collectors at once instead of one after another. Most of their time is spent starting processes (`systemctl`, `docker`, `fail2ban-client`, `supervisorctl`), so on a slow VPS the inventory took 8-9 s; it now takes about as long as its slowest part.
+
 ### Fixed
 
 - `updates:status`, `provision` and `provision --check` hung when run by hand from a terminal: reading Composer's version as root made Composer ask "Continue as root/super user?". The version is now read as `nobody`, without plugins and with no terminal to ask on.

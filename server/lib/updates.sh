@@ -135,20 +135,32 @@ updates_release_upgrade() {
     fi
 }
 
+updates_pending_json() {
+    updates_pending_tsv | json_tsv package current candidate security | jq 'map(.security |= (. == "true"))'
+}
+
+updates_held_json() {
+    updates_held_tsv | json_lines
+}
+
+updates_components_json() {
+    updates_components_tsv | json_tsv id name installed latest update_available note | jq 'map(.update_available |= (. == "true"))'
+}
+
 updates_status_json() {
-    local pending held components
-    pending="$(updates_pending_tsv | json_tsv package current candidate security | jq 'map(.security |= (. == "true"))')"
-    held="$(updates_held_tsv | json_lines)"
-    components="$(updates_components_tsv | json_tsv id name installed latest update_available note | jq 'map(.update_available |= (. == "true"))')"
+    local dir
+    local -a parts=(inv_system updates_kernel_json updates_pending_json updates_held_json updates_components_json updates_unattended_json updates_history_json updates_release_upgrade)
+    dir="$(mktemp -d)"
+    run_parallel "$dir" "${parts[@]}"
     jq -n \
-        --argjson system "$(inv_system)" \
-        --argjson kernel "$(updates_kernel_json)" \
-        --argjson pending "$pending" \
-        --argjson held "$held" \
-        --argjson components "$components" \
-        --argjson unattended "$(updates_unattended_json)" \
-        --argjson history "$(updates_history_json)" \
-        --arg release "$(updates_release_upgrade)" \
+        --argjson system "$(< "$dir/inv_system")" \
+        --argjson kernel "$(< "$dir/updates_kernel_json")" \
+        --argjson pending "$(< "$dir/updates_pending_json")" \
+        --argjson held "$(< "$dir/updates_held_json")" \
+        --argjson components "$(< "$dir/updates_components_json")" \
+        --argjson unattended "$(< "$dir/updates_unattended_json")" \
+        --argjson history "$(< "$dir/updates_history_json")" \
+        --arg release "$(< "$dir/updates_release_upgrade")" \
         '{
             os: $system.os,
             uptime_seconds: $system.uptime_seconds,
@@ -161,6 +173,7 @@ updates_status_json() {
             history: $history,
             release_upgrade: (if $release == "" then null else $release end)
         }'
+    rm -rf "$dir"
 }
 
 # ---------------------------------------------------------------------------
