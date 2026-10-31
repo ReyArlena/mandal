@@ -82,7 +82,7 @@ final class ComposeImport
             }
         }
 
-        $limit = self::bytes((string) config('mandal.imports.max_unpacked'));
+        $limit = self::limit('max_unpacked', '20G');
 
         if ($bytes > $limit) {
             throw new InvalidImport('The archive unpacks to '.self::human($bytes).', more than the '.self::human($limit).' allowed.');
@@ -169,8 +169,28 @@ final class ComposeImport
         return min(
             self::bytes((string) ini_get('upload_max_filesize')) ?: PHP_INT_MAX,
             self::bytes((string) ini_get('post_max_size')) ?: PHP_INT_MAX,
-            self::bytes((string) config('mandal.imports.max_upload')),
+            self::configuredUploadBytes(),
         );
+    }
+
+    /**
+     * The panel's own import limit, before PHP's limits are applied.
+     */
+    public static function configuredUploadBytes(): int
+    {
+        return self::limit('max_upload', '1G');
+    }
+
+    /**
+     * A size from config/mandal.php, or the default when it is missing or
+     * unreadable: a worker started before the setting existed sees none,
+     * which must not read as "nothing allowed".
+     */
+    private static function limit(string $key, string $default): int
+    {
+        $bytes = self::bytes((string) config("mandal.imports.{$key}", $default));
+
+        return $bytes > 0 ? $bytes : self::bytes($default);
     }
 
     /**

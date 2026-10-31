@@ -37,7 +37,7 @@ class AppServiceProvider extends ServiceProvider
         // Backup imports are the panel's only uploads; Livewire's own limit
         // (12 MB, five minutes) would refuse them long before PHP does.
         config([
-            'livewire.temporary_file_upload.rules' => ['required', 'file', 'max:'.intdiv(ComposeImport::bytes((string) config('mandal.imports.max_upload')), 1024)],
+            'livewire.temporary_file_upload.rules' => ['required', 'file', 'max:'.intdiv(ComposeImport::configuredUploadBytes(), 1024)],
             'livewire.temporary_file_upload.max_upload_time' => 30,
         ]);
     }

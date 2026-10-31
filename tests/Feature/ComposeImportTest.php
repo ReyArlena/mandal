@@ -167,6 +167,13 @@ it('refuses an archive that unpacks to more than the limit', function () {
     expect(fn () => ComposeImport::inspect($zip))->toThrow(InvalidImport::class, 'more than the 1 KB allowed');
 });
 
+it('falls back to the default limits when the settings are missing', function () {
+    config(['mandal.imports' => null]);
+
+    expect(ComposeImport::configuredUploadBytes())->toBe(1073741824)
+        ->and(ComposeImport::inspect(makeZip($this->dir.'/game.zip', ['compose.yml' => COMPOSE]))->composeName)->toBe('compose.yml');
+});
+
 it('converts sizes and caps uploads at the smallest limit', function () {
     config(['mandal.imports.max_upload' => '1K']);
 
