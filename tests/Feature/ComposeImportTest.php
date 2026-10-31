@@ -259,6 +259,7 @@ describe('creating an app from an import', function () {
             ->toContain('Uploading: 100%')
             ->and($command)->toContain("--from='/home/mandal/.mandal/")
             ->toContain("--files='/home/mandal/.mandal/")
+            ->toEndWith(' 2>&1')
             ->and($files)->toHaveCount(1)
             ->and(tarNames($this->dir.'/uploaded.tar.gz'))->toBe(['./', './savegame/', './savegame/world0.ksd'])
             ->and(Storage::disk('local')->exists('imports/upload.zip'))->toBeFalse()

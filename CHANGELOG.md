@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Tasks that upload a file first (creating an app, which also uploads the compose file or deploy script) showed the command's stderr only once it finished, so a long `docker compose pull` looked hung. It now streams with the rest of the output.
 - `updates:status`, `provision` and `provision --check` hung when run by hand from a terminal: reading Composer's version as root made Composer ask "Continue as root/super user?". The version is now read as `nobody`, without plugins and with no terminal to ask on.
 
 ## [0.2.0] - 2026-10-31

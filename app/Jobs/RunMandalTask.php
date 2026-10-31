@@ -117,6 +117,7 @@ abstract class RunMandalTask implements ShouldBeUnique, ShouldQueue
                     timeoutSeconds: $this->timeout - 60,
                     files: $files,
                     onUpload: $this->reportUpload(...),
+                    mergeErrorOutput: true,
                 );
         } catch (SshException|InvalidImport $exception) {
             $task->appendOutput("\nerror: {$exception->getMessage()}\n");

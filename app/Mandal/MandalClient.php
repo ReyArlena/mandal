@@ -131,13 +131,15 @@ class MandalClient
      * command that consumes it. The command receives the remote path as
      * `--from=<path>`. Local files in $files are copied next to it and passed
      * the same way under their own option, `['--files' => '/tmp/x.tar.gz']`;
-     * $onUpload hears how far each has got.
+     * $onUpload hears how far each has got. With $mergeErrorOutput, stderr
+     * streams with stdout, so progress tools like `docker compose pull`,
+     * which write to stderr, show as they go.
      *
      * @param  (callable(string): void)|null  $onOutput
      * @param  array<string, string>  $files
      * @param  (callable(string, int, int): void)|null  $onUpload  option, bytes sent, bytes in all
      */
-    public function runWithUpload(Server $server, string $arguments, string $contents, string $extension = '', ?callable $onOutput = null, int $timeoutSeconds = 60, array $files = [], ?callable $onUpload = null): CommandResult
+    public function runWithUpload(Server $server, string $arguments, string $contents, string $extension = '', ?callable $onOutput = null, int $timeoutSeconds = 60, array $files = [], ?callable $onUpload = null, bool $mergeErrorOutput = false): CommandResult
     {
         $connection = $this->ssh->connect($server);
         $remote = self::UPLOAD_DIR.'/'.Str::random(16).$extension;
@@ -156,7 +158,7 @@ class MandalClient
                 $arguments .= ' '.$option.'='.escapeshellarg($home.'/'.$file);
             }
 
-            return $connection->run($this->command($arguments, asRoot: true), $onOutput, $timeoutSeconds);
+            return $connection->run($this->command($arguments, asRoot: true).($mergeErrorOutput ? ' 2>&1' : ''), $onOutput, $timeoutSeconds);
         } finally {
             // The files can hold secrets. The CLI removes them once used, but
             // not when it refuses the command, so they are always removed here too.
