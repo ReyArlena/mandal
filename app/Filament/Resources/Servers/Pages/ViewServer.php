@@ -50,6 +50,8 @@ class ViewServer extends ViewRecord
 
     public ?string $error = null;
 
+    private ?string $cliState = null;
+
     public function mount(int|string $record): void
     {
         parent::mount($record);
@@ -65,6 +67,7 @@ class ViewServer extends ViewRecord
     public function loadInventory(bool $fresh = false): void
     {
         $this->error = null;
+        $this->cliState = null;
 
         /** @var Server $server */
         $server = $this->getRecord();
@@ -285,21 +288,13 @@ class ViewServer extends ViewRecord
         return Action::make('updateCli')
             ->label('Update CLI')
             ->icon(Heroicon::OutlinedArrowDownTray)
-            ->color('warning')
-            ->visible(function (Server $record, MandalClient $mandal, CliArchive $archive): bool {
-                if ($record->connected_at === null) {
-                    return false;
-                }
-
-                // Reading the inventory (cached briefly) records the build
-                // the server runs right now.
-                try {
-                    $mandal->inventory($record);
-                } catch (SshException) {
-                    return false;
-                }
-
-                return $record->cliOutdated($archive->hash());
+            ->color(fn (Server $record): string => $this->cliUpdateState($record) === 'outdated' ? 'warning' : 'gray')
+            ->visible(fn (Server $record): bool => $record->connected_at !== null)
+            ->disabled(fn (Server $record): bool => $this->cliUpdateState($record) !== 'outdated')
+            ->tooltip(fn (Server $record, CliArchive $archive): ?string => match ($this->cliUpdateState($record)) {
+                'current' => "Up to date (build {$archive->hash()})",
+                'unreachable' => 'The server could not be reached to read its CLI build',
+                default => null,
             })
             ->requiresConfirmation()
             ->modalHeading('Update the mandal CLI on this server')
@@ -317,6 +312,25 @@ class ViewServer extends ViewRecord
 
                 $this->redirect(ServerResource::getUrl('task', ['record' => $record, 'task' => $task]));
             });
+    }
+
+    /**
+     * Whether the server's CLI matches the panel's build: outdated, current
+     * or unreachable. Reading the inventory (cached briefly) records the
+     * build the server runs right now; the answer is kept for the request
+     * since the button asks several times while rendering.
+     */
+    private function cliUpdateState(Server $record): string
+    {
+        return $this->cliState ??= (function () use ($record): string {
+            try {
+                app(MandalClient::class)->inventory($record);
+            } catch (SshException) {
+                return 'unreachable';
+            }
+
+            return $record->cliOutdated(app(CliArchive::class)->hash()) ? 'outdated' : 'current';
+        })();
     }
 
     private function queueCliUpdate(Server $record): Task

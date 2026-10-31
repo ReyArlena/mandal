@@ -129,12 +129,22 @@ it('offers a CLI update only when the server build differs', function () {
     $hash = app(CliArchive::class)->hash();
 
     livewire(ViewServer::class, ['record' => $this->server->getRouteKey()])
-        ->assertActionVisible('updateCli');
+        ->assertActionVisible('updateCli')
+        ->assertActionEnabled('updateCli');
 
     $current = $this->inventory;
     $current['mandal']['build'] = $hash;
     $this->ssh->respondWithJson('inventory', $current);
     app(MandalClient::class)->forgetInventory($this->server);
+
+    livewire(ViewServer::class, ['record' => $this->server->getRouteKey()])
+        ->assertActionVisible('updateCli')
+        ->assertActionDisabled('updateCli')
+        ->assertSee("Up to date (build {$hash})");
+});
+
+it('hides the CLI update until the server has been connected', function () {
+    $this->server->forceFill(['connected_at' => null])->save();
 
     livewire(ViewServer::class, ['record' => $this->server->getRouteKey()])
         ->assertActionHidden('updateCli');
