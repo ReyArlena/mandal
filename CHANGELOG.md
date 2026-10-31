@@ -7,26 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- Database dumps and app archives went to the same remote folder (`<prefix>/<subfolder>/<name>/`) when an app and its database share a name, which they do by default, so an app's backup list also showed its database dumps. Remote copies now go under `db/<database>/` and `apps/<app>/`, like the local ones.
-- SSH hardening failed with "sshd configuration test failed", and `provision --check` read the SSH settings as empty, on a server nobody had connected to over SSH yet (set up from a console or cloud-init): with socket activation `/run/sshd` only exists once sshd has started, and `sshd -t`/`-T` refuse to run without it. Mandal now creates it first.
-- "Test connection" asked to confirm the host key on every click, even once it was pinned: a custom modal heading alone makes Filament open the modal. It now connects straight away when the key is pinned and only asks the first time.
-- Deploys reset requests that were in flight, because the PHP-FPM reload after switching releases killed workers at once (`process_control_timeout` defaults to 0; the panel's own task page showed "Error while loading page" while deploying itself). Provisioning and `php:install` now write `pool.d/00-mandal-global.conf` with a 10 s timeout, and the inventory no longer lists that `[global]` drop-in as a pool.
-- Deployed apps had their `APP_NAME` replaced by the app's slug (the panel showed "mandal-panel" instead of "Mandal"): the deploy environment exported `APP_NAME` for `deploy.sh`, and `artisan optimize` cached it over the value in `.env`. The variable is now `MANDAL_APP`.
-- `install.sh` failed at its last step on a fresh server because nothing had created the `mandal` SSH user: `key:add` now creates the user and its sudo rule when they are missing.
-- The panel's queue worker stayed in Supervisor's FATAL state after `install.sh`, since it was added before the first release existed. Deploys now start any of the app's Supervisor processes that is not running.
-
-### Changed
-
-- Backup destinations (S3-compatible buckets) moved to **Settings**, stored encrypted in the panel and pushed to a server only when a backup there uses them (`backup:remote`, one rclone config per destination under `/etc/mandal/rclone.d/`). Database backups now have a local and a remote destination, each with its own schedule and copies to keep (`backup:configure --from=` with `ENABLED`, `LOCAL_*`, `REMOTE_*` keys; `backup:run --destination=local|remote|all`; the cron file carries one line per destination). A remote that cannot be reached no longer loses the backup: the copy stays local, the run is logged as `failed-remote`, and `backup:status` lists every app target with its last run so the panel can check a whole server in one call. Servers configured before this update keep their files but must save their backup settings again: the old `/etc/mandal/backups.conf` and `/etc/mandal/rclone.conf` are no longer read.
-- Database backups are on by default: provisioning (and `panel:install`) writes a local nightly backup at 02:30 keeping seven copies, unless the file already exists.
-- The `.env`, deploy script and compose file editors (and the compose and deploy script fields when creating an app) use Filament's code editor, with line numbers and YAML highlighting for compose files, instead of a plain text area.
-- Pulling a Docker app's images asks "Pull and restart?" and describes what `docker compose pull` and `up -d` do, instead of the Laravel deploy wording.
-- Adding a worker offers templates for a queue worker, Horizon, Reverb and `schedule:work` that fill in the form, and each worker on the app page has its own Restart button.
-- The Settings page's Public URL and GitHub token buttons moved into their sections' headers, next to the new Backup destinations section.
-- The sidebar and breadcrumbs are gone: a server's pages are tabs above the page title, and the servers list has none since its table shows every server. On small screens the server switcher moved from the sidebar drawer to the top bar, which drops the logo on phones to make room.
-- The server overview and Inventory are one **Server** tab: connection details and the panel's public key on top, the inventory below, with Inventory's Refresh button next to the server's actions. The page title is the server's name, and the old `/servers/{id}/inventory` address redirects to it.
+## [0.2.0] - 2026-10-31
 
 ### Added
 
@@ -35,6 +16,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `backup:delete` removes one database backup (local or remote) from the Backups page, and `backup:remote --remove --force` detaches a destination from every backup that used it.
 - The deploy script can be edited from the panel: the create form starts with Mandal's default `deploy.sh`, the app page has a **Deploy script** editor with **Reset to default**, and the CLI gained `app:deploy-script` (print, `--from=`, `--reset`, `--default`). A syntax check with `bash -n` refuses a broken script.
 - The create form explains where a new app's database password ends up (the app's `.env`, readable from the app page).
+
+### Changed
+
+- Ubuntu 24.04 is supported again alongside 26.04. On 24.04 provisioning takes PHP from the ondrej PPA and installs MariaDB 10.11; setup.sh, install.sh, Docker apps, database management and backups were tested end to end on both releases.
+- Backup destinations (S3-compatible buckets) moved to **Settings**, stored encrypted in the panel and pushed to a server only when a backup there uses them (`backup:remote`, one rclone config per destination under `/etc/mandal/rclone.d/`). Remote copies go under `<prefix>/<subfolder>/db/<database>/` and `<prefix>/<subfolder>/apps/<app>/`, like the local ones. Database backups now have a local and a remote destination, each with its own schedule and copies to keep (`backup:configure --from=` with `ENABLED`, `LOCAL_*`, `REMOTE_*` keys; `backup:run --destination=local|remote|all`; the cron file carries one line per destination). A remote that cannot be reached no longer loses the backup: the copy stays local, the run is logged as `failed-remote`, and `backup:status` lists every app target with its last run so the panel can check a whole server in one call. Servers configured before this update keep their files but must save their backup settings again: the old `/etc/mandal/backups.conf` and `/etc/mandal/rclone.conf` are no longer read.
+- Database backups are on by default: provisioning (and `panel:install`) writes a local nightly backup at 02:30 keeping seven copies, unless the file already exists.
+- The `.env`, deploy script and compose file editors (and the compose and deploy script fields when creating an app) use Filament's code editor, with line numbers and YAML highlighting for compose files, instead of a plain text area.
+- Pulling a Docker app's images asks "Pull and restart?" and describes what `docker compose pull` and `up -d` do, instead of the Laravel deploy wording.
+- Adding a worker offers templates for a queue worker, Horizon, Reverb and `schedule:work` that fill in the form, and each worker on the app page has its own Restart button.
+- The Settings page's Public URL and GitHub token buttons moved into their sections' headers, next to the new Backup destinations section.
+- The sidebar and breadcrumbs are gone: a server's pages are tabs above the page title, and the servers list has none since its table shows every server. On small screens the server switcher moved from the sidebar drawer to the top bar, which drops the logo on phones to make room.
+- The server overview and Inventory are one **Server** tab: connection details and the panel's public key on top, the inventory below, with Inventory's Refresh button next to the server's actions. The page title is the server's name, and the old `/servers/{id}/inventory` address redirects to it.
+
+### Fixed
+
+- SSH hardening failed with "sshd configuration test failed", and `provision --check` read the SSH settings as empty, on a server nobody had connected to over SSH yet (set up from a console or cloud-init): with socket activation `/run/sshd` only exists once sshd has started, and `sshd -t`/`-T` refuse to run without it. Mandal now creates it first.
+- "Test connection" asked to confirm the host key on every click, even once it was pinned: a custom modal heading alone makes Filament open the modal. It now connects straight away when the key is pinned and only asks the first time.
+- Deploys reset requests that were in flight, because the PHP-FPM reload after switching releases killed workers at once (`process_control_timeout` defaults to 0; the panel's own task page showed "Error while loading page" while deploying itself). Provisioning and `php:install` now write `pool.d/00-mandal-global.conf` with a 10 s timeout, and the inventory no longer lists that `[global]` drop-in as a pool.
+- Deployed apps had their `APP_NAME` replaced by the app's slug (the panel showed "mandal-panel" instead of "Mandal"): the deploy environment exported `APP_NAME` for `deploy.sh`, and `artisan optimize` cached it over the value in `.env`. The variable is now `MANDAL_APP`.
+- `install.sh` failed at its last step on a fresh server because nothing had created the `mandal` SSH user: `key:add` now creates the user and its sudo rule when they are missing.
+- The panel's queue worker stayed in Supervisor's FATAL state after `install.sh`, since it was added before the first release existed. Deploys now start any of the app's Supervisor processes that is not running.
+
+## [0.1.0] - 2026-10-27
+
+### Added
 
 - Laravel 13 application with a Filament 5 panel served from the site root.
 - Required app-based multi-factor authentication with recovery codes for every account.
@@ -66,4 +72,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `mandal cli:update` and an "Update CLI" action in the panel; the inventory reports a build hash so out-of-date servers are spotted. After the first successful connection test, the panel installs its own build when the release's differs. The panel records each server's build, flags out-of-date servers in the servers list, raises a persistent notification per user until the server is updated, and checks every connected server hourly (`mandal:check-updates`).
 - Deployments: `mandal app:deploy` clones the repository with the app's deploy key into a timestamped release, links shared storage and `.env`, runs the app's `deploy.sh`, switches `current`, reloads PHP-FPM, restarts workers and prunes old releases; `app:rollback` switches back; `app:releases` lists releases; `app:configure` changes the repository, branch or releases to keep. Deploy and Roll back actions in the panel.
 - Documentation site under `docs/` (VitePress), published to GitHub Pages on every push to `main`: guides for every page of the panel, the CLI reference with a generated command table (`scripts/cli-reference.sh`, checked in CI), a list of the files each task changes on the server, and contributing pages covering local setup, Incus testing and releasing.
-- `mandal provision`: installs and hardens the stack on Ubuntu 24.04 or 26.04 (nginx, newest PHP with all required extensions from the ondrej PPA, or Ubuntu's own PHP while the PPA has no packages for the release, Composer, MariaDB, Dragonfly, Bun, Supervisor, Certbot, Docker, ufw, fail2ban, unattended upgrades, swap, SSH hardening) through drop-in files, keeping existing configuration. Supports `--dry-run`, `--php=`, driver choices and `--skip-ssh-hardening`.
+- `mandal provision`: installs and hardens the stack on Ubuntu 26.04 (nginx, newest PHP with all required extensions from the ondrej PPA, or Ubuntu's own PHP while the PPA has no packages for the release, Composer, MariaDB, Dragonfly, Bun, Supervisor, Certbot, Docker, ufw, fail2ban, unattended upgrades, swap, SSH hardening) through drop-in files, keeping existing configuration. Supports `--dry-run`, `--php=`, driver choices and `--skip-ssh-hardening`.
