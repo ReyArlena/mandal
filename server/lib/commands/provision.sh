@@ -147,7 +147,7 @@ provision_components() {
     fi
 
     if has_cmd composer; then
-        component_row composer true "$(composer --version 2> /dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | awk 'NR == 1' || true)" keep ""
+        component_row composer true "$(composer_version)" keep ""
     else
         component_row composer false "" install ""
     fi

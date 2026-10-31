@@ -75,7 +75,7 @@ updates_components_tsv() {
     installed="$(js_status | jq -r '.version')"
     latest="$(updates_github_latest oven-sh/bun)"
     printf 'js\t%s\t%s\t%s\t%s\t\n' "$(js_driver)" "$installed" "$latest" "$(updates_newer "$installed" "$latest")"
-    installed="$(composer --version 2> /dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | awk 'NR == 1' || true)"
+    installed="$(composer_version)"
     latest="$(updates_composer_latest)"
     printf 'composer\tComposer\t%s\t%s\t%s\t\n' "$installed" "$latest" "$(updates_newer "$installed" "$latest")"
     installed="$(docker --version 2> /dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | awk 'NR == 1' || true)"

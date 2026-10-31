@@ -1090,6 +1090,31 @@ assert_json "status reads apt history newest first" "$status" '.history[0].actio
 assert_json "status mentions a newer LTS" "$status" '.release_upgrade' "28.04 LTS"
 assert_json "status carries the reboot flag" "$status" '.reboot_required' "true"
 
+# composer_version: as nobody when root, never reading a terminal
+mkdir -p "${TMP}/composer-bin"
+cat > "${TMP}/composer-bin/composer" <<'COMPOSEREOF'
+#!/usr/bin/env bash
+printf '%s|%s|%s\n' "$*" "$HOME" "$(readlink /proc/self/fd/0)" >> "${MANDAL_FAKE_COMPOSER_LOG}"
+printf 'Composer version 2.9.5 2026-03-01 10:00:00\nPHP version 8.5.11 (/usr/bin/php8.5)\n'
+COMPOSEREOF
+cat > "${TMP}/composer-bin/runuser" <<'RUNUSEREOF'
+#!/usr/bin/env bash
+printf 'runuser %s\n' "$*" >> "${MANDAL_FAKE_COMPOSER_LOG}"
+while [[ $# -gt 0 && "$1" != "--" ]]; do shift; done
+shift
+exec "$@"
+RUNUSEREOF
+chmod +x "${TMP}/composer-bin/composer" "${TMP}/composer-bin/runuser"
+export MANDAL_FAKE_COMPOSER_LOG="${TMP}/composer.log"
+assert_eq "composer_version reads the version as root" "2.9.5" "$(PATH="${TMP}/composer-bin:${PATH}" composer_version)"
+assert_eq "composer_version runs composer as nobody when root" "runuser -u nobody -- env HOME=/nonexistent COMPOSER_HOME=/nonexistent composer --version --no-plugins --no-interaction
+--version --no-plugins --no-interaction|/nonexistent|/dev/null" "$(cat "$MANDAL_FAKE_COMPOSER_LOG")"
+: > "$MANDAL_FAKE_COMPOSER_LOG"
+assert_eq "composer_version reads the version when not root" "2.9.5" "$(is_root() { return 1; }; PATH="${TMP}/composer-bin:${PATH}" composer_version)"
+assert_eq "composer_version runs composer directly when not root" "--version --no-plugins --no-interaction|/nonexistent|/dev/null" "$(cat "$MANDAL_FAKE_COMPOSER_LOG")"
+assert_eq "composer_version is empty without composer" "" "$(composer_version)"
+unset MANDAL_FAKE_COMPOSER_LOG
+
 apply="$(cmd_updates_apply --security --dry-run 2>&1)"
 assert_eq "updates:apply --security dry run completes" "0" "$?"
 [[ "$apply" == *"apt-get update"* && "$apply" == *"unattended-upgrade -v"* && "$apply" == *"systemctl reload-or-restart php8.5-fpm"* ]] && pass || fail "security updates refresh apt, run unattended-upgrade and reload PHP-FPM afterwards"

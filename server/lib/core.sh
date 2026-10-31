@@ -281,6 +281,17 @@ package_version() {
     dpkg-query -W -f='${Version}' "$1" 2> /dev/null || true
 }
 
+# Composer's version, read as nobody. Run as root, Composer warns and, given a
+# terminal, waits for an answer to "Continue as root/super user?", which hangs
+# whatever asked. Reading a version needs no privileges, home or plugins.
+composer_version() {
+    has_cmd composer || return 0
+    local -a as_nobody=()
+    is_root && as_nobody=(runuser -u nobody --)
+    { "${as_nobody[@]}" env HOME=/nonexistent COMPOSER_HOME=/nonexistent composer --version --no-plugins --no-interaction < /dev/null 2> /dev/null || true; } \
+        | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | awk 'NR == 1' || true
+}
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------

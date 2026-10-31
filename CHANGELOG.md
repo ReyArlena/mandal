@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `updates:status`, `provision` and `provision --check` hung when run by hand from a terminal: reading Composer's version as root made Composer ask "Continue as root/super user?". The version is now read as `nobody`, without plugins and with no terminal to ask on.
+
 ## [0.2.0] - 2026-10-31
 
 ### Added
