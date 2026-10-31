@@ -400,6 +400,7 @@ assert_eq "rewriting the drop-ins keeps a changed limit" "512M" "$(MANDAL_PHP_DI
 assert_eq "php sizes convert to bytes" "1073741824 536870912 8192 -1" "$(php_size_bytes 1G) $(php_size_bytes 512M) $(php_size_bytes 8K) $(php_size_bytes -1)"
 plimits="$(MANDAL_PHP_DIR="$phpl" MANDAL_DRY_RUN=1 cmd_php_limits --version=8.5 --upload-max-filesize=2g --post-max-size=2G --max-execution-time=600 2>&1)"
 [[ "$plimits" == *"upload_max_filesize=2G post_max_size=2G memory_limit=512M max_execution_time=600 max_input_time=300"* ]] && pass || fail "php:limits changes the given limits and keeps the rest"
+[[ "$plimits" == *"systemctl reload-or-restart --no-block php8.5-fpm"* ]] && pass || fail "php:limits reloads PHP-FPM without waiting for it"
 (MANDAL_PHP_DIR="$phpl" MANDAL_DRY_RUN=1 cmd_php_limits --version=8.5 --upload-max-filesize=2G) > /dev/null 2>&1 && fail "php:limits refuses post_max_size below upload_max_filesize" || pass
 (MANDAL_PHP_DIR="$phpl" MANDAL_DRY_RUN=1 cmd_php_limits --version=8.5 --memory-limit=lots) > /dev/null 2>&1 && fail "php:limits validates sizes" || pass
 (MANDAL_PHP_DIR="$phpl" MANDAL_DRY_RUN=1 cmd_php_limits --version=8.5 --max-input-time=-5) > /dev/null 2>&1 && fail "php:limits validates seconds" || pass

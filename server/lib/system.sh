@@ -148,6 +148,13 @@ service_restart() {
     run_cmd systemctl restart "$1"
 }
 
+# Queues the reload and returns at once. For a service the caller may be
+# waiting behind: the panel's own PHP-FPM, whose graceful reload would wait
+# for the very request that asked for it until FPM killed it.
+service_reload_no_wait() {
+    run_cmd systemctl reload-or-restart --no-block "$1"
+}
+
 # sshd -t and -T refuse to run without the privilege separation directory.
 # The SSH service creates it when it starts, but with socket activation
 # (Ubuntu 24.04 and later) it is missing until the first connection, so a

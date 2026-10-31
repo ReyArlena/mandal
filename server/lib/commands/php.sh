@@ -106,7 +106,11 @@ cmd_php_limits() {
         pairs+=("$key=${limits[$key]}")
     done
     php_write_dropins "$version" "${pairs[@]}"
-    service_reload_or_restart "php${version}-fpm"
+    if ! dry_run; then
+        "php-fpm${version}" -t > /dev/null 2>&1 || die "php-fpm${version} configuration test failed"
+    fi
+    # The panel may run on this version and be waiting for this command.
+    service_reload_no_wait "php${version}-fpm"
     printf 'PHP %s limits: %s\n' "$version" "${pairs[*]}"
 }
 

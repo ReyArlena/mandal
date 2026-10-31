@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Saving PHP limits for the version the panel itself runs on ended in "Error while loading page" after ten seconds: the PHP-FPM reload waited for the request that asked for it until FPM killed it. `php:limits` now tests the configuration and queues the reload without waiting, so the request returns first. The limits were saved either way.
 - Task and log output showed terminal colour codes as text (`[32;1mDONE`, `[0m`) from commands run with `--ansi` and from programs such as SteamCMD. They are stripped, and **Copy output** copies clean text.
 - **Copy output** could sit next to the task status instead of on the right, depending on the theme build.
 - Tasks that upload a file first (creating an app, which also uploads the compose file or deploy script) showed the command's stderr only once it finished, so a long `docker compose pull` looked hung. It now streams with the rest of the output.
