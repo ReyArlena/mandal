@@ -102,3 +102,17 @@ it('does not show another server\'s task', function () {
     livewire(ViewTask::class, ['record' => $server->getRouteKey(), 'task' => $other->getKey()])
         ->assertStatus(404);
 });
+
+it('links a started Docker app to its container logs with live refresh on', function () {
+    $server = Server::factory()->withPinnedHostKey()->create();
+    $started = Task::factory()->for($server)->succeeded()->create(['type' => TaskType::Control, 'options' => ['name' => 'game', 'action' => 'start']]);
+    $stopped = Task::factory()->for($server)->succeeded()->create(['type' => TaskType::Control, 'options' => ['name' => 'game', 'action' => 'stop']]);
+
+    livewire(ViewTask::class, ['record' => $server->getRouteKey(), 'task' => $started->getKey()])
+        ->assertSee('Follow container logs')
+        ->assertSeeHtml('source=docker%3Agame')
+        ->assertSeeHtml('live=1');
+
+    livewire(ViewTask::class, ['record' => $server->getRouteKey(), 'task' => $stopped->getKey()])
+        ->assertDontSee('Follow container logs');
+});

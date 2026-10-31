@@ -54,6 +54,7 @@ class ServerLogs extends Page
     #[Url]
     public string $since = '';
 
+    #[Url]
     public bool $live = false;
 
     /** @var array<string, mixed> */
@@ -139,7 +140,15 @@ class ServerLogs extends Page
     public function toggleLive(): void
     {
         $this->live = ! $this->live;
+        $this->updatedLive();
+    }
 
+    /**
+     * Turning live refresh on starts from a fresh read, so polling only
+     * appends what is new after it.
+     */
+    public function updatedLive(): void
+    {
         if ($this->live) {
             $this->read();
         }

@@ -59,9 +59,10 @@
                     @endif
                 </div>
                 <div class="flex items-center gap-2 md:col-span-1">
-                    <x-filament::button size="sm" :color="$this->live ? 'success' : 'gray'" wire:click="toggleLive" :icon="$this->live ? 'heroicon-m-pause' : 'heroicon-m-play'">
-                        {{ $this->live ? 'Live' : 'Tail' }}
-                    </x-filament::button>
+                    <label class="flex cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+                        <x-filament::toggle state="$wire.$entangle('live').live" on-color="success" />
+                        <span>Live refresh</span>
+                    </label>
                 </div>
             </div>
 

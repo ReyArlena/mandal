@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Servers\Pages;
 
+use App\Enums\TaskStatus;
+use App\Enums\TaskType;
 use App\Filament\Resources\Servers\ServerResource;
 use App\Models\Server;
 use App\Models\Task;
@@ -33,6 +35,22 @@ class ViewTask extends Page
         $server = $this->getRecord();
 
         $this->taskId = $server->tasks()->whereKey($task)->firstOrFail()->getKey();
+    }
+
+    /**
+     * After a Docker app starts or restarts, its containers are where the
+     * progress shows next: the Logs page on their output, refreshing live.
+     */
+    public function containerLogsUrl(): ?string
+    {
+        $task = $this->task();
+        $name = (string) ($task->options['name'] ?? '');
+
+        if ($task->type !== TaskType::Control || $task->status !== TaskStatus::Succeeded || ! in_array($task->options['action'] ?? null, ['start', 'restart'], true) || $name === '') {
+            return null;
+        }
+
+        return ServerResource::getUrl('logs', ['record' => $this->getRecord(), 'source' => "docker:{$name}", 'live' => 1]);
     }
 
     public function getTitle(): string

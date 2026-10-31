@@ -19,11 +19,16 @@
             @if (! $task->isFinished())
                 <x-filament::loading-indicator class="h-4 w-4" />
             @endif
+            @if ($logsUrl = $this->containerLogsUrl())
+                <x-filament::button tag="a" :href="$logsUrl" size="xs" icon="heroicon-o-document-text" class="ms-auto">
+                    Follow container logs
+                </x-filament::button>
+            @endif
             <x-filament::button
                 size="xs"
                 color="gray"
                 icon="heroicon-o-clipboard-document"
-                class="ms-auto"
+                :class="$logsUrl ? null : 'ms-auto'"
                 x-data="{ copied: false }"
                 x-on:click="navigator.clipboard.writeText(document.getElementById('task-output').innerText).then(() => { copied = true; setTimeout(() => copied = false, 2000) })"
             >

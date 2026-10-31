@@ -69,6 +69,17 @@ it('offers the time filter for container logs', function () {
     expect($this->ssh->ran('logs:read --source=docker:tool --lines=200 --since=1h'))->toBeTrue();
 });
 
+it('turns live refresh on from the toggle or the address', function () {
+    livewire(ServerLogs::class, ['record' => $this->server->getRouteKey()])
+        ->assertSee('Live refresh')
+        ->assertDontSeeHtml('wire:poll.3s')
+        ->set('live', true)
+        ->assertSeeHtml('wire:poll.3s="poll"');
+
+    livewire(ServerLogs::class, ['record' => $this->server->getRouteKey(), 'live' => true])
+        ->assertSeeHtml('wire:poll.3s="poll"');
+});
+
 it('appends new lines while tailing', function () {
     $component = livewire(ServerLogs::class, ['record' => $this->server->getRouteKey()])
         ->set('source', 'nginx:shop:access')
