@@ -50,3 +50,9 @@
 .dark .fi-server-tabs {
     --line: color-mix(in oklab, white 10%, transparent);
 }
+
+/* Tabs used as a form choice: the line under them, but no side padding,
+   so they line up with the fields below. */
+.fi-tabs.fi-contained.fi-tab-choice {
+    padding-inline: 0;
+}

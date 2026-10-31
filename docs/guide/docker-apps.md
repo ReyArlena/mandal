@@ -1,6 +1,6 @@
 # Docker apps
 
-Choose **Docker compose project** in the New app form for anything that is not Laravel, from a web app to a game server. Paste the compose file and any environment variables. Mandal writes them to `/srv/docker/<app>` (`compose.yml` and `.env`), checks the file with `docker compose config` and starts the project with `docker compose up -d`. The compose file runs as root, so it can do anything on the server; only paste files you trust. The form starts from a template that sets `security_opt: [no-new-privileges:true]`.
+Choose the **Docker** tab in the New app form for anything that is not Laravel, from a web app to a game server. Paste the compose file and any environment variables. Mandal writes them to `/srv/docker/<app>` (`compose.yml` and `.env`), checks the file with `docker compose config` and starts the project with `docker compose up -d`. The compose file runs as root, so it can do anything on the server; only paste files you trust. The form starts from a template that sets `security_opt: [no-new-privileges:true]`.
 
 ## Importing a backup
 

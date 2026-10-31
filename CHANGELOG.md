@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The New app form picks **Laravel** or **Docker** with tabs carrying their logos, instead of a dropdown.
 - New servers and new PHP versions accept 1 GB uploads: PHP-FPM gets `upload_max_filesize` and `post_max_size` of `1G`, `memory_limit` `256M` and 300 s for `max_execution_time` and `max_input_time`, and nginx `client_max_body_size 1g` instead of `64m`. Existing servers get them with **Provision again**; values changed on the PHP page are kept.
 - `inventory` and `updates:status` run their collectors at once instead of one after another. Most of their time is spent starting processes (`systemctl`, `docker`, `fail2ban-client`, `supervisorctl`), so on a slow VPS the inventory took 8-9 s; it now takes about as long as its slowest part.
 - The inventory reads Docker with one `docker ps --all` for the Docker section and every Docker app, taking compose projects from the container labels instead of `docker compose ls` and one `docker compose ps` per app, and Docker's version from its package.

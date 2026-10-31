@@ -24,6 +24,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\ViewField;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
 use Filament\Schemas\Components\Section;
@@ -190,12 +191,17 @@ class ServerApps extends Page
             ->modalSubmitActionLabel('Create app')
             ->modalWidth(Width::ThreeExtraLarge)
             ->schema([
-                Select::make('type')
-                    ->options(['laravel' => 'Laravel app', 'docker' => 'Docker compose project'])
+                ViewField::make('type')
+                    ->label('App type')
+                    ->hiddenLabel()
+                    ->view('filament.forms.tab-choice')
+                    ->viewData([
+                        'options' => ['laravel' => 'Laravel', 'docker' => 'Docker'],
+                        'icons' => ['laravel' => 'mandal-laravel', 'docker' => 'mandal-docker'],
+                    ])
                     ->default('laravel')
                     ->required()
-                    ->live()
-                    ->selectablePlaceholder(false),
+                    ->in(['laravel', 'docker']),
                 TextInput::make('name')
                     ->required()
                     ->regex(self::APP_NAME_PATTERN)
