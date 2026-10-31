@@ -4,7 +4,26 @@ Choose the **Docker** tab in the New app form for anything that is not Laravel, 
 
 ## Importing a backup
 
-**Import backup (optional)**, folded under the name field, takes a `.zip` or `.tar.gz` of a project folder, up to the size shown under the field: the smallest of the panel's own PHP `upload_max_filesize` and `post_max_size` and its import limit (1 GB by default). The archive goes to the panel, so it is the panel's PHP that counts, not the target server's. The archive is checked as soon as it arrives: only files and folders, no links or paths leaving the folder, at most 20 GB unpacked, and a compose file at the top or inside a single top-level folder, found under Compose's own names (`compose.yaml`, `compose.yml`, `docker-compose.yaml`, `docker-compose.yml`). Its contents fill the compose field and are saved as `compose.yml`; a `.env` fills the environment variables, and the name is suggested from the file name. Creating the app packs the remaining files, uploads them with the compose file (progress in the task output) and unpacks them into `/srv/docker/<app>` before the containers start. The files belong to root with their modes kept, so an image that runs as another user may need its folders handed over to that user.
+**Import backup (optional)**, folded under the name field, takes a `.zip` or `.tar.gz` of a project folder, up to the size shown under the field: the smallest of the panel's own PHP `upload_max_filesize` and `post_max_size` and its import limit (1 GB by default). The archive goes to the panel, so it is the panel's PHP that counts, not the target server's. The archive is checked as soon as it arrives: only files and folders, no links or paths leaving the folder, at most 20 GB unpacked, and a compose file at the top or inside a single top-level folder, found under Compose's own names (`compose.yaml`, `compose.yml`, `docker-compose.yaml`, `docker-compose.yml`). Its contents fill the compose field and are saved as `compose.yml`; a `.env` fills the environment variables, and the name is suggested from the file name. Creating the app packs the remaining files, uploads them with the compose file (progress in the task output) and unpacks them into `/srv/docker/<app>` before the containers start. The files belong to root with their modes kept, so an image that runs as another user cannot write to them. Hand them over in the compose file with a one-off service that the app waits for; the default compose file has a commented example:
+
+```yaml
+services:
+  fix-permissions:
+    image: busybox:1.37
+    command: chown -R 10000:10000 /savegame
+    volumes:
+      - ./savegame:/savegame
+    restart: "no"
+  game:
+    image: sknnr/enshrouded-dedicated-server:latest
+    depends_on:
+      fix-permissions:
+        condition: service_completed_successfully
+    volumes:
+      - ./savegame:/home/steam/enshrouded/savegame
+```
+
+It runs before every start, so ownership is put right again after a restore or a change.
 
 When the panel runs on the server, the upload also passes nginx (`client_max_body_size`) and that server's PHP-FPM limits; raise them on the **PHP** page for larger archives. `MANDAL_IMPORT_MAX_UPLOAD` and `MANDAL_IMPORT_MAX_UNPACKED` in the panel's `.env` change its own limits.
 

@@ -66,6 +66,19 @@ class ServerApps extends Page
           options:
             max-size: "10m"
             max-file: "3"
+        # An image that runs as a non-root user cannot write to a folder
+        # mounted from the project (owned by root). Hand it over first with
+        # the one-off service below, and start this one after it:
+        # depends_on:
+        #   fix-permissions:
+        #     condition: service_completed_successfully
+
+      # fix-permissions:
+      #   image: busybox:1.37
+      #   command: chown -R 10000:10000 /data
+      #   volumes:
+      #     - ./savegame:/data
+      #   restart: "no"
 
     volumes:
       data:
