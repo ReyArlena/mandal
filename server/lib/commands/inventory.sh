@@ -13,6 +13,9 @@ cmd_inventory() {
     load_all_drivers
     local dir section
     local -a sections=(mandal system services php nginx database cache js supervisor certificates firewall fail2ban docker apps backups) args=()
+    # Read once for the Docker section and every Docker app.
+    local MANDAL_DOCKER_CONTAINERS
+    MANDAL_DOCKER_CONTAINERS="$(docker_containers_json)"
     dir="$(mktemp -d)"
     run_parallel "$dir" "${sections[@]/#/inv_}"
     for section in "${sections[@]}"; do
@@ -370,17 +373,17 @@ inv_fail2ban() {
 # ---------------------------------------------------------------------------
 
 inv_docker() {
-    local installed=false version="" projects='[]' containers='[]'
+    local installed=false version=""
+    local MANDAL_DOCKER_CONTAINERS="${MANDAL_DOCKER_CONTAINERS:-}"
+    [[ -n "$MANDAL_DOCKER_CONTAINERS" ]] || MANDAL_DOCKER_CONTAINERS="$(docker_containers_json)"
     if has_cmd docker; then
         installed=true
-        version="$(docker --version 2> /dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | awk 'NR == 1' || true)"
-        if [[ "$(unit_state docker)" == "active" ]] && is_root; then
-            projects="$(docker compose ls --all --format json 2> /dev/null || true)"
-            [[ -n "$projects" ]] && jq -e . <<< "$projects" > /dev/null 2>&1 || projects='[]'
-            containers="$({ docker ps --all --format '{{json .}}' 2> /dev/null || true; } | jq -s '.')"
-        fi
+        # dpkg answers faster than the docker client starts.
+        version="$(package_version docker-ce | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | awk 'NR == 1' || true)"
+        [[ -n "$version" ]] || version="$(docker --version 2> /dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | awk 'NR == 1' || true)"
     fi
-    jq -n --argjson installed "$installed" --arg active "$(unit_state docker)" --arg version "$version" --argjson projects "$projects" --argjson containers "$containers" --argjson exposed "$(docker_exposed_ports_json)" \
+    jq -n --argjson installed "$installed" --arg active "$(unit_state docker)" --arg version "$version" --argjson projects "$(docker_projects_json)" \
+        --argjson containers "$(docker_containers_json | jq 'map(del(.Project, .ConfigFiles))')" --argjson exposed "$(docker_exposed_ports_json)" \
         '{installed: $installed, active: $active, version: $version, projects: $projects, containers: $containers, exposed: $exposed}'
 }
 
@@ -427,6 +430,8 @@ inv_app() {
 
 inv_apps() {
     local file name apps='[]'
+    local MANDAL_DOCKER_CONTAINERS="${MANDAL_DOCKER_CONTAINERS:-}"
+    [[ -n "$MANDAL_DOCKER_CONTAINERS" ]] || MANDAL_DOCKER_CONTAINERS="$(docker_containers_json)"
     for file in "$MANDAL_APPS_DIR"/*.conf; do
         [[ -f "$file" ]] || continue
         name="$(basename "$file" .conf)"

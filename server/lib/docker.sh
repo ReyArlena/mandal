@@ -131,15 +131,36 @@ docker_check_project() {
     fi
 }
 
-# Ports published to every interface by running containers, which ufw
-# does not filter: [{container, host, port, target, protocol}]
-docker_exposed_ports_json() {
+# Every container as `docker ps --all` rows, plus Project and ConfigFiles
+# from the compose labels. One docker call answers the Docker section and
+# every Docker app; the inventory reads it once into MANDAL_DOCKER_CONTAINERS.
+docker_containers_json() {
+    if [[ -n "${MANDAL_DOCKER_CONTAINERS:-}" ]]; then
+        printf '%s\n' "$MANDAL_DOCKER_CONTAINERS"
+        return 0
+    fi
     if ! has_cmd docker || [[ "$(unit_state docker)" != "active" ]] || ! is_root; then
         echo '[]'
         return 0
     fi
-    { docker ps --format '{{json .}}' 2> /dev/null || true; } | jq -s '
-        [.[] | . as $c | (.Ports // "") | split(", ") | .[]
+    { docker ps --all --format '{"row":{{json .}},"project":{{json (.Label "com.docker.compose.project")}},"config_files":{{json (.Label "com.docker.compose.project.config_files")}}}' 2> /dev/null || true; } \
+        | jq -s 'map(.row + {Project: .project, ConfigFiles: .config_files})' 2> /dev/null || echo '[]'
+}
+
+# Compose projects in the shape of `docker compose ls --all`, from the
+# container labels: [{Name, Status, ConfigFiles}]
+docker_projects_json() {
+    docker_containers_json | jq '
+        map(select(.Project != "")) | group_by(.Project)
+        | map({Name: .[0].Project, Status: (group_by(.State) | map("\(.[0].State)(\(length))") | join(", ")), ConfigFiles: .[0].ConfigFiles})
+    ' 2> /dev/null || echo '[]'
+}
+
+# Ports published to every interface by running containers, which ufw
+# does not filter: [{container, host, port, target, protocol}]
+docker_exposed_ports_json() {
+    docker_containers_json | jq '
+        [.[] | select(.State == "running") | . as $c | (.Ports // "") | split(", ") | .[]
             | capture("^(?<host>[^:]+|\\[[^\\]]+\\]):(?<port>[0-9-]+)->(?<target>[0-9-]+)/(?<protocol>tcp|udp|sctp)$")?
             | select(.host != "127.0.0.1" and .host != "[::1]")
             | {container: $c.Names, host: .host, port: .port, target: .target, protocol: .protocol}]
@@ -271,12 +292,10 @@ docker_app_running() {
     [[ -n "$(docker compose --project-directory "$(docker_app_dir "$1")" --project-name "$1" ps -q --status running 2> /dev/null || true)" ]]
 }
 
-# JSON describing the app's containers, for the inventory.
+# JSON describing the app's running containers, for the inventory (what
+# `docker compose ps` lists).
 docker_app_status_json() {
-    local name="$1"
-    if ! has_cmd docker || [[ "$(unit_state docker)" != "active" ]] || ! is_root; then
-        echo '[]'
-        return 0
-    fi
-    { docker compose --project-directory "$(docker_app_dir "$name")" --project-name "$name" ps --format json 2> /dev/null || true; } | jq -s 'map(if type == "array" then .[] else . end) | map({name: .Name, image: .Image, state: .State, status: .Status})'
+    docker_containers_json | jq --arg name "$1" '
+        map(select(.Project == $name and .State == "running") | {name: .Names, image: .Image, state: .State, status: .Status})
+    ' 2> /dev/null || echo '[]'
 }

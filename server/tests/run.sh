@@ -1445,15 +1445,30 @@ cp "$compose_file" "${MANDAL_DOCKER_DIR}/tool/compose.yml"
 (PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_COMPOSE_FAIL=1 docker_check_project tool false "") > /dev/null 2>&1 && fail "docker_check_project refuses an invalid compose file" || pass
 assert_json "docker_app_ports_json lists the published ports" "$(PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_COMPOSE_PORTS='[{"host_ip":"127.0.0.1","published":"20000","target":8080},{"published":"15637","target":15637,"protocol":"udp"}]' docker_app_ports_json tool)" 'map(.host_ip + ":" + .published + "->" + .target + "/" + .protocol) | join(",")' "127.0.0.1:20000->8080/tcp,0.0.0.0:15637->15637/udp"
 
-ps_json='{"Names":"enshrouded-server","Ports":"0.0.0.0:15637->15637/udp, :::15637->15637/udp"}
-{"Names":"tool-app-1","Ports":"127.0.0.1:20000->8080/tcp"}
-{"Names":"valheim-server","Ports":"0.0.0.0:2456-2457->2456-2457/udp, [::]:2456-2457->2456-2457/udp"}'
+ps_json='{"row":{"Names":"enshrouded-server","Image":"sknnr/enshrouded","State":"running","Status":"Up 2 hours","Ports":"0.0.0.0:15637->15637/udp, :::15637->15637/udp"},"project":"enshrouded","config_files":"/srv/docker/enshrouded/compose.yml"}
+{"row":{"Names":"tool-app-1","Image":"ghcr.io/org/tool:1.2","State":"running","Status":"Up 5 minutes","Ports":"127.0.0.1:20000->8080/tcp"},"project":"tool","config_files":"/srv/docker/tool/compose.yml"}
+{"row":{"Names":"tool-worker-1","Image":"ghcr.io/org/tool:1.2","State":"exited","Status":"Exited (0) 1 hour ago","Ports":""},"project":"tool","config_files":"/srv/docker/tool/compose.yml"}
+{"row":{"Names":"valheim-server","Image":"lloesche/valheim-server","State":"running","Status":"Up 3 days","Ports":"0.0.0.0:2456-2457->2456-2457/udp, [::]:2456-2457->2456-2457/udp"},"project":"","config_files":""}
+{"row":{"Names":"old-server","Image":"lloesche/valheim-server","State":"exited","Status":"Exited (137) 2 days ago","Ports":""},"project":"","config_files":""}'
 exposed="$(unit_state() { echo active; }; PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_DOCKER_PS="$ps_json" docker_exposed_ports_json)"
 assert_json "exposed ports skip loopback bindings and duplicates per protocol" "$exposed" 'map(.container + ":" + .port + "/" + .protocol) | join(",")' "enshrouded-server:15637/udp,valheim-server:2456-2457/udp"
+containers="$(unit_state() { echo active; }; PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_DOCKER_PS="$ps_json" docker_containers_json)"
+assert_json "containers carry their compose project from the labels" "$containers" 'map(.Names + "=" + .Project) | join(",")' "enshrouded-server=enshrouded,tool-app-1=tool,tool-worker-1=tool,valheim-server=,old-server="
+assert_json "compose projects come from the container labels" "$(MANDAL_DOCKER_CONTAINERS="$containers" docker_projects_json)" 'map(.Name + " " + .Status + " " + .ConfigFiles) | join(",")' "enshrouded running(1) /srv/docker/enshrouded/compose.yml,tool exited(1), running(1) /srv/docker/tool/compose.yml"
+assert_json "an app lists its running containers" "$(MANDAL_DOCKER_CONTAINERS="$containers" docker_app_status_json tool)" 'map(.name + ":" + .image + ":" + .state + ":" + .status) | join(",")' "tool-app-1:ghcr.io/org/tool:1.2:running:Up 5 minutes"
+docker_section="$(unit_state() { echo active; }; PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_DOCKER_PS="$ps_json" inv_docker)"
+assert_json "the docker section keeps the docker ps rows" "$docker_section" '(.containers | length | tostring) + "|" + (.containers[0] | has("Project") | tostring) + "|" + (.projects | length | tostring) + "|" + (.exposed | length | tostring)' "5|false|2|2"
 assert_json "exposed ports are empty while docker is inactive" "$(PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_DOCKER_PS="$ps_json" docker_exposed_ports_json)" 'length' "0"
 assert_json "firewall:list reports docker" "$(PATH="${TMP}/compose-bin:${PATH}" firewall_rules_json)" '.docker | (.active | tostring) + ":" + (.exposed | length | tostring)' "false:0"
 
 printf 'TYPE=docker\nDOMAIN=tool.example.com\nWWW=redirect-to-naked\nPROXY=true\nPORT=20000\n' > "${MANDAL_APPS_DIR}/tool.conf"
+mkdir -p "${TMP}/count-bin"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$1" >> "%s"\nexec "%s" "$@"\n' "${TMP}/docker-calls.log" "${TMP}/compose-bin/docker" > "${TMP}/count-bin/docker"
+chmod +x "${TMP}/count-bin/docker"
+: > "${TMP}/docker-calls.log"
+dinventory="$(unit_state() { echo active; }; PATH="${TMP}/count-bin:${PATH}" MANDAL_FAKE_DOCKER_PS="$ps_json" cmd_inventory)"
+assert_json "inventory lists a docker app's running containers" "$dinventory" '.apps[] | select(.name == "tool") | .containers | map(.name) | join(",")' "tool-app-1"
+assert_eq "inventory reads the containers with one docker ps" "1" "$(grep -c '^ps$' "${TMP}/docker-calls.log")"
 printf 'services:\n  app:\n    image: ghcr.io/org/tool:1.3\n' > "${TMP}/new-compose.yml"
 dcompose="$(cmd_app_compose --name=tool 2>&1)"
 [[ "$dcompose" == *"ghcr.io/org/tool:1.2"* ]] && pass || fail "app:compose prints the compose file"
