@@ -28,6 +28,8 @@ cmd_app_control() {
     fi
     case "$action" in
         start)
+            # up pulls any image not on the server yet, so the first start
+            # of a new app shows the download here.
             step "Starting $DEPLOY_NAME"
             docker_compose "$DEPLOY_NAME" up -d
             ;;

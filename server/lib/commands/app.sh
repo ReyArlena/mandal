@@ -118,6 +118,7 @@ cmd_app_create() {
         else
             printf '\nDocker app %s created. Ports in its compose file are published directly and bypass the firewall.\n' "$name"
         fi
+        printf 'Its containers are not started yet: use Start on the app page, or mandal app:control --name=%s --action=start.\n' "$name"
         return 0
     fi
 

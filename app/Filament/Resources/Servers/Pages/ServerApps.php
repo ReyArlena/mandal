@@ -19,6 +19,7 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\CodeEditor;
 use Filament\Forms\Components\CodeEditor\Enums\Language;
+use Filament\Forms\Components\Field;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
@@ -98,6 +99,20 @@ class ServerApps extends Page
     /** @var list<string> */
     public array $phpVersions = [];
 
+    /**
+     * Names and domains already in use on the server, from the inventory:
+     * compose projects, databases and the server names of every nginx site.
+     *
+     * @var array{projects: list<string>, databases: list<string>, domains: list<string>}
+     */
+    public array $taken = ['projects' => [], 'databases' => [], 'domains' => []];
+
+    /**
+     * Names the CLI refuses: system users and services an app user would
+     * collide with.
+     */
+    private const array RESERVED_NAMES = ['mandal', 'root', 'admin', 'www-data', 'nginx', 'mysql', 'mariadb', 'redis', 'dragonfly', 'docker', 'daemon', 'sys', 'sync', 'games', 'man', 'lp', 'mail', 'news', 'uucp', 'proxy', 'backup', 'list', 'irc', 'nobody', 'ubuntu'];
+
     public ?string $defaultPhp = null;
 
     public ?string $error = null;
@@ -145,6 +160,68 @@ class ServerApps extends Page
         $this->apps = array_values($inventory['apps'] ?? []);
         $this->phpVersions = array_values($inventory['php']['versions'] ?? []);
         $this->defaultPhp = $inventory['php']['default'] ?? null;
+        $this->taken = [
+            'projects' => array_values(array_map('strval', array_column($inventory['docker']['projects'] ?? [], 'Name'))),
+            'databases' => array_values(array_map('strval', $inventory['database']['databases'] ?? [])),
+            'domains' => collect($inventory['nginx']['sites'] ?? [])->pluck('server_names')->flatten()
+                ->merge(collect($this->apps)->pluck('domain'))
+                ->merge(collect($this->apps)->flatMap(fn (array $app): array => preg_split('/\s+/', (string) ($app['aliases'] ?? ''), -1, PREG_SPLIT_NO_EMPTY) ?: []))
+                ->filter(fn (mixed $domain): bool => is_string($domain) && $domain !== '')
+                ->unique()->values()->all(),
+        ];
+    }
+
+    /**
+     * Why a name cannot be used for a new app of this type, or null.
+     */
+    public function nameProblem(string $name, string $type): ?string
+    {
+        return match (true) {
+            in_array($name, self::RESERVED_NAMES, true) => "{$name} is reserved for the system.",
+            in_array($name, array_column($this->apps, 'name'), true) => "An app called {$name} already exists.",
+            $type === 'docker' && in_array($name, $this->taken['projects'], true) => "A Docker compose project called {$name} already runs on this server.",
+            $type !== 'docker' && in_array(str_replace('-', '_', $name), $this->taken['databases'], true) => 'A database called '.str_replace('-', '_', $name).' already exists; the app would need it.',
+            default => null,
+        };
+    }
+
+    /**
+     * Why a domain cannot be used for a new app, or null. The www. form is
+     * checked too, since nginx answers on both.
+     */
+    public function domainProblem(string $domain): ?string
+    {
+        $domain = strtolower(trim($domain));
+        $bare = preg_replace('/^www\./', '', $domain) ?? $domain;
+
+        foreach ([$bare, 'www.'.$bare] as $candidate) {
+            if (in_array($candidate, $this->taken['domains'], true)) {
+                return "{$candidate} is already served by a site on this server.";
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * A compose file must not name its own containers: Mandal names them
+     * after the app, so one file can serve several apps.
+     */
+    public static function composeProblem(string $compose): ?string
+    {
+        return preg_match('/^[ \t]+container_name[ \t]*:/m', $compose)
+            ? 'Remove container_name: Mandal names containers <app>-<service>-1 after the app, so the same file can be used for more than one app.'
+            : null;
+    }
+
+    /**
+     * Re-checks a field as soon as it changes, so its error shows and the
+     * Create button is disabled before anything is submitted.
+     */
+    private function validateLive(Field $component): void
+    {
+        $this->resetErrorBag($component->getStatePath());
+        $this->validateOnly($component->getStatePath());
     }
 
     public function hasPendingTask(): bool
@@ -202,6 +279,7 @@ class ServerApps extends Page
             ->modalHeading('Create an app')
             ->modalDescription('A Laravel app gets a system user, PHP-FPM pool, nginx site, database and a production .env; deploying the code comes next. A Docker app runs the compose file you provide, optionally with nginx in front.')
             ->modalSubmitActionLabel('Create app')
+            ->modalSubmitAction(fn (Action $action): Action => $action->disabled(fn (): bool => $this->getErrorBag()->isNotEmpty()))
             ->modalWidth(Width::ThreeExtraLarge)
             ->schema([
                 ViewField::make('type')
@@ -214,11 +292,19 @@ class ServerApps extends Page
                     ])
                     ->default('laravel')
                     ->required()
-                    ->in(['laravel', 'docker']),
+                    ->in(['laravel', 'docker'])
+                    // Errors on fields the other type hides would keep Create disabled.
+                    ->afterStateUpdated(fn () => $this->resetErrorBag()),
                 TextInput::make('name')
                     ->required()
                     ->regex(self::APP_NAME_PATTERN)
-                    ->notIn(array_column($this->apps, 'name'))
+                    ->rule(fn (Get $get): Closure => function (string $attribute, mixed $value, Closure $fail) use ($get): void {
+                        if (is_string($value) && ($problem = $this->nameProblem($value, (string) $get('type'))) !== null) {
+                            $fail($problem);
+                        }
+                    })
+                    ->live(debounce: 500)
+                    ->afterStateUpdated(fn (TextInput $component) => $this->validateLive($component))
                     ->helperText('2 to 32 lower-case letters, digits or hyphens. Used for the system user, database and directories.')
                     ->placeholder('shop'),
                 Section::make('Import backup (optional)')
@@ -255,11 +341,18 @@ class ServerApps extends Page
                     ->language(Language::Yaml)
                     ->default(self::COMPOSE_TEMPLATE)
                     ->requiredIf('type', 'docker')
-                    ->rules(['max:262144'])
+                    ->rules(['max:262144', fn (): Closure => function (string $attribute, mixed $value, Closure $fail): void {
+                        if (is_string($value) && ($problem = self::composeProblem($value)) !== null) {
+                            $fail($problem);
+                        }
+                    }])
+                    ->live(debounce: 1000)
+                    ->afterStateUpdated(fn (CodeEditor $component) => $this->validateLive($component))
                     ->helperText('Saved as compose.yml in /srv/docker/<name> and run as root through Docker, like any compose project. Ports here bypass ufw; bind to 127.0.0.1 unless a port should be public.')
                     ->visible(fn (callable $get): bool => $get('type') === 'docker'),
                 Checkbox::make('proxy')
                     ->label('Serve a domain through nginx')
+                    ->afterStateUpdated(fn () => $this->resetErrorBag())
                     ->helperText('For web apps: nginx proxies the domain to a port a service publishes on 127.0.0.1. Leave it off for game servers and anything that is not HTTP.')
                     ->live()
                     ->visible(fn (callable $get): bool => $get('type') === 'docker'),
@@ -276,6 +369,13 @@ class ServerApps extends Page
                 TextInput::make('domain')
                     ->required(fn (callable $get): bool => $get('type') !== 'docker' || (bool) $get('proxy'))
                     ->rule(fn (): string => 'regex:/^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/')
+                    ->rule(fn (): Closure => function (string $attribute, mixed $value, Closure $fail): void {
+                        if (is_string($value) && ($problem = $this->domainProblem($value)) !== null) {
+                            $fail($problem);
+                        }
+                    })
+                    ->live(debounce: 500)
+                    ->afterStateUpdated(fn (TextInput $component) => $this->validateLive($component))
                     ->placeholder('shop.example.com')
                     ->helperText('Without www.')
                     ->visible(fn (callable $get): bool => $get('type') !== 'docker' || (bool) $get('proxy')),
@@ -289,6 +389,17 @@ class ServerApps extends Page
                 TagsInput::make('aliases')
                     ->placeholder('Add another domain')
                     ->nestedRecursiveRules(['regex:/^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/'])
+                    ->rule(fn (): Closure => function (string $attribute, mixed $value, Closure $fail): void {
+                        foreach ((array) $value as $alias) {
+                            if (is_string($alias) && ($problem = $this->domainProblem($alias)) !== null) {
+                                $fail($problem);
+
+                                return;
+                            }
+                        }
+                    })
+                    ->live()
+                    ->afterStateUpdated(fn (TagsInput $component) => $this->validateLive($component))
                     ->visible(fn (callable $get): bool => $get('type') !== 'docker' || (bool) $get('proxy')),
                 Select::make('php')
                     ->label('PHP version')
@@ -384,6 +495,12 @@ class ServerApps extends Page
         }
 
         $set('compose', $import->compose);
+        $compose = (string) preg_replace('/\.import$/', '.compose', $component->getStatePath());
+        $this->resetErrorBag($compose);
+
+        if (($problem = self::composeProblem($import->compose)) !== null) {
+            $this->addError($compose, $problem);
+        }
 
         if ($import->env !== null && trim((string) $get('env')) === '') {
             $set('env', $import->envLines());
@@ -391,8 +508,9 @@ class ServerApps extends Page
 
         $name = Str::slug(preg_replace('/\.(zip|tar\.gz|tgz)$/i', '', $file->getClientOriginalName()) ?? '');
 
-        if (trim((string) $get('name')) === '' && preg_match(self::APP_NAME_PATTERN, $name) && ! in_array($name, array_column($this->apps, 'name'), true)) {
+        if (trim((string) $get('name')) === '' && preg_match(self::APP_NAME_PATTERN, $name) && $this->nameProblem($name, 'docker') === null) {
             $set('name', $name);
+            $this->resetErrorBag((string) preg_replace('/\.import$/', '.name', $component->getStatePath()));
         }
     }
 }

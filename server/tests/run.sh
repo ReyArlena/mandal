@@ -1443,7 +1443,7 @@ cat > "${TMP}/compose-bin/docker" <<'DOCKEREOF'
 #!/usr/bin/env bash
 if [[ "$*" == *"config --format json"* ]]; then
     [[ "${MANDAL_FAKE_COMPOSE_FAIL:-0}" == 1 ]] && { echo "services.app.ports must be a list" >&2; exit 1; }
-    printf '{"services":{"app":{"image":"x","ports":%s}}}\n' "${MANDAL_FAKE_COMPOSE_PORTS:-[]}"
+    printf '{"services":{"app":{"image":"x","ports":%s%s}}}\n' "${MANDAL_FAKE_COMPOSE_PORTS:-[]}" "${MANDAL_FAKE_CONTAINER_NAME:+,\"container_name\":\"$MANDAL_FAKE_CONTAINER_NAME\"}"
 elif [[ "$1" == "ps" ]]; then
     printf '%s\n' "${MANDAL_FAKE_DOCKER_PS:-}"
 fi
@@ -1454,10 +1454,11 @@ printf 'services:\n  app:\n    image: ghcr.io/org/tool:1.2\n    ports:\n      - 
 
 dcreate="$(cmd_app_create --name=tool --type=docker --from="$compose_file" --proxy --port=20000 --domain=tool.example.com --env=APP_KEY=abc --env=DEBUG=0 --dry-run 2>&1)"
 assert_eq "docker app:create dry run completes" "0" "$?"
-for marker in "write ${MANDAL_DOCKER_DIR}/tool/compose.yml (0640" "write ${MANDAL_DOCKER_DIR}/tool/.env (0600" "write ${MANDAL_NGINX_DIR}/conf.d/mandal-upgrade.conf" "write ${MANDAL_NGINX_DIR}/sites-available/tool.conf" "docker compose --progress plain --project-directory ${MANDAL_DOCKER_DIR}/tool --project-name tool pull" "--project-name tool up -d --remove-orphans" "Docker app tool created; nginx serves tool.example.com from 127.0.0.1:20000."; do
+for marker in "write ${MANDAL_DOCKER_DIR}/tool/compose.yml (0640" "write ${MANDAL_DOCKER_DIR}/tool/.env (0600" "write ${MANDAL_NGINX_DIR}/conf.d/mandal-upgrade.conf" "write ${MANDAL_NGINX_DIR}/sites-available/tool.conf" "Docker app tool created; nginx serves tool.example.com from 127.0.0.1:20000." "not started yet: use Start on the app page, or mandal app:control --name=tool --action=start"; do
     if [[ "$dcreate" == *"$marker"* ]]; then pass; else fail "docker app:create mentions: $marker"; fi
 done
 [[ "$dcreate" != *"useradd"* && "$dcreate" != *"CREATE DATABASE"* ]] && pass || fail "docker app:create creates no user or database"
+[[ "$dcreate" != *"--project-name tool pull"* && "$dcreate" != *"--project-name tool up"* ]] && pass || fail "docker app:create leaves starting to app:control"
 [[ -f "$compose_file" ]] && pass || fail "docker app:create dry run keeps the uploaded compose file"
 dgame="$(cmd_app_create --name=game --type=docker --from="$compose_file" --domain=ignored.example.com --dry-run 2>&1)"
 assert_eq "docker app:create without a proxy completes" "0" "$?"
@@ -1499,6 +1500,8 @@ cp "$compose_file" "${MANDAL_DOCKER_DIR}/tool/compose.yml"
 (PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_COMPOSE_PORTS='[{"published":"15637","target":15637,"protocol":"udp"}]' docker_check_project tool true 20000) > /dev/null 2>&1 && fail "docker_check_project refuses a proxy without the loopback port" || pass
 (PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_COMPOSE_PORTS='[{"published":"15637","target":15637,"protocol":"udp"}]' docker_check_project tool false "") > /dev/null 2>&1 && pass || fail "docker_check_project accepts any ports without a proxy"
 (PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_COMPOSE_FAIL=1 docker_check_project tool false "") > /dev/null 2>&1 && fail "docker_check_project refuses an invalid compose file" || pass
+fixed_name="$(PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_CONTAINER_NAME=enshrouded-server docker_check_project tool false "" 2>&1)"
+[[ "$fixed_name" == *"remove container_name from the compose file (app (enshrouded-server))"* ]] && pass || fail "docker_check_project refuses a fixed container_name"
 assert_json "docker_app_ports_json lists the published ports" "$(PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_COMPOSE_PORTS='[{"host_ip":"127.0.0.1","published":"20000","target":8080},{"published":"15637","target":15637,"protocol":"udp"}]' docker_app_ports_json tool)" 'map(.host_ip + ":" + .published + "->" + .target + "/" + .protocol) | join(",")' "127.0.0.1:20000->8080/tcp,0.0.0.0:15637->15637/udp"
 
 ps_json='{"row":{"Names":"enshrouded-server","Image":"sknnr/enshrouded","State":"running","Status":"Up 2 hours","Ports":"0.0.0.0:15637->15637/udp, :::15637->15637/udp"},"project":"enshrouded","config_files":"/srv/docker/enshrouded/compose.yml"}

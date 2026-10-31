@@ -125,6 +125,11 @@ docker_check_project() {
     has_cmd docker || dry_run || die "Docker is not installed; run mandal provision first"
     dry_run && return 0
     config="$(docker_compose_config "$name")" || die "the compose file is invalid: $(printf '%s' "$config" | tail -n 3)"
+    # Containers are named <app>-<service>-<n> from the app name, so one
+    # compose file can serve several apps; a fixed name would clash.
+    local fixed
+    fixed="$(jq -r '[.services // {} | to_entries[] | select(.value.container_name) | "\(.key) (\(.value.container_name))"] | join(", ")' <<< "$config" 2> /dev/null || true)"
+    [[ -z "$fixed" ]] || die "remove container_name from the compose file ($fixed): Mandal names containers <app>-<service>-1 after the app"
     if [[ "$proxy" == true ]]; then
         jq -e --arg port "$port" '[.services // {} | .[] | .ports // [] | .[] | select((.host_ip // "") == "127.0.0.1" and ((.published // "") | tostring) == $port)] | length > 0' <<< "$config" > /dev/null \
             || die "no service publishes 127.0.0.1:$port, which nginx would proxy to; add \"127.0.0.1:$port:<container port>\" to a service's ports"
@@ -227,8 +232,8 @@ docker_app_create() {
     if [[ "$proxy" == true ]]; then
         docker_write_proxy "$name" "$mode" "$port" "$domain" "$aliases"
     fi
-    docker_compose "$name" pull
-    docker_compose "$name" up -d --remove-orphans
+    # Nothing starts yet: pulling can take long or fail, and the files and
+    # environment may want a look first. app:control --action=start runs up.
 }
 
 # docker_app_replace_compose name compose_file: validates the new file and

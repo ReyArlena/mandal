@@ -74,17 +74,55 @@ it('validates the app name, domain and repository', function () {
     Queue::fake();
 
     livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
-        ->callAction('createApp', data: [
-            'name' => 'Shop!',
-            'domain' => 'not a domain',
-            'www' => 'redirect-to-naked',
-            'php' => '8.5',
-            'repo' => 'git@github.com:acme/shop.git',
-            'branch' => 'main',
-        ])
-        ->assertHasActionErrors(['name', 'domain', 'repo']);
+        ->callAction('createApp', data: ['name' => 'Shop!', 'domain' => 'not a domain', 'www' => 'redirect-to-naked', 'php' => '8.5', 'branch' => 'main'])
+        ->assertHasActionErrors(['name', 'domain']);
+
+    livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
+        ->callAction('createApp', data: ['name' => 'blog', 'domain' => 'blog.example.com', 'www' => 'redirect-to-naked', 'php' => '8.5', 'repo' => 'git@github.com:acme/shop.git', 'branch' => 'main'])
+        ->assertHasActionErrors(['repo']);
 
     Queue::assertNothingPushed();
+});
+
+it('checks the name and domain as they are typed and disables Create while they are wrong', function () {
+    livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
+        ->mountAction('createApp')
+        ->setActionData(['name' => 'shop'])
+        ->assertHasActionErrors(['name' => 'An app called shop already exists.'])
+        ->setActionData(['name' => 'root'])
+        ->assertHasActionErrors(['name' => 'root is reserved for the system.'])
+        ->setActionData(['name' => 'blog'])
+        ->assertHasNoActionErrors(['name'])
+        ->setActionData(['domain' => 'www.legacy.example.com'])
+        ->assertHasActionErrors(['domain' => 'legacy.example.com is already served by a site on this server.'])
+        ->setActionData(['domain' => 'blog.example.com', 'aliases' => ['shop.example.com']])
+        ->assertHasActionErrors(['aliases' => 'shop.example.com is already served by a site on this server.'])
+        ->assertSeeHtml('disabled');
+});
+
+it('refuses a Docker app name an existing compose project uses, and a fixed container_name', function () {
+    $inventory = $this->inventory;
+    $inventory['docker']['projects'] = [['Name' => 'valheim', 'Status' => 'running(1)', 'ConfigFiles' => '/opt/valheim/compose.yml']];
+    $this->ssh->respondWithJson('inventory', $inventory);
+
+    livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
+        ->mountAction('createApp')
+        ->setActionData(['type' => 'docker'])
+        ->setActionData(['name' => 'valheim'])
+        ->assertHasActionErrors(['name' => 'A Docker compose project called valheim already runs on this server.'])
+        ->setActionData(['compose' => "services:\n  game:\n    image: x\n    container_name: game-server\n"])
+        ->assertHasActionErrors(['compose']);
+});
+
+it('refuses a Laravel app name whose database already exists', function () {
+    $inventory = $this->inventory;
+    $inventory['database']['databases'] = ['old_blog'];
+    $this->ssh->respondWithJson('inventory', $inventory);
+
+    livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
+        ->mountAction('createApp')
+        ->setActionData(['name' => 'old-blog'])
+        ->assertHasActionErrors(['name' => 'A database called old_blog already exists; the app would need it.']);
 });
 
 it('refuses a name that already exists on the server', function () {
@@ -204,8 +242,12 @@ it('rejects a docker app without a compose file, or with a proxy but no port or 
     Queue::fake();
 
     livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
-        ->callAction('createApp', data: ['type' => 'docker', 'name' => 'tool', 'compose' => '', 'proxy' => true, 'port' => null, 'domain' => ''])
-        ->assertHasActionErrors(['compose', 'port', 'domain']);
+        ->callAction('createApp', data: ['type' => 'docker', 'name' => 'tool', 'compose' => '', 'proxy' => false])
+        ->assertHasActionErrors(['compose']);
+
+    livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
+        ->callAction('createApp', data: ['type' => 'docker', 'name' => 'tool', 'compose' => "services:\n  app:\n    image: x\n", 'proxy' => true, 'port' => null, 'domain' => ''])
+        ->assertHasActionErrors(['port', 'domain']);
 
     Queue::assertNothingPushed();
 });

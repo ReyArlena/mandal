@@ -131,7 +131,7 @@ Removes, in order, the nginx site, the PHP-FPM pool, every Supervisor program of
 | Imported files (`--files`) | The `.tar.gz` the panel built from an imported backup, unpacked into the project as root (`--no-same-owner`, file modes kept) after checking that it only holds files and folders inside the project and fits on the disk; the uploaded archive is removed |
 | Compose file | `/srv/docker/<app>/compose.yml` (`0640`), checked with `docker compose config` before anything starts; the directory is removed again if the check fails |
 | Environment | `/srv/docker/<app>/.env` (`0600`) |
-| Containers | `docker compose --project-name <app> pull`, then `up -d --remove-orphans` |
+| Containers | None started; `app:control --action=start` runs `up -d`, which pulls missing images first. A compose file that sets `container_name` is refused, since containers are named `<app>-<service>-1` after the app |
 | nginx (with proxy) | `/etc/nginx/sites-available/<app>.conf` linked into `sites-enabled`, proxying to `127.0.0.1:<port>`; `/etc/nginx/conf.d/mandal-upgrade.conf` (websocket upgrade map) written once |
 | Manifest | `/etc/mandal/apps/<app>.conf` with `TYPE=docker`, `PROXY`, `PORT` |
 
