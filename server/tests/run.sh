@@ -26,6 +26,7 @@ export MANDAL_SUPERVISOR_DIR="${FIXTURES}/supervisor"
 export MANDAL_OS_RELEASE="${FIXTURES}/os-release"
 export MANDAL_REBOOT_REQUIRED="${FIXTURES}/reboot-required"
 export MANDAL_SSHD_DROPIN_DIR="${FIXTURES}/sshd_config.d"
+export MANDAL_SSHD_RUN_DIR="${TMP}/run/sshd"
 export MANDAL_PROC_SWAPS="${FIXTURES}/swaps-none"
 export MANDAL_APT_SOURCES_DIR="${TMP}/apt-sources"
 export MANDAL_CONFIG_BACKUP_DIR="${TMP}/config-backups"
@@ -266,6 +267,7 @@ assert_json "whole inventory is valid JSON under pipefail" "$(cmd_inventory)" 'k
 set +o pipefail
 
 assert_eq "ssh_setting reads one value without exiting early" "2222" "$(ssh_setting port)"
+[[ -d "$MANDAL_SSHD_RUN_DIR" ]] && pass || fail "sshd's privilege separation directory exists before sshd -T runs"
 assert_eq "port_listener strips the ss decoration" "nginx" "$(port_listener 80)"
 assert_eq "port_listener is empty for a free port" "" "$(port_listener 3306)"
 assert_json "check is ok" "$check" '.ok' "true"

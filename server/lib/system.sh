@@ -148,6 +148,14 @@ service_restart() {
     run_cmd systemctl restart "$1"
 }
 
+# sshd -t and -T refuse to run without the privilege separation directory.
+# The SSH service creates it when it starts, but with socket activation
+# (Ubuntu 24.04 and later) it is missing until the first connection, so a
+# server set up from a console or cloud-init has none yet.
+sshd_run_dir() {
+    [[ -d "$MANDAL_SSHD_RUN_DIR" ]] || install -d -m 0755 "$MANDAL_SSHD_RUN_DIR" 2> /dev/null || true
+}
+
 # ---------------------------------------------------------------------------
 # Misc
 # ---------------------------------------------------------------------------

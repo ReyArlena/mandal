@@ -336,6 +336,7 @@ EOF
         printf '+ sshd -t && systemctl reload ssh\n'
         return 0
     fi
+    sshd_run_dir
     sshd -t || die "sshd configuration test failed; the SSH service was not reloaded"
     service_reload_or_restart ssh
 }
