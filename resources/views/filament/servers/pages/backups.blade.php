@@ -43,7 +43,7 @@
                 <dd>
                     @if ($remote && ($remote['name'] ?? '') !== '')
                         {{ \App\Models\BackupDestination::query()->where('slug', $remote['name'])->value('name') ?? $remote['name'] }}: {{ BackupTargetForm::describeSchedule($remote['schedule'] ?? null) }}, keeps {{ $remote['keep'] ?? 0 }}
-                        <span class="block font-mono text-xs text-gray-500">s3://{{ $remote['bucket'] ?? '' }}{{ ($remote['prefix'] ?? '') !== '' ? '/' . $remote['prefix'] : '' }}{{ ($remote['path'] ?? '') !== '' ? '/' . $remote['path'] : '' }}/</span>
+                        <span class="block font-mono text-xs text-gray-500">s3://{{ $remote['bucket'] ?? '' }}{{ ($remote['prefix'] ?? '') !== '' ? '/' . $remote['prefix'] : '' }}{{ ($remote['path'] ?? '') !== '' ? '/' . $remote['path'] : '' }}/db/</span>
                     @else
                         <x-filament::badge color="gray">None</x-filament::badge>
                     @endif
