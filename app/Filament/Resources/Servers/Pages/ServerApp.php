@@ -324,7 +324,7 @@ class ServerApp extends Page
                     ->helperText('Keeps files consistent; the app is unreachable for the duration.')
                     ->visible(fn (): bool => $this->isDocker()),
                 BackupTargetForm::localSection(),
-                BackupTargetForm::remoteSection($this->appName),
+                BackupTargetForm::remoteSection('apps/'.$this->appName),
             ])
             ->action(function (array $arguments, array $data, RemoteSync $sync): void {
                 $name = $this->appName($arguments);

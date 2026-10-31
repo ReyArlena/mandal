@@ -674,7 +674,7 @@ printf 'LOCAL=true\nLOCAL_KEEP=5\nREMOTE=rustfs\nREMOTE_SCHEDULE=0 5 * * *\nREMO
 (cmd_backup_configure --from="${TMP}/both.env") > /dev/null 2>&1
 both="$(MANDAL_FAKE_DBS=$'mysql\nshop' MANDAL_DRY_RUN=1 backup_run "" all 2>&1)"
 assert_eq "backup:run to both destinations completes" "0" "$?"
-[[ "$both" == *"+ dump shop -> ${MANDAL_BACKUP_DIR}/shop/shop-"* && "$both" == *"rclone_cmd rustfs copy ${MANDAL_BACKUP_DIR}/shop/shop-"*" rustfs:my-backups/srv1/prod/shop/"* && "$both" == *"prune remote rustfs:my-backups/srv1/prod/shop (keep 5)"* ]] && pass || fail "backup:run keeps the dump locally and uploads it under the remote path"
+[[ "$both" == *"+ dump shop -> ${MANDAL_BACKUP_DIR}/shop/shop-"* && "$both" == *"rclone_cmd rustfs copy ${MANDAL_BACKUP_DIR}/shop/shop-"*" rustfs:my-backups/srv1/prod/db/shop/"* && "$both" == *"prune remote rustfs:my-backups/srv1/prod/db/shop (keep 5)"* ]] && pass || fail "backup:run keeps the dump locally and uploads it under the remote path"
 local_only="$(MANDAL_FAKE_DBS=$'mysql\nshop' MANDAL_DRY_RUN=1 backup_run "" local 2>&1)"
 [[ "$local_only" != *"rclone"* && "$local_only" == *"+ dump shop -> ${MANDAL_BACKUP_DIR}/shop/"* ]] && pass || fail "backup:run --destination=local skips the upload"
 remote_only="$(MANDAL_FAKE_DBS=$'mysql\nshop' MANDAL_DRY_RUN=1 backup_run "" remote 2>&1)"
@@ -707,7 +707,7 @@ printf 'LOCAL=false\nREMOTE=rustfs\n' > "${TMP}/remote-only.env"
 (cmd_backup_configure --from="${TMP}/remote-only.env") > /dev/null 2>&1
 upload_fail="$(MANDAL_FAKE_RCLONE_FAIL=copy MANDAL_FAKE_DBS=$'mysql\nshop' backup_run_real "" all 2>&1)"
 assert_eq "backup:run exits non-zero when the upload fails" "1" "$?"
-[[ "$upload_fail" == *"failed-remote shop upload to rustfs:my-backups/srv1/shop failed"* && "$upload_fail" == *"keeping ${MANDAL_BACKUP_DIR}/.tmp/shop/shop-"*" locally because the remote failed"* ]] && pass || fail "a failed upload keeps the scratch copy instead of deleting it"
+[[ "$upload_fail" == *"failed-remote shop upload to rustfs:my-backups/srv1/db/shop failed"* && "$upload_fail" == *"keeping ${MANDAL_BACKUP_DIR}/.tmp/shop/shop-"*" locally because the remote failed"* ]] && pass || fail "a failed upload keeps the scratch copy instead of deleting it"
 assert_eq "the scratch copy is really kept" "1" "$(find "${MANDAL_BACKUP_DIR}/.tmp/shop" -name 'shop-*.sql.zst' | wc -l)"
 rm -rf "${MANDAL_BACKUP_DIR}/.tmp"
 printf 'LOCAL=true\nLOCAL_KEEP=5\nREMOTE=rustfs\nREMOTE_SCHEDULE=0 5 * * *\nREMOTE_KEEP=5\nREMOTE_PATH=prod\n' > "${TMP}/both.env"
@@ -718,7 +718,7 @@ printf 'LOCAL=true\nLOCAL_KEEP=5\nREMOTE=rustfs\nREMOTE_SCHEDULE=0 5 * * *\nREMO
 assert_json "backup:list reads the remote through lsjson" "$(MANDAL_FAKE_RCLONE_LSJSON='[{"Name":"shop-20261019020000.sql.zst","Size":12,"ModTime":"2026-10-19T02:00:00Z"}]' MANDAL_FAKE_DBS=$'mysql\nshop' backup_list_json shop)" '.[0].remote[0].file + "|" + (.[0].remote[0].size | tostring)' "shop-20261019020000.sql.zst|12"
 : > "$MANDAL_FAKE_RCLONE_LOG"
 MANDAL_FAKE_DBS=$'mysql\nshop' backup_list_json shop > /dev/null
-assert_eq "backup:list asks the remote for the database folder" "lsjson rustfs:my-backups/srv1/prod/shop" "$(cat "$MANDAL_FAKE_RCLONE_LOG")"
+assert_eq "backup:list asks the remote for the database folder" "lsjson rustfs:my-backups/srv1/prod/db/shop" "$(cat "$MANDAL_FAKE_RCLONE_LOG")"
 del="$(cmd_backup_delete --database=shop --file=shop-20261020020000.sql.zst --where=local --dry-run 2>&1)"
 assert_eq "backup:delete dry run completes" "0" "$?"
 [[ "$del" == *"rm -f ${MANDAL_BACKUP_DIR}/shop/shop-20261020020000.sql.zst"* ]] && pass || fail "backup:delete removes the local file"
@@ -726,7 +726,7 @@ assert_eq "backup:delete dry run completes" "0" "$?"
 [[ ! -f "${MANDAL_BACKUP_DIR}/shop/shop-20261021020000.sql.zst" ]] && pass || fail "backup:delete really removes the local file"
 : > "$MANDAL_FAKE_RCLONE_LOG"
 (cmd_backup_delete --database=shop --file=shop-20261019020000.sql.zst --where=remote) > /dev/null 2>&1
-assert_eq "backup:delete removes a remote file with deletefile" "deletefile rustfs:my-backups/srv1/prod/shop/shop-20261019020000.sql.zst" "$(cat "$MANDAL_FAKE_RCLONE_LOG")"
+assert_eq "backup:delete removes a remote file with deletefile" "deletefile rustfs:my-backups/srv1/prod/db/shop/shop-20261019020000.sql.zst" "$(cat "$MANDAL_FAKE_RCLONE_LOG")"
 (cmd_backup_delete --database=shop --file='../etc/passwd' --where=local --dry-run) > /dev/null 2>&1 && fail "backup:delete validates the file name" || pass
 (cmd_backup_delete --database=shop --file=other-20261019020000.sql.zst --where=local --dry-run) > /dev/null 2>&1 && fail "backup:delete refuses a file of another database" || pass
 (cmd_backup_delete --database=shop --file=shop-20261019020000.sql.zst --where=elsewhere --dry-run) > /dev/null 2>&1 && fail "backup:delete validates --where" || pass
@@ -735,7 +735,7 @@ restore="$(cmd_backup_restore --database=shop --file=shop-20261022020000.sql.zst
 assert_eq "backup:restore dry run completes" "0" "$?"
 [[ "$restore" == *"CREATE DATABASE IF NOT EXISTS \`shop_restore_"* && "$restore" == *"zstd -dc ${MANDAL_BACKUP_DIR}/shop/shop-20261022020000.sql.zst | mariadb shop_restore_"* && "$restore" == *"GRANT ALL PRIVILEGES ON \`shop_restore_"* ]] && pass || fail "backup:restore restores into a new database the app user can read"
 remote_restore="$(cmd_backup_restore --database=shop --file=shop-20261019020000.sql.zst --dry-run 2>&1)"
-[[ "$remote_restore" == *"rclone_cmd rustfs copy rustfs:my-backups/srv1/prod/shop/shop-20261019020000.sql.zst"* ]] && pass || fail "backup:restore downloads a backup that only exists remotely"
+[[ "$remote_restore" == *"rclone_cmd rustfs copy rustfs:my-backups/srv1/prod/db/shop/shop-20261019020000.sql.zst"* ]] && pass || fail "backup:restore downloads a backup that only exists remotely"
 (cmd_backup_restore --database=shop --file='../etc/passwd' --dry-run) > /dev/null 2>&1 && fail "backup:restore validates the file name" || pass
 (cmd_backup_restore --database=shop --file=shop-20261021020000.sql.zst --into='shop;drop' --dry-run) > /dev/null 2>&1 && fail "backup:restore validates the target database" || pass
 
@@ -825,7 +825,7 @@ chmod +x "${TMP}/backup-bin/docker"
 export MANDAL_FAKE_DOCKER_LOG="${TMP}/docker.log"
 arun="$(cmd_app_backup --name=valheim --dry-run 2>&1)"
 assert_eq "app:backup dry run completes" "0" "$?"
-[[ "$arun" == *"docker compose --progress plain --project-directory ${vroot} --project-name valheim pause"*"tar --zstd --anchored --wildcards --wildcards-match-slash --exclude-from=${MANDAL_BACKUPS_CONF_DIR}/app-valheim.exclude -C ${vroot} -cf ${MANDAL_APP_BACKUP_DIR}/valheim/valheim-"*".tar.zst ."*"--project-name valheim unpause"*" ok app valheim ${MANDAL_APP_BACKUP_DIR}/valheim/valheim-"*"rclone_cmd rustfs copy ${MANDAL_APP_BACKUP_DIR}/valheim/valheim-"*" rustfs:my-backups/srv1/games/valheim/"*"prune remote rustfs:my-backups/srv1/games/valheim (keep 4)"* ]] && pass || fail "app:backup pauses, archives, unpauses, uploads and prunes in that order"
+[[ "$arun" == *"docker compose --progress plain --project-directory ${vroot} --project-name valheim pause"*"tar --zstd --anchored --wildcards --wildcards-match-slash --exclude-from=${MANDAL_BACKUPS_CONF_DIR}/app-valheim.exclude -C ${vroot} -cf ${MANDAL_APP_BACKUP_DIR}/valheim/valheim-"*".tar.zst ."*"--project-name valheim unpause"*" ok app valheim ${MANDAL_APP_BACKUP_DIR}/valheim/valheim-"*"rclone_cmd rustfs copy ${MANDAL_APP_BACKUP_DIR}/valheim/valheim-"*" rustfs:my-backups/srv1/games/apps/valheim/"*"prune remote rustfs:my-backups/srv1/games/apps/valheim (keep 4)"* ]] && pass || fail "app:backup pauses, archives, unpauses, uploads and prunes in that order"
 alocal="$(cmd_app_backup --name=valheim --destination=local --dry-run 2>&1)"
 [[ "$alocal" != *"rclone"* && "$alocal" == *"tar --zstd"* ]] && pass || fail "app:backup --destination=local skips the upload"
 aremote="$(cmd_app_backup --name=valheim --destination=remote --dry-run 2>&1)"
@@ -852,7 +852,7 @@ members="$(tar -tf "$archive" | sort | tr '\n' ' ')"
 [[ "$members" != *"app.log"* ]] && pass || fail "a glob exclude matches at any depth"
 [[ "$members" == *"./etclink "* && "$members" != *"./etclink/"* ]] && pass || fail "a symlink out of the root is stored as a link"
 assert_eq "app:backup pauses and unpauses running containers" "ps|pause|unpause" "$(grep -oE 'ps -q|pause|unpause' "$MANDAL_FAKE_DOCKER_LOG" | sed 's/ -q//' | tr '\n' '|' | sed 's/|$//')"
-assert_eq "app:backup uploads the archive and prunes the remote" "copy ${archive} rustfs:my-backups/srv1/games/valheim/|lsf rustfs:my-backups/srv1/games/valheim" "$(tr '\n' '|' < "$MANDAL_FAKE_RCLONE_LOG" | sed 's/|$//')"
+assert_eq "app:backup uploads the archive and prunes the remote" "copy ${archive} rustfs:my-backups/srv1/games/apps/valheim/|lsf rustfs:my-backups/srv1/games/apps/valheim" "$(tr '\n' '|' < "$MANDAL_FAKE_RCLONE_LOG" | sed 's/|$//')"
 grep -q " ok app valheim ${archive} $(stat -c %s "$archive")\$" "$MANDAL_BACKUP_LOG" && pass || fail "app:backup logs ok with the file and size"
 assert_json "backup:status carries the app's last run" "$(backup_status_json)" '.apps[] | select(.name == "valheim") | .last_run.status + "|" + (.last_run.rest | split(" ") | .[0:2] | join(" "))' "ok|app valheim"
 assert_json "backup:status lists every app with backup settings" "$(backup_status_json)" '.apps | map(.name) | join(",")' "shop,valheim"
@@ -889,7 +889,7 @@ got="$(cmd_app_backup_get --name=valheim --file="$newest" | sha256sum | cut -d' 
 assert_eq "app:backup-get writes only the archive bytes" "$(sha256sum < "${MANDAL_APP_BACKUP_DIR}/valheim/$newest" | cut -d' ' -f1)" "$got"
 : > "$MANDAL_FAKE_RCLONE_LOG"
 assert_eq "app:backup-get streams a remote archive with rclone cat" "remote-bytes" "$(cmd_app_backup_get --name=valheim --file=valheim-20260101000000.tar.zst)"
-assert_eq "app:backup-get asks the remote for the file" "cat rustfs:my-backups/srv1/games/valheim/valheim-20260101000000.tar.zst" "$(cat "$MANDAL_FAKE_RCLONE_LOG")"
+assert_eq "app:backup-get asks the remote for the file" "cat rustfs:my-backups/srv1/games/apps/valheim/valheim-20260101000000.tar.zst" "$(cat "$MANDAL_FAKE_RCLONE_LOG")"
 (cmd_app_backup_get --name=valheim --file='../x.tar.zst') > /dev/null 2>&1 && fail "app:backup-get validates the file name" || pass
 (cmd_app_backup_get --name=valheim --file='shop-20260101000000.tar.zst') > /dev/null 2>&1 && fail "app:backup-get refuses another app's archive" || pass
 adel="$(cmd_app_backup_delete --name=valheim --file="$newest" --where=local --dry-run 2>&1)"
@@ -898,7 +898,7 @@ adel="$(cmd_app_backup_delete --name=valheim --file="$newest" --where=local --dr
 [[ ! -f "${MANDAL_APP_BACKUP_DIR}/valheim/${newest}" ]] && pass || fail "app:backup-delete really removes the archive"
 : > "$MANDAL_FAKE_RCLONE_LOG"
 (cmd_app_backup_delete --name=valheim --file=valheim-20260101000000.tar.zst --where=remote) > /dev/null 2>&1
-assert_eq "app:backup-delete removes a remote archive with deletefile" "deletefile rustfs:my-backups/srv1/games/valheim/valheim-20260101000000.tar.zst" "$(cat "$MANDAL_FAKE_RCLONE_LOG")"
+assert_eq "app:backup-delete removes a remote archive with deletefile" "deletefile rustfs:my-backups/srv1/games/apps/valheim/valheim-20260101000000.tar.zst" "$(cat "$MANDAL_FAKE_RCLONE_LOG")"
 (cmd_app_backup_delete --name=valheim --file=valheim-20260101000000.tar.zst --where=nowhere) > /dev/null 2>&1 && fail "app:backup-delete validates --where" || pass
 
 # forced remote removal detaches the backups that use it

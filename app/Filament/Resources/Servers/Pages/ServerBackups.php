@@ -114,7 +114,7 @@ class ServerBackups extends Page
             ->schema([
                 BackupTargetForm::enabledToggle(),
                 BackupTargetForm::localSection(),
-                BackupTargetForm::remoteSection('<database>'),
+                BackupTargetForm::remoteSection('db/<database>'),
             ])
             ->action(function (array $data, RemoteSync $sync): void {
                 try {

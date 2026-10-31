@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Database dumps and app archives went to the same remote folder (`<prefix>/<subfolder>/<name>/`) when an app and its database share a name, which they do by default, so an app's backup list also showed its database dumps. Remote copies now go under `db/<database>/` and `apps/<app>/`, like the local ones.
 - SSH hardening failed with "sshd configuration test failed", and `provision --check` read the SSH settings as empty, on a server nobody had connected to over SSH yet (set up from a console or cloud-init): with socket activation `/run/sshd` only exists once sshd has started, and `sshd -t`/`-T` refuse to run without it. Mandal now creates it first.
 - "Test connection" asked to confirm the host key on every click, even once it was pinned: a custom modal heading alone makes Filament open the modal. It now connects straight away when the key is pinned and only asks the first time.
 - Deploys reset requests that were in flight, because the PHP-FPM reload after switching releases killed workers at once (`process_control_timeout` defaults to 0; the panel's own task page showed "Error while loading page" while deploying itself). Provisioning and `php:install` now write `pool.d/00-mandal-global.conf` with a 10 s timeout, and the inventory no longer lists that `[global]` drop-in as a pool.

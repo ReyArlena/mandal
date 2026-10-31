@@ -221,7 +221,7 @@ app_backup_run() {
     fi
     [[ "$paused" == false ]] || { docker_compose "$name" unpause; trap - EXIT; }
     backup_log "ok app $name $file $(dry_run || stat -c %s "$file" 2> /dev/null || echo 0)"
-    backup_store "$MANDAL_APP_BACKUP_DIR" "$name" "$file" "^${name}-[0-9]{14}\.tar\.zst$" "app $name" \
+    backup_store "$MANDAL_APP_BACKUP_DIR" apps "$name" "$file" "^${name}-[0-9]{14}\.tar\.zst$" "app $name" \
         || die "the remote '$BACKUP_REMOTE' could not be reached; the local copy was kept"
 }
 
@@ -261,7 +261,7 @@ app_backup_list_json() {
     fi
     local_files="$({ find "$MANDAL_APP_BACKUP_DIR/$name" -maxdepth 1 -type f -name "${name}-*.tar.zst" -printf '%f\t%s\t%TY-%Tm-%TdT%TH:%TM:%TSZ\n' 2> /dev/null || true; } | json_tsv file size modified | jq 'map(.size |= tonumber | .where = "local")')"
     if [[ -n "$BACKUP_REMOTE" ]] && remote_usable "$BACKUP_REMOTE" && ! dry_run; then
-        remote_files="$({ rclone_cmd "$BACKUP_REMOTE" lsjson "$(remote_target "$BACKUP_REMOTE" "$BACKUP_REMOTE_PATH" "$name")" 2> /dev/null || echo '[]'; } | jq 'map({file: .Name, size: .Size, modified: .ModTime, where: "remote"})')"
+        remote_files="$({ rclone_cmd "$BACKUP_REMOTE" lsjson "$(remote_target "$BACKUP_REMOTE" "$BACKUP_REMOTE_PATH" "apps/$name")" 2> /dev/null || echo '[]'; } | jq 'map({file: .Name, size: .Size, modified: .ModTime, where: "remote"})')"
     fi
     jq -n \
         --argjson config "$config" \
@@ -310,7 +310,7 @@ cmd_app_backup_delete() {
     else
         backup_target_load "app:$name"
         [[ -n "$BACKUP_REMOTE" ]] || die "no remote is set for app '$name'"
-        run_cmd rclone_cmd "$BACKUP_REMOTE" deletefile "$(remote_target "$BACKUP_REMOTE" "$BACKUP_REMOTE_PATH" "$name")/$file"
+        run_cmd rclone_cmd "$BACKUP_REMOTE" deletefile "$(remote_target "$BACKUP_REMOTE" "$BACKUP_REMOTE_PATH" "apps/$name")/$file"
     fi
     printf '\nDeleted %s (%s).\n' "$file" "$where"
 }
@@ -338,7 +338,7 @@ cmd_app_backup_get() {
     if [[ -z "$BACKUP_REMOTE" ]] || ! remote_usable "$BACKUP_REMOTE"; then
         die "archive '$file' not found locally and no remote is set"
     fi
-    rclone_cmd "$BACKUP_REMOTE" cat "$(remote_target "$BACKUP_REMOTE" "$BACKUP_REMOTE_PATH" "$name")/$file"
+    rclone_cmd "$BACKUP_REMOTE" cat "$(remote_target "$BACKUP_REMOTE" "$BACKUP_REMOTE_PATH" "apps/$name")/$file"
 }
 
 # Called by app:delete: the target conf, excludes and cron lines always go,

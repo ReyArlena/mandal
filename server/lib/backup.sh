@@ -448,19 +448,19 @@ backup_prune_remote() {
     done
 }
 
-# backup_store base leaf file regex label - after the file exists: upload
+# backup_store base kind leaf file regex label - after the file exists: upload
 # and prune the remote when this run serves it, then keep or drop the local
 # copy. A broken remote never loses the backup: the file stays local and
 # the failure is logged as "failed-remote <label> <reason>" so the run can
 # report it. Returns 1 when the remote part failed.
 backup_store() {
-    local base="$1" leaf="$2" file="$3" regex="$4" label="${5:-$2}" status=0 target
+    local base="$1" kind="$2" leaf="$3" file="$4" regex="$5" label="${6:-$3}" status=0 target
     if [[ "$BACKUP_DO_REMOTE" == true ]]; then
         if ! remote_usable "$BACKUP_REMOTE"; then
             backup_log "failed-remote $label remote $BACKUP_REMOTE is missing its configuration"
             status=1
         else
-            target="$(remote_target "$BACKUP_REMOTE" "$BACKUP_REMOTE_PATH" "$leaf")"
+            target="$(remote_target "$BACKUP_REMOTE" "$BACKUP_REMOTE_PATH" "$kind/$leaf")"
             if run_cmd rclone_cmd "$BACKUP_REMOTE" copy "$file" "$target/"; then
                 backup_prune_remote "$BACKUP_REMOTE" "$target" "$regex" "$BACKUP_REMOTE_KEEP" || backup_log "failed-remote $label pruning $target failed"
             else
@@ -569,7 +569,7 @@ backup_run() {
             continue
         fi
         backup_log "ok ${app}-sqlite $file $(dry_run || stat -c %s "$file" 2> /dev/null || echo 0)"
-        backup_store "$MANDAL_BACKUP_DIR" "${app}-sqlite" "$file" "^${app}-sqlite-[0-9]{14}\.sql\.zst$" || remote_failed=$((remote_failed + 1))
+        backup_store "$MANDAL_BACKUP_DIR" db "${app}-sqlite" "$file" "^${app}-sqlite-[0-9]{14}\.sql\.zst$" || remote_failed=$((remote_failed + 1))
     done
     for db in $(backup_databases); do
         [[ -z "$only" || "$db" == "$only" ]] || continue
@@ -581,7 +581,7 @@ backup_run() {
             continue
         fi
         backup_log "ok $db $file $(dry_run || stat -c %s "$file" 2> /dev/null || echo 0)"
-        backup_store "$MANDAL_BACKUP_DIR" "$db" "$file" "^${db}-[0-9]{14}\.sql\.zst$" || remote_failed=$((remote_failed + 1))
+        backup_store "$MANDAL_BACKUP_DIR" db "$db" "$file" "^${db}-[0-9]{14}\.sql\.zst$" || remote_failed=$((remote_failed + 1))
     done
     [[ "$count" -gt 0 ]] || die "no databases to back up${only:+ (no database named $only)}"
     [[ "$failed" -eq 0 ]] || die "$failed backup(s) failed"
@@ -598,7 +598,7 @@ backup_list_json() {
         local_files="$({ find "$MANDAL_BACKUP_DIR/$db" -maxdepth 1 -type f -name "${db}-*.sql.zst" -printf '%f\t%s\t%TY-%Tm-%TdT%TH:%TM:%TSZ\n' 2> /dev/null || true; } | sort | json_tsv file size modified | jq 'map(.size |= tonumber)')"
         remote_files='[]'
         if [[ -n "$BACKUP_REMOTE" ]] && remote_usable "$BACKUP_REMOTE" && ! dry_run; then
-            remote_files="$({ rclone_cmd "$BACKUP_REMOTE" lsjson "$(remote_target "$BACKUP_REMOTE" "$BACKUP_REMOTE_PATH" "$db")" 2> /dev/null || echo '[]'; } | jq 'map({file: .Name, size: .Size, modified: .ModTime})')"
+            remote_files="$({ rclone_cmd "$BACKUP_REMOTE" lsjson "$(remote_target "$BACKUP_REMOTE" "$BACKUP_REMOTE_PATH" "db/$db")" 2> /dev/null || echo '[]'; } | jq 'map({file: .Name, size: .Size, modified: .ModTime})')"
         fi
         jq -n --arg db "$db" --argjson local "$local_files" --argjson remote "$remote_files" '{database: $db, local: $local, remote: $remote}'
     done | jq -s '.'
@@ -640,7 +640,7 @@ backup_delete() {
     else
         backup_target_load databases
         [[ -n "$BACKUP_REMOTE" ]] || die "no remote is set for database backups"
-        run_cmd rclone_cmd "$BACKUP_REMOTE" deletefile "$(remote_target "$BACKUP_REMOTE" "$BACKUP_REMOTE_PATH" "$db")/$name"
+        run_cmd rclone_cmd "$BACKUP_REMOTE" deletefile "$(remote_target "$BACKUP_REMOTE" "$BACKUP_REMOTE_PATH" "db/$db")/$name"
     fi
     printf '\nDeleted %s (%s).\n' "$name" "$where"
 }
@@ -657,7 +657,7 @@ backup_restore() {
         backup_target_load databases
         [[ -n "$BACKUP_REMOTE" ]] || dry_run || die "backup '$name' not found locally and no remote is configured"
         tmp="$(mktemp -d)"
-        run_cmd rclone_cmd "$BACKUP_REMOTE" copy "$(remote_target "$BACKUP_REMOTE" "$BACKUP_REMOTE_PATH" "$db")/$name" "$tmp/"
+        run_cmd rclone_cmd "$BACKUP_REMOTE" copy "$(remote_target "$BACKUP_REMOTE" "$BACKUP_REMOTE_PATH" "db/$db")/$name" "$tmp/"
         file="$tmp/$name"
     fi
     step "Restoring $name into database $into"
