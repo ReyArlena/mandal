@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `inventory` and `updates:status` run their collectors at once instead of one after another. Most of their time is spent starting processes (`systemctl`, `docker`, `fail2ban-client`, `supervisorctl`), so on a slow VPS the inventory took 8-9 s; it now takes about as long as its slowest part.
 - The inventory reads Docker with one `docker ps --all` for the Docker section and every Docker app, taking compose projects from the container labels instead of `docker compose ls` and one `docker compose ps` per app, and Docker's version from its package.
 - Deleting a Docker app describes it in Docker terms (containers, network, nginx site) and offers **Keep the project folder and volumes**, instead of the Laravel wording about pools, crontabs, system users and a database.
+- Deleting a Docker app also removes the images its services used, unless another container still uses one. They stayed behind before, often several GB per app.
 - The Server tab always shows **Update CLI** once a server is connected, disabled with "Up to date (build ...)" when the server already runs the panel's build, instead of hiding it.
 
 ### Fixed

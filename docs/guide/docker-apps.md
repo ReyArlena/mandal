@@ -45,7 +45,7 @@ Docker publishes ports straight past ufw: anything in `ports:` not bound to `127
 - **Pull and restart**: `docker compose pull` then `up -d --remove-orphans`, so the latest images are used. Pull progress is shown in the task output.
 - **Logs**: opens the Logs page on the container output.
 - **Backups**: archives of the project directory, set up as for [Laravel apps](./apps#backups). **Pause containers while archiving** (on by default) runs `docker compose pause` for the duration so files are consistent; the app is unreachable meanwhile. Set it up once the containers are running.
-- **Delete**: `docker compose down`, the nginx site and the backup settings. Unless you keep the files, the named volumes, the project directory and its local archives go too. Kept files stay in `/srv/docker/<app>`, bind mounts such as `./data` included, and an app created later with the same name uses that folder again.
+- **Delete**: `docker compose down`, the nginx site, the backup settings and the images no other container uses (they can be pulled again). Unless you keep the files, the named volumes, the project directory and its local archives go too. Kept files stay in `/srv/docker/<app>`, bind mounts such as `./data` included, and an app created later with the same name uses that folder again.
 
 ## Example: a game server
 

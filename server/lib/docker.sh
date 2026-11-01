@@ -317,11 +317,35 @@ docker_app_deploy() {
     printf '\nDeployed %s.\n' "$name"
 }
 
+# The images the project's services use, one per line.
+docker_app_images() {
+    has_cmd docker || return 0
+    { docker compose --project-directory "$(docker_app_dir "$1")" --project-name "$1" config --images 2> /dev/null || true; } | sort -u
+}
+
+# docker_remove_images name image...: removes the images that are present
+# and that no container outside the project uses.
+docker_remove_images() {
+    local name="$1" image users
+    shift
+    for image in "$@"; do
+        docker image inspect "$image" > /dev/null 2>&1 || continue
+        users="$({ docker ps --all --filter "ancestor=$image" --format '{{.ID}} {{.Label "com.docker.compose.project"}}' 2> /dev/null || true; } | awk -v name="$name" '$2 != name')"
+        if [[ -n "$users" ]]; then
+            printf '+ keeping image %s: other containers use it\n' "$image"
+        else
+            run_cmd docker image rm "$image" || warn "could not remove image $image"
+        fi
+    done
+}
+
 # docker_app_delete name keep_data: with keep_data the project folder (bind
-# mounts such as ./data live there) and the named volumes stay.
+# mounts such as ./data live there) and the named volumes stay. Images go
+# either way unless another container uses them; they can be pulled again.
 docker_app_delete() {
-    local name="$1" keep_data="$2" dir
+    local name="$1" keep_data="$2" dir images
     dir="$(docker_app_dir "$name")"
+    mapfile -t images < <(docker_app_images "$name")
     if [[ "$keep_data" == true ]]; then
         docker_compose "$name" down --remove-orphans
     else
@@ -329,6 +353,7 @@ docker_app_delete() {
     fi
     run_cmd rm -f "$MANDAL_NGINX_DIR/sites-enabled/${name}.conf" "$MANDAL_NGINX_DIR/sites-available/${name}.conf"
     nginx_check_and_reload
+    docker_remove_images "$name" "${images[@]}"
     if [[ "$keep_data" == true ]]; then
         printf '+ keeping %s and the volumes; an app created with the same name uses them again\n' "$dir"
     else

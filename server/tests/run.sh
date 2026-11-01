@@ -1447,7 +1447,14 @@ assert_eq "every server block in the proxy vhost hides the nginx version" "2" "$
 mkdir -p "${TMP}/compose-bin"
 cat > "${TMP}/compose-bin/docker" <<'DOCKEREOF'
 #!/usr/bin/env bash
-if [[ "$*" == *"config --format json"* ]]; then
+if [[ "$*" == *"config --images"* ]]; then
+    printf '%s\n' "${MANDAL_FAKE_COMPOSE_IMAGES:-}"
+elif [[ "$1 $2" == "image inspect" ]]; then
+    grep -qxF -- "$3" <<< "${MANDAL_FAKE_COMPOSE_IMAGES:-}"
+elif [[ "$*" == *"ancestor="* ]]; then
+    [[ "$*" == *"ancestor=${MANDAL_FAKE_SHARED_IMAGE:-none}"* ]] && printf 'abc123 other\n'
+    printf 'def456 tool\n'
+elif [[ "$*" == *"config --format json"* ]]; then
     [[ "${MANDAL_FAKE_COMPOSE_FAIL:-0}" == 1 ]] && { echo "services.app.ports must be a list" >&2; exit 1; }
     printf '{"services":{"app":{"image":"x","ports":%s%s}}}\n' "${MANDAL_FAKE_COMPOSE_PORTS:-[]}" "${MANDAL_FAKE_CONTAINER_NAME:+,\"container_name\":\"$MANDAL_FAKE_CONTAINER_NAME\"}"
 elif [[ "$1" == "ps" ]]; then
@@ -1606,6 +1613,8 @@ ddelete="$(cmd_app_delete --name=tool --dry-run 2>&1)"
 dkeep="$(cmd_app_delete --name=tool --keep-files --dry-run 2>&1)"
 [[ "$dkeep" == *"down --remove-orphans"* && "$dkeep" != *"--volumes"* ]] && pass || fail "docker app:delete can keep the volumes"
 [[ "$dkeep" == *"keeping ${MANDAL_DOCKER_DIR}/tool"* && "$dkeep" != *"rm -rf ${MANDAL_DOCKER_DIR}/tool"* ]] && pass || fail "docker app:delete --keep-files keeps the project folder"
+dimages="$(PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_COMPOSE_IMAGES=$'ghcr.io/org/tool:1.2\nbusybox:1.37' MANDAL_FAKE_SHARED_IMAGE=busybox:1.37 cmd_app_delete --name=tool --dry-run 2>&1)"
+[[ "$dimages" == *"docker image rm ghcr.io/org/tool:1.2"* && "$dimages" == *"keeping image busybox:1.37: other containers use it"* && "$dimages" != *"docker image rm busybox"* ]] && pass || fail "docker app:delete removes the images only it uses" "$(printf '%s' "$dimages" | tail -n 4)"
 printf 'A=1\n' > "${TMP}/tool.env"
 denv="$(cmd_app_env --name=tool --from="${TMP}/tool.env" --dry-run 2>&1)"
 [[ "$denv" == *"write ${MANDAL_DOCKER_DIR}/tool/.env (0600 root:root)"* ]] && pass || fail "app:env targets the docker app's env file" "$(printf '%s' "$denv" | tail -n 3)"
