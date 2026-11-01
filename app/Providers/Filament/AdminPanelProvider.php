@@ -5,6 +5,7 @@ namespace App\Providers\Filament;
 use App\Filament\Catppuccin;
 use App\Filament\Clusters\Settings\SettingsCluster;
 use App\Http\Controllers\AppBackupDownloadController;
+use App\Http\Controllers\DatabaseExportController;
 use Filament\Actions\Action;
 use Filament\Auth\MultiFactor\App\AppAuthentication;
 use Filament\Http\Middleware\Authenticate;
@@ -60,14 +61,19 @@ class AdminPanelProvider extends PanelProvider
             ->multiFactorAuthentication([
                 AppAuthentication::make()->recoverable(),
             ], isRequired: true)
-            // A plain download link cannot be a Livewire action, so it is a
-            // route inside the panel's authenticated group, behind the same
+            // A plain download link cannot be a Livewire action, so downloads
+            // are routes inside the panel's authenticated group, behind the same
             // sign-in and multi-factor middleware as every page.
             ->authenticatedRoutes(function (Panel $panel): void {
                 Route::get('servers/{server}/apps/{app}/backups/{file}', AppBackupDownloadController::class)
                     ->middleware($panel->isMultiFactorAuthenticationRequired() ? [$panel->getMultiFactorAuthenticationRequiredMiddleware()] : [])
                     ->where(['app' => '[a-z][a-z0-9-]{1,31}', 'file' => '[a-z][a-z0-9-]{1,31}-[0-9]{14}\.tar\.zst'])
                     ->name('servers.apps.backups.download');
+
+                Route::get('servers/{server}/databases/{database}/export/{format}', DatabaseExportController::class)
+                    ->middleware($panel->isMultiFactorAuthenticationRequired() ? [$panel->getMultiFactorAuthenticationRequiredMiddleware()] : [])
+                    ->where(['database' => '[a-z0-9_]{1,64}', 'format' => 'sql|zst'])
+                    ->name('servers.databases.export');
 
                 // Inventory became part of the Server tab; keep old links working.
                 Route::permanentRedirect('servers/{record}/inventory', '/servers/{record}')

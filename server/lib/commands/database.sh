@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# db:list / db:create / db:access / db:delete
+# db:list / db:create / db:access / db:delete / db:export / db:import
 # db:user:create / db:user:update / db:user:delete
 #
 # Databases and database users on the server. Users are always local
@@ -13,6 +13,8 @@ MANDAL_COMMANDS+=("db:list|Databases with their size and users with their access
 MANDAL_COMMANDS+=("db:create|Create a database (--name=, optionally --user= for each user given access)|write")
 MANDAL_COMMANDS+=("db:access|Set which users can use a database (--name=, --user= for each)|write")
 MANDAL_COMMANDS+=("db:delete|Delete a database no app uses (--name=)|write")
+MANDAL_COMMANDS+=("db:export|Write a dump of a database to stdout (--name=, --format=sql or zst)|read")
+MANDAL_COMMANDS+=("db:import|Import a .sql, .sql.gz or .sql.zst dump into a database (--name= --file=, --replace empties it first)|write")
 MANDAL_COMMANDS+=("db:user:create|Create a database user (--name=, --database= for each, password in --from=)|write")
 MANDAL_COMMANDS+=("db:user:update|Set a user's databases (--database= for each) and optionally its password (--from=)|write")
 MANDAL_COMMANDS+=("db:user:delete|Delete a database user no app uses (--name=)|write")
@@ -309,4 +311,112 @@ cmd_db_user_delete() {
     fi
     db_user_drop "$name"
     printf 'User %s deleted.\n' "$name"
+}
+
+cmd_db_export() {
+    local arg name="" format=sql
+    load_all_drivers
+    for arg in "$@"; do
+        case "$arg" in
+            --name=*) name="${arg#*=}" ;;
+            --format=*) format="${arg#*=}" ;;
+            *) die 64 "unknown option '$arg'" ;;
+        esac
+    done
+    [[ -n "$name" ]] || die 64 "--name is required"
+    [[ "$format" =~ ^(sql|zst)$ ]] || die 64 "--format must be sql or zst"
+    validate_database "$name"
+    require_root
+    db_require_running
+    db_state
+    db_exists "$name" || die "database '$name' does not exist"
+    # The same dump as the backups, so an export imports like one.
+    if [[ "$format" == zst ]]; then
+        mariadb-dump --single-transaction --quick --routines --triggers --events "$name" | zstd -q -T0 -c
+    else
+        mariadb-dump --single-transaction --quick --routines --triggers --events "$name"
+    fi
+}
+
+# What a dump file is: zstd, gzip or plain SQL text, from its first bytes;
+# fails for anything else.
+db_dump_kind() {
+    local magic
+    magic="$(head -c 4 "$1" | od -An -tx1 | tr -d ' \n')"
+    case "$magic" in
+        28b52ffd) echo zstd ;;
+        1f8b*) echo gzip ;;
+        *)
+            [[ "$(head -c 65536 "$1" | tr -d '\000' | wc -c)" -eq "$(head -c 65536 "$1" | wc -c)" ]] || return 1
+            echo sql
+            ;;
+    esac
+}
+
+# db_dump_cat file kind: the dump as SQL text on stdout.
+db_dump_cat() {
+    case "$2" in
+        zstd) zstd -dc -- "$1" ;;
+        gzip) gzip -dc -- "$1" ;;
+        *) cat -- "$1" ;;
+    esac
+}
+
+cmd_db_import() {
+    local arg name="" file="" replace=false kind backup
+    load_all_drivers
+    for arg in "$@"; do
+        case "$arg" in
+            --name=*) name="${arg#*=}" ;;
+            --file=*) file="${arg#*=}" ;;
+            --replace) replace=true ;;
+            --dry-run) export MANDAL_DRY_RUN=1 ;;
+            *) die 64 "unknown option '$arg'" ;;
+        esac
+    done
+    [[ -n "$name" && -n "$file" ]] || die 64 "--name and --file are required"
+    validate_database "$name"
+    require_root
+    [[ -f "$file" && ! -L "$file" ]] || die 2 "file not found: $file"
+    kind="$(db_dump_kind "$file")" || die 2 "the file is not a SQL dump: use a .sql file, or one compressed with gzip (.sql.gz) or zstd (.sql.zst)"
+    # The import runs as the database root user, so a dump must not reach
+    # beyond the database it is imported into.
+    if db_dump_cat "$file" "$kind" | grep -qaiE '^[[:space:]]*(USE[[:space:]]|CREATE[[:space:]]+(DATABASE|SCHEMA)[[:space:]])'; then
+        die 2 "the dump switches to or creates a database (USE or CREATE DATABASE); export a single database without --databases and try again"
+    fi
+    db_require_running
+    db_state
+    db_exists "$name" || die "database '$name' does not exist"
+    if ! dry_run; then
+        with_lock
+        audit "db:import $name$([[ "$replace" == true ]] && echo " replace")"
+    fi
+
+    # A backup like the nightly ones, so the Backups tab can restore it. Its
+    # name has a one-second timestamp, so an import right after another waits.
+    backup="$MANDAL_BACKUP_DIR/$name/$(backup_file_name "$name")"
+    while [[ -e "$backup" ]] && ! dry_run; do
+        sleep 1
+        backup="$MANDAL_BACKUP_DIR/$name/$(backup_file_name "$name")"
+    done
+    step "Backing up $name before the import"
+    backup_dump "$name" "$backup" || die "could not back up $name first; nothing was imported"
+
+    if [[ "$replace" == true ]]; then
+        # Grants on the database survive the drop, so its users keep access.
+        step "Emptying $name"
+        db_sql "DROP DATABASE \`${name}\`"
+        db_sql "CREATE DATABASE \`${name}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+    fi
+
+    step "Importing $(basename "$file") into $name"
+    printf '+ %s %s | mariadb %s\n' "$(case "$kind" in zstd) echo 'zstd -dc' ;; gzip) echo 'gzip -dc' ;; *) echo cat ;; esac)" "$file" "$name"
+    if ! dry_run; then
+        if ! db_dump_cat "$file" "$kind" | mariadb "$name"; then
+            rm -f "$file"
+            die "the import stopped part-way, so $name may be partly changed; its previous contents are in backup $(basename "$backup") on the Backups tab"
+        fi
+        rm -f "$file"
+    fi
+    printf '\nImported into %s. Its previous contents are in backup %s.\n' "$name" "$(basename "$backup")"
 }

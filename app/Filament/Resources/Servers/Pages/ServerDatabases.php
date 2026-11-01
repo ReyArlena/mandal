@@ -2,15 +2,21 @@
 
 namespace App\Filament\Resources\Servers\Pages;
 
+use App\Enums\TaskType;
 use App\Filament\Resources\Servers\Concerns\FormatsBytes;
 use App\Filament\Resources\Servers\ServerResource;
+use App\Jobs\ImportDatabase;
+use App\Mandal\ComposeImport;
 use App\Mandal\MandalClient;
 use App\Models\Server;
+use App\Models\Task;
 use App\Ssh\CommandResult;
 use App\Ssh\SshException;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
@@ -20,7 +26,8 @@ use Illuminate\Support\Str;
 
 /**
  * The server's databases and database users: create them, choose who can
- * use which database, change passwords and delete what no app uses.
+ * use which database, change passwords, import and export dumps and delete
+ * what no app uses.
  */
 class ServerDatabases extends Page
 {
@@ -196,6 +203,56 @@ class ServerDatabases extends Page
                     "Access to {$name} saved",
                     'Could not change who can use the database',
                 );
+            });
+    }
+
+    /**
+     * Where a dump of the database downloads from, as plain SQL or
+     * zstd-compressed like the backups.
+     */
+    public function exportUrl(string $database, string $format): string
+    {
+        return route('filament.admin.servers.databases.export', ['server' => $this->server(), 'database' => $database, 'format' => $format]);
+    }
+
+    public function importAction(): Action
+    {
+        return Action::make('import')
+            ->label('Import')
+            ->icon(Heroicon::OutlinedArrowUpTray)
+            ->link()
+            ->modalHeading(fn (array $arguments): string => "Import into {$arguments['name']}")
+            ->modalDescription('A .sql dump, or one compressed with gzip (.sql.gz) or zstd (.sql.zst) like the backups and exports here. The database is backed up first, so its previous contents can be restored from the Backups tab. The import runs as the database administrator, so a dump that switches to or creates a database (USE, CREATE DATABASE) is refused.')
+            ->modalSubmitActionLabel('Import')
+            ->schema([
+                FileUpload::make('file')
+                    ->label('Dump')
+                    ->required()
+                    ->disk('local')
+                    ->directory('imports')
+                    ->visibility('private')
+                    ->storeFileNamesIn('file_name')
+                    ->maxSize(intdiv(ComposeImport::maxUploadBytes(), 1024))
+                    ->rules(['extensions:sql,gz,zst'])
+                    ->validationMessages(['extensions' => 'Choose a .sql, .sql.gz or .sql.zst file.'])
+                    ->helperText(fn (): string => 'Max upload size to this panel: '.ComposeImport::human(ComposeImport::maxUploadBytes()).'.'),
+                Checkbox::make('replace')
+                    ->label('Empty the database first')
+                    ->helperText('Drops every table before importing, so nothing from before is left. Without it the dump runs on top of the current tables; most dumps drop and recreate the tables they contain.'),
+            ])
+            ->action(function (array $arguments, array $data): void {
+                $name = $this->validName($arguments, self::DATABASE_PATTERN);
+
+                if ($name === null || ! is_string($data['file'] ?? null)) {
+                    return;
+                }
+
+                $this->queueTask(TaskType::ImportDatabase, ImportDatabase::class, [
+                    'database' => $name,
+                    'file' => $data['file'],
+                    'file_name' => is_string($data['file_name'] ?? null) ? $data['file_name'] : basename($data['file']),
+                    'replace' => (bool) ($data['replace'] ?? false),
+                ], "Importing into {$name}");
             });
     }
 
@@ -394,6 +451,38 @@ class ServerDatabases extends Page
         $name = (string) ($arguments['name'] ?? '');
 
         return preg_match($pattern, $name) === 1 ? $name : null;
+    }
+
+    /**
+     * @param  class-string<ImportDatabase>  $job
+     * @param  array<string, mixed>  $options
+     */
+    private function queueTask(TaskType $type, string $job, array $options, string $title): void
+    {
+        $server = $this->server();
+
+        if ($server->hasActiveTask()) {
+            Notification::make()
+                ->title('Another task is still running')
+                ->body('Wait for it to finish; only one task runs on a server at a time.')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        /** @var Task $task */
+        $task = $server->tasks()->create([
+            'type' => $type,
+            'user_id' => auth()->id(),
+            'options' => $options,
+        ]);
+
+        $job::dispatch($task);
+
+        Notification::make()->title($title)->body('Follow the progress on the task page.')->success()->send();
+
+        $this->redirect(ServerResource::getUrl('task', ['record' => $server, 'task' => $task]));
     }
 
     /**

@@ -34,6 +34,8 @@
 | `db:access` | Set which users can use a database (--name=, --user= for each) |
 | `db:create` | Create a database (--name=, optionally --user= for each user given access) |
 | `db:delete` | Delete a database no app uses (--name=) |
+| `db:export` | Write a dump of a database to stdout (--name=, --format=sql or zst) |
+| `db:import` | Import a .sql, .sql.gz or .sql.zst dump into a database (--name= --file=, --replace empties it first) |
 | `db:list` | Databases with their size and users with their access, as JSON |
 | `db:user:create` | Create a database user (--name=, --database= for each, password in --from=) |
 | `db:user:delete` | Delete a database user no app uses (--name=) |

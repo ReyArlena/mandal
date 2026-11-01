@@ -16,6 +16,7 @@ enum TaskType: string implements HasLabel
     case UpdateCli = 'update-cli';
     case Backup = 'backup';
     case Restore = 'restore';
+    case ImportDatabase = 'import-database';
     case Updates = 'updates';
     case Php = 'php';
     case Benchmark = 'benchmark';
@@ -33,6 +34,7 @@ enum TaskType: string implements HasLabel
             self::UpdateCli => 'Update CLI',
             self::Backup => 'Back up',
             self::Restore => 'Restore backup',
+            self::ImportDatabase => 'Import database',
             self::Updates => 'Install updates',
             self::Php => 'PHP version',
             self::Benchmark => 'Benchmark',

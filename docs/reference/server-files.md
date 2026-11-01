@@ -151,8 +151,10 @@ No system user is created for a Docker app, and no firewall rules are written: D
 | `db:create`, `db:delete` | `CREATE DATABASE` / `DROP DATABASE` through the Unix socket as root |
 | `db:user:create`, `db:user:update`, `db:user:delete` | `CREATE USER '<user>'@'localhost'`, `ALTER USER ... IDENTIFIED BY` (password read from an uploaded file), `DROP USER` |
 | `db:access` | `GRANT ALL ON <db>.*` and `REVOKE` per user |
+| `db:import` | Writes a backup of the database to `/var/backups/mandal/db/<db>/<db>-<timestamp>.sql.zst` first, optionally `DROP DATABASE` and `CREATE DATABASE` (grants are kept), then runs the uploaded dump through `mariadb <db>` and removes it |
+| `db:export` | Nothing: streams `mariadb-dump` to the panel |
 
-Nothing is written outside MariaDB. Databases and users that belong to an app are refused.
+Apart from the backup `db:import` takes, nothing is written outside MariaDB. Databases and users that belong to an app are refused.
 
 ## Backups
 

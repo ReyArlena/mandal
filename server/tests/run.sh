@@ -53,7 +53,7 @@ mkdir -p "${MANDAL_APT_SOURCES_DIR}"
 # Only the fakes and a fixed set of real tools are on PATH, so whatever the
 # host has installed (bun, docker, nginx...) cannot leak into the results.
 mkdir -p "${TMP}/bin"
-for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch base64 sha256sum tar gzip getent stat flock curl seq xxd printf mkdir cp rm ln env install du zstd; do
+for tool in bash sh jq awk grep sed tr cut find wc basename dirname readlink id hostname uname nproc df mktemp mv chmod chown cat date sort uniq head tail tee ls touch base64 sha256sum tar gzip getent stat flock curl seq xxd od printf mkdir cp rm ln env install du zstd; do
     if path="$(command -v "$tool" 2> /dev/null)"; then
         ln -s "$path" "${TMP}/bin/${tool}"
     fi
@@ -1128,6 +1128,29 @@ out="$(cmd_db_delete --name=reports --dry-run 2>&1)"
 out="$(cmd_db_user_delete --name=reporter --dry-run 2>&1)"
 [[ "$out" == *"DROP USER 'reporter'@'localhost'"* ]] && pass || fail "db:user:delete drops the user"
 (cmd_db_user_delete --name=shop --dry-run) > /dev/null 2>&1 && fail "db:user:delete refuses an app's user" || pass
+
+dump="${TMP}/import.sql"
+printf 'DROP TABLE IF EXISTS `orders`;\nCREATE TABLE `orders` (`id` int);\nINSERT INTO `orders` VALUES (1);\n' > "$dump"
+out="$(cmd_db_import --name=reports --file="$dump" --dry-run 2>&1)"
+[[ "$out" == *"dump reports -> ${MANDAL_BACKUP_DIR}/reports/reports-"*".sql.zst"* && "$out" == *"cat ${dump} | mariadb reports"* ]] && pass || fail "db:import backs the database up, then imports a plain .sql dump"
+[[ "$out" != *"DROP DATABASE"* ]] && pass || fail "db:import keeps the existing tables unless asked to replace them"
+out="$(cmd_db_import --name=reports --file="$dump" --replace --dry-run 2>&1)"
+[[ "$out" == *"DROP DATABASE \`reports\`"* && "$out" == *"CREATE DATABASE \`reports\` CHARACTER SET utf8mb4"* ]] && pass || fail "db:import --replace empties the database first"
+gzip -kc "$dump" > "${dump}.gz"
+[[ "$(cmd_db_import --name=reports --file="${dump}.gz" --dry-run 2>&1)" == *"gzip -dc ${dump}.gz | mariadb reports"* ]] && pass || fail "db:import reads a gzip dump"
+zstd -q -c "$dump" > "${dump}.zst"
+[[ "$(cmd_db_import --name=reports --file="${dump}.zst" --dry-run 2>&1)" == *"zstd -dc ${dump}.zst | mariadb reports"* ]] && pass || fail "db:import reads a zstd dump like the backups"
+printf 'CREATE DATABASE `other`;\nUSE `other`;\nCREATE TABLE t (id int);\n' > "${TMP}/switch.sql"
+(cmd_db_import --name=reports --file="${TMP}/switch.sql" --dry-run) > /dev/null 2>&1 && fail "db:import refuses a dump that switches databases" || pass
+printf '  use other;\n' > "${TMP}/switch.sql"
+(cmd_db_import --name=reports --file="${TMP}/switch.sql" --dry-run) > /dev/null 2>&1 && fail "db:import refuses USE in any case" || pass
+printf '\000\001\002binary' > "${TMP}/binary.sql"
+(cmd_db_import --name=reports --file="${TMP}/binary.sql" --dry-run) > /dev/null 2>&1 && fail "db:import refuses a file that is not a dump" || pass
+(cmd_db_import --name=missing --file="$dump" --dry-run) > /dev/null 2>&1 && fail "db:import refuses an unknown database" || pass
+(cmd_db_import --name=mysql --file="$dump" --dry-run) > /dev/null 2>&1 && fail "db:import refuses system schemas" || pass
+(cmd_db_import --name=reports --file="${TMP}/no-such.sql" --dry-run) > /dev/null 2>&1 && fail "db:import needs the file" || pass
+(cmd_db_export --name=reports --format=tar) > /dev/null 2>&1 && fail "db:export only writes sql or zst" || pass
+(cmd_db_export --name=missing) > /dev/null 2>&1 && fail "db:export refuses an unknown database" || pass
 unset MANDAL_FAKE_USERS
 
 # ---------------------------------------------------------------------------

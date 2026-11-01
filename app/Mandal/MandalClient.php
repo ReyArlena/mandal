@@ -154,16 +154,21 @@ class MandalClient
      * @param  array<string, string>  $files
      * @param  (callable(string, int, int): void)|null  $onUpload  option, bytes sent, bytes in all
      */
-    public function runWithUpload(Server $server, string $arguments, string $contents, string $extension = '', ?callable $onOutput = null, int $timeoutSeconds = 60, array $files = [], ?callable $onUpload = null, bool $mergeErrorOutput = false): CommandResult
+    public function runWithUpload(Server $server, string $arguments, ?string $contents, string $extension = '', ?callable $onOutput = null, int $timeoutSeconds = 60, array $files = [], ?callable $onUpload = null, bool $mergeErrorOutput = false): CommandResult
     {
         $connection = $this->ssh->connect($server);
-        $remote = self::UPLOAD_DIR.'/'.Str::random(16).$extension;
-        $uploaded = [$remote];
+        $uploaded = [];
 
         try {
-            $connection->upload($remote, $contents, 0600);
             $home = rtrim(trim($connection->run('printf %s "$HOME"', timeoutSeconds: 15)->output), '/');
-            $arguments .= ' --from='.escapeshellarg($home.'/'.$remote);
+
+            // Without contents only the files travel, streamed from disk.
+            if ($contents !== null) {
+                $remote = self::UPLOAD_DIR.'/'.Str::random(16).$extension;
+                $uploaded[] = $remote;
+                $connection->upload($remote, $contents, 0600);
+                $arguments .= ' --from='.escapeshellarg($home.'/'.$remote);
+            }
 
             foreach ($files as $option => $local) {
                 $file = self::UPLOAD_DIR.'/'.Str::random(16).'-'.basename($local);
@@ -177,7 +182,9 @@ class MandalClient
         } finally {
             // The files can hold secrets. The CLI removes them once used, but
             // not when it refuses the command, so they are always removed here too.
-            rescue(fn () => $connection->run('rm -f -- '.implode(' ', array_map('escapeshellarg', $uploaded)), timeoutSeconds: 15), report: false);
+            if ($uploaded !== []) {
+                rescue(fn () => $connection->run('rm -f -- '.implode(' ', array_map('escapeshellarg', $uploaded)), timeoutSeconds: 15), report: false);
+            }
             $connection->disconnect();
         }
     }

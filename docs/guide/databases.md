@@ -6,11 +6,18 @@ The **Databases** page lists every MariaDB database with its size and the users 
 
 - create databases and users, and choose which users can use a database (from either side)
 - change a user's password
+- import and export databases
 - delete databases and users that no app uses
 
 Users sign in from the server itself (MariaDB listens on 127.0.0.1 only) and get all privileges on their databases. Passwords are uploaded as a file and never appear in commands or logs. An app's own database and user cannot be deleted here, the app always keeps access to its database, and its password stays in the app's `.env`.
 
 MariaDB's `root` authenticates through the Unix socket, so `sudo mariadb` on the server is the way to run anything the panel does not offer.
+
+### Import and export
+
+**Export** on a database downloads a dump, as plain `.sql` or compressed `.sql.zst`, made the same way as the backups (`mariadb-dump --single-transaction --routines --triggers --events`). The file is named like a backup, `<database>-<timestamp>.sql`.
+
+**Import** takes a `.sql` dump, or one compressed with gzip (`.sql.gz`) or zstd (`.sql.zst`), so backups and exports from here import as they are. Before anything changes, the database is backed up into the usual backup set, so **Restore** on the Backups tab brings its previous contents back. **Empty the database first** drops every table before the import; without it the dump runs on top of the current tables, which suits most dumps since they drop and recreate the tables they contain. The import runs as MariaDB's `root`, so a dump that switches to or creates another database (`USE`, `CREATE DATABASE`, as `mariadb-dump --databases` writes) is refused; export a single database instead. The upload limit is the panel's own (shown in the form).
 
 ## Backups
 

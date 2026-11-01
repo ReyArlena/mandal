@@ -101,7 +101,7 @@ abstract class RunMandalTask implements ShouldBeUnique, ShouldQueue
             $upload = $this->upload();
             $files = $this->files();
 
-            $result = $upload === null
+            $result = $upload === null && $files === []
                 ? $mandal->run(
                     $server,
                     $this->arguments(),
@@ -112,8 +112,8 @@ abstract class RunMandalTask implements ShouldBeUnique, ShouldQueue
                 : $mandal->runWithUpload(
                     $server,
                     $this->arguments(),
-                    $upload['contents'],
-                    $upload['extension'],
+                    $upload['contents'] ?? null,
+                    $upload['extension'] ?? '',
                     onOutput: fn (string $chunk) => $task->appendOutput($chunk),
                     timeoutSeconds: $this->timeout - 60,
                     files: $files,

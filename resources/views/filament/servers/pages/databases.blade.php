@@ -30,6 +30,20 @@
                             <span class="text-xs text-gray-500">No users</span>
                         @endforelse
                         {{ ($this->accessAction)(['name' => $database['name']]) }}
+                        {{ ($this->importAction)(['name' => $database['name']]) }}
+                        <x-filament::dropdown placement="bottom-end">
+                            <x-slot name="trigger">
+                                <x-filament::link tag="button" icon="heroicon-o-arrow-down-tray">Export</x-filament::link>
+                            </x-slot>
+                            <x-filament::dropdown.list>
+                                <x-filament::dropdown.list.item tag="a" :href="$this->exportUrl($database['name'], 'sql')" icon="heroicon-o-document-text">
+                                    .sql
+                                </x-filament::dropdown.list.item>
+                                <x-filament::dropdown.list.item tag="a" :href="$this->exportUrl($database['name'], 'zst')" icon="heroicon-o-archive-box">
+                                    .sql.zst (compressed)
+                                </x-filament::dropdown.list.item>
+                            </x-filament::dropdown.list>
+                        </x-filament::dropdown>
                         @unless ($database['app'] ?? null)
                             {{ ($this->deleteDatabaseAction)(['name' => $database['name']]) }}
                         @endunless
