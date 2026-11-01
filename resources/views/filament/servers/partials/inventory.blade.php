@@ -34,6 +34,24 @@
                 <dd class="font-mono">{{ $system['hostname'] ?? '' }}</dd>
                 <dt class="text-gray-500 dark:text-gray-400">Kernel</dt>
                 <dd class="font-mono">{{ $system['kernel'] ?? '' }} ({{ $system['arch'] ?? '' }})</dd>
+                @isset($system['ntsync'])
+                    <dt class="text-gray-500 dark:text-gray-400">ntsync</dt>
+                    <dd class="flex flex-wrap items-center gap-2">
+                        @if (! ($system['ntsync']['supported'] ?? false))
+                            <x-filament::badge color="gray">Not supported</x-filament::badge>
+                            <span class="text-xs text-gray-500">needs Linux 6.14 or newer</span>
+                        @else
+                            @if ($this->ntsyncEnabled())
+                                <x-filament::badge color="success">Active</x-filament::badge>
+                            @elseif ($system['ntsync']['active'] ?? false)
+                                <x-filament::badge color="warning">Active until reboot</x-filament::badge>
+                            @else
+                                <x-filament::badge color="gray">Not enabled</x-filament::badge>
+                            @endif
+                            {{ ($this->enableNtsyncAction)([]) }}
+                        @endif
+                    </dd>
+                @endisset
                 <dt class="text-gray-500 dark:text-gray-400">Uptime</dt>
                 <dd>{{ $this->duration($system['uptime_seconds'] ?? 0) }}</dd>
                 <dt class="text-gray-500 dark:text-gray-400">CPUs</dt>

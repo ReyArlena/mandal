@@ -28,6 +28,31 @@ run_cmd() {
     "$@"
 }
 
+# ntsync: the kernel driver (Linux 6.14+) that Wine and Proton use for
+# Windows locks and events. Supported when it is loaded already or the
+# running kernel has the module (or has it built in).
+ntsync_active() {
+    [[ -c "$MANDAL_NTSYNC_DEVICE" ]]
+}
+
+ntsync_supported() {
+    ntsync_active || { has_cmd modinfo && modinfo ntsync > /dev/null 2>&1; }
+}
+
+# Whether systemd-modules-load loads it at boot.
+ntsync_persistent() {
+    grep -qsxF ntsync "$MANDAL_MODULES_LOAD_DIR"/*.conf
+}
+
+ntsync_json() {
+    local supported=false active=false persistent=false
+    ntsync_supported && supported=true
+    ntsync_active && active=true
+    ntsync_persistent && persistent=true
+    jq -n --argjson supported "$supported" --argjson active "$active" --argjson persistent "$persistent" \
+        '{supported: $supported, active: $active, persistent: $persistent}'
+}
+
 # Copy an existing file into the config backup directory before changing it.
 backup_file() {
     local file="$1" dest

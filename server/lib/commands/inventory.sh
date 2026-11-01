@@ -92,6 +92,7 @@ inv_system() {
         --argjson disk_used "${disk_used:-0}" \
         --argjson reboot "$reboot" \
         --argjson packages "$packages" \
+        --argjson ntsync "$(ntsync_json)" \
         '{
             hostname: $hostname,
             os: {id: $os_id, version: $os_version, name: $os_name},
@@ -102,7 +103,8 @@ inv_system() {
             memory: {total_bytes: $mem_total, available_bytes: $mem_available},
             disk: {total_bytes: $disk_total, used_bytes: $disk_used},
             reboot_required: $reboot,
-            reboot_packages: $packages
+            reboot_packages: $packages,
+            ntsync: $ntsync
         }'
 }
 

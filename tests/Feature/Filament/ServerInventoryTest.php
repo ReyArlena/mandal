@@ -75,3 +75,39 @@ it('refreshes past the cache', function () {
 
     expect($this->ssh->commands)->toHaveCount(2);
 });
+
+it('enables ntsync from the system card and reads the inventory again', function () {
+    $server = Server::factory()->withPinnedHostKey()->create();
+    $this->inventory['system']['ntsync'] = ['supported' => true, 'active' => false, 'persistent' => false];
+    $this->ssh->respondWithJson('inventory', $this->inventory)
+        ->respondTo('ntsync:enable', "ntsync is active.\n");
+
+    livewire(ViewServer::class, ['record' => $server->getRouteKey()])
+        ->assertSee('Not enabled')
+        ->assertActionEnabled('enableNtsync')
+        ->callAction('enableNtsync')
+        ->assertNotified('ntsync is active');
+
+    expect($this->ssh->ran('ntsync:enable'))->toBeTrue()
+        ->and(collect($this->ssh->commands)->filter(fn (string $command): bool => str_contains($command, 'inventory')))->toHaveCount(2);
+});
+
+it('reports ntsync that is already active', function () {
+    $server = Server::factory()->withPinnedHostKey()->create();
+    $this->inventory['system']['ntsync'] = ['supported' => true, 'active' => true, 'persistent' => true];
+    $this->ssh->respondWithJson('inventory', $this->inventory);
+
+    livewire(ViewServer::class, ['record' => $server->getRouteKey()])
+        ->assertSee('Active')
+        ->assertActionDisabled('enableNtsync');
+});
+
+it('says when the kernel has no ntsync driver', function () {
+    $server = Server::factory()->withPinnedHostKey()->create();
+    $this->inventory['system']['ntsync'] = ['supported' => false, 'active' => false, 'persistent' => false];
+    $this->ssh->respondWithJson('inventory', $this->inventory);
+
+    livewire(ViewServer::class, ['record' => $server->getRouteKey()])
+        ->assertSee('Not supported')
+        ->assertSee('needs Linux 6.14 or newer');
+});

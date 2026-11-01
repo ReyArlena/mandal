@@ -19,6 +19,7 @@ use App\Models\Task;
 use App\Ssh\KeyPair;
 use App\Ssh\SshClient;
 use App\Ssh\SshException;
+use App\Support\Terminal;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -29,6 +30,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Filament\Support\Enums\Size;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\View\View;
 
@@ -280,6 +282,57 @@ class ViewServer extends ViewRecord
 
                 Notification::make()->title('Access granted')->body(trim($result->output))->success()->send();
             });
+    }
+
+    /**
+     * Loads the ntsync driver now and at boot (`mandal ntsync:enable`), for
+     * Windows game servers run under Proton or Wine. Shown on the System card.
+     */
+    public function enableNtsyncAction(): Action
+    {
+        return Action::make('enableNtsync')
+            ->label('Enable')
+            ->icon(Heroicon::OutlinedBolt)
+            ->size(Size::Small)
+            ->color('gray')
+            ->disabled(fn (): bool => $this->ntsyncEnabled())
+            ->tooltip(fn (): ?string => $this->ntsyncEnabled() ? 'Already active' : null)
+            ->requiresConfirmation()
+            ->modalIcon(Heroicon::OutlinedBolt)
+            ->modalHeading('Enable ntsync')
+            ->modalDescription('Loads the kernel\'s ntsync driver now and at every boot. Windows game servers run under Proton or Wine use it for their locks and events, which can cut their tick time. A container only uses it once its compose file passes the device: devices: [/dev/ntsync:/dev/ntsync].')
+            ->modalSubmitActionLabel('Enable')
+            ->action(function (MandalClient $mandal): void {
+                /** @var Server $server */
+                $server = $this->getRecord();
+
+                try {
+                    $result = $mandal->run($server, 'ntsync:enable', timeoutSeconds: 60);
+                } catch (SshException $exception) {
+                    Notification::make()->title('Could not enable ntsync')->body($exception->getMessage())->danger()->send();
+
+                    return;
+                }
+
+                if ($result->failed()) {
+                    Notification::make()->title('Could not enable ntsync')->body(Terminal::plain(trim($result->errorOutput ?: $result->output)))->danger()->send();
+
+                    return;
+                }
+
+                Notification::make()->title('ntsync is active')->success()->send();
+                $this->loadInventory(fresh: true);
+            });
+    }
+
+    /**
+     * Whether ntsync is loaded and set to load at boot, as the inventory saw it.
+     */
+    public function ntsyncEnabled(): bool
+    {
+        $ntsync = $this->section('system')['ntsync'] ?? [];
+
+        return ($ntsync['active'] ?? false) && ($ntsync['persistent'] ?? false);
     }
 
     /**

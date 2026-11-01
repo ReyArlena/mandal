@@ -70,6 +70,19 @@ volumes:
 
 Create it without the nginx option. The Firewall page then lists `2456-2457/udp` as exposed by Docker, and players connect to the server's address on 2456.
 
+### Windows game servers and ntsync
+
+Some game servers only ship for Windows, and their images run them under Proton or Wine (Enshrouded, for example). They spend much of their time on Windows locks and events, which the kernel's ntsync driver handles far faster than Wine's fallbacks. It needs Linux 6.14 or newer: Ubuntu 26.04 has it, Ubuntu 24.04's standard 6.8 kernel does not.
+
+Press **Enable** next to ntsync on the Server tab (`mandal ntsync:enable`), which loads the driver and lists it in `/etc/modules-load.d/ntsync.conf` for every boot. Then pass the device to the game's service and apply the compose file:
+
+```yaml
+    devices:
+      - /dev/ntsync:/dev/ntsync
+```
+
+The device is readable and writable by every user, as the kernel creates it; it only lets a process make its own locks and events. Images based on a recent GE-Proton use it on their own, and some log `ntsync: up and running.` at start.
+
 ## Example: a web app behind nginx
 
 ```yaml

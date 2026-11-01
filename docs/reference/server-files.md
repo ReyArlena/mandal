@@ -190,6 +190,7 @@ Every backup target (the server's databases, or one app) has a local and a remot
 | `php:install` | `php<v>-*` packages; `/etc/php/<v>/{cli,fpm}/conf.d/99-mandal.ini` (`expose_php = Off`; FPM also `upload_max_filesize = 1G`, `post_max_size = 1G`, `memory_limit = 256M`, `max_execution_time = 300`, `max_input_time = 300`, kept when the file already sets other values); `/etc/php/<v>/fpm/pool.d/00-mandal-global.conf`; `php<v>-fpm` enabled |
 | `php:limits` | The limits in `/etc/php/<v>/fpm/conf.d/99-mandal.ini`, then `php<v>-fpm` reloaded; refuses a `post_max_size` below `upload_max_filesize` |
 | `nginx:limits` | `NGINX_CLIENT_MAX_BODY_SIZE` in `/etc/mandal/server.conf` and `client_max_body_size` in `/etc/nginx/conf.d/mandal.conf`, then nginx tested and reloaded; refused when `nginx.conf` sets the directive itself |
+| `ntsync:enable` | `modprobe ntsync` and `/etc/modules-load.d/ntsync.conf` (`ntsync`), unless the driver is loaded and listed for boot already; refused on a kernel without the driver |
 | `php:default` | `update-alternatives --set` for `php`, `phar`, `phar.phar`, `phpize`, `php-config` |
 | `php:remove` | The version's packages purged; refused while an app uses it |
 

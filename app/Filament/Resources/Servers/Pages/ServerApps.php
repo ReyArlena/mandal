@@ -67,6 +67,10 @@ class ServerApps extends Page
           options:
             max-size: "10m"
             max-file: "3"
+        # A Windows game server run under Proton or Wine is faster with the
+        # kernel's ntsync driver. Enable ntsync on the Server tab, then:
+        # devices:
+        #   - /dev/ntsync:/dev/ntsync
         # An image that runs as a non-root user cannot write to a folder
         # mounted from the project (owned by root). Hand it over first with
         # the one-off service below, and start this one after it:

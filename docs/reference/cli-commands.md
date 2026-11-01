@@ -48,6 +48,7 @@
 | `logs:read` | Read a log source as JSON (--source=&lt;id&gt; [--lines=] [--grep=] [--since=] [--level=] [--after=]) |
 | `logs:sources` | List readable log sources as JSON (--app=&lt;name&gt; to filter) |
 | `nginx:limits` | Change nginx's request body limit for every site (--client-max-body-size=1g) |
+| `ntsync:enable` | Load the ntsync driver for Windows game servers under Proton or Wine, now and at boot |
 | `panel:install` | Create an app for hosting the panel on this server (--name= --domain= --repo=) |
 | `panel:update` | Update the hosted panel and the CLI to a release (--version=&lt;tag&gt;, default: the latest) |
 | `php:available` | PHP versions the package source offers, as JSON |
