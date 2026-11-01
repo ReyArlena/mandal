@@ -69,6 +69,24 @@ app_hostnames() {
     done
 }
 
+# Certificates that name the app's domain. No two apps share a domain, so
+# such a certificate is the app's.
+app_certificates() {
+    local domain="${1#www.}"
+    [[ -n "$domain" ]] && has_cmd certbot || return 0
+    { certbot certificates 2> /dev/null || true; } | certbot_tsv | awk -F '\t' -v domain="$domain" '
+        { n = split($2, hosts, " "); for (i = 1; i <= n; i++) if (hosts[i] == domain) { print $1; next } }
+    '
+}
+
+# Run once nginx no longer serves the app: its site names the files.
+app_delete_certificates() {
+    local cert
+    while IFS= read -r cert; do
+        run_cmd certbot delete --non-interactive --cert-name "$cert" || warn "could not delete the certificate $cert"
+    done < <(app_certificates "$1")
+}
+
 # Names that serve the app itself (not redirected).
 app_primary_hostnames() {
     local mode="$1" domain name

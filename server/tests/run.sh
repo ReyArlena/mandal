@@ -478,6 +478,7 @@ assert_eq "app:delete dry run completes" "0" "$?"
 for marker in "rm -f ${MANDAL_NGINX_DIR}/sites-enabled/shop.conf" "rm -f ${MANDAL_PHP_DIR}/8.5/fpm/pool.d/shop.conf" "DROP DATABASE IF EXISTS \`shop\`" "userdel --remove shop" "App shop removed."; do
     if [[ "$delete" == *"$marker"* ]]; then pass; else fail "app:delete mentions: $marker"; fi
 done
+[[ "$delete" == *"certbot delete --non-interactive --cert-name shop.example.com"* && "$delete" != *"--cert-name old.example.com"* ]] && pass || fail "app:delete removes the certificate for the app's domain only"
 keep="$(cmd_app_delete --name=shop --keep-database --keep-files --dry-run 2>&1)"
 [[ "$keep" != *"DROP DATABASE"* && "$keep" == *"userdel shop"* ]] && pass || fail "app:delete can keep the database and files"
 
@@ -1609,6 +1610,7 @@ printf 'TYPE=docker\nDOMAIN=tool.example.com\nWWW=redirect-to-naked\nPROXY=true\
 ddeploy="$(cmd_app_deploy --name=tool --dry-run 2>&1)"
 [[ "$ddeploy" == *"--project-name tool pull"* && "$ddeploy" == *"up -d --remove-orphans"* && "$ddeploy" != *"git clone"* ]] && pass || fail "docker app:deploy pulls and recreates instead of cloning"
 ddelete="$(cmd_app_delete --name=tool --dry-run 2>&1)"
+[[ "$ddelete" != *"certbot delete"* ]] && pass || fail "docker app:delete leaves certificates for other domains"
 [[ "$ddelete" == *"down --volumes --remove-orphans"* && "$ddelete" == *"rm -rf ${MANDAL_DOCKER_DIR}/tool"* && "$ddelete" == *"rm -f ${MANDAL_NGINX_DIR}/sites-enabled/tool.conf"* ]] && pass || fail "docker app:delete removes containers, volumes, files and the vhost"
 dkeep="$(cmd_app_delete --name=tool --keep-files --dry-run 2>&1)"
 [[ "$dkeep" == *"down --remove-orphans"* && "$dkeep" != *"--volumes"* ]] && pass || fail "docker app:delete can keep the volumes"

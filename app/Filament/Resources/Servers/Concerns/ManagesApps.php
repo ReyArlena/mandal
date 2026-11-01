@@ -586,8 +586,8 @@ trait ManagesApps
             ->requiresConfirmation()
             ->modalHeading(fn (array $arguments): string => "Delete {$arguments['name']}?")
             ->modalDescription(fn (array $arguments): string => ($arguments['type'] ?? 'laravel') === 'docker'
-                ? 'Stops and removes the containers and their network, the images no other container uses, the nginx site and the backup settings. Choose what to keep below.'
-                : 'Removes the site, pool, worker programs, crontab and system user. Choose what to keep below.')
+                ? 'Stops and removes the containers and their network, the images no other container uses, the nginx site and certificate and the backup settings. Choose what to keep below.'
+                : 'Removes the site and certificate, pool, worker programs, crontab and system user. Choose what to keep below.')
             ->schema(fn (array $arguments): array => ($arguments['type'] ?? 'laravel') === 'docker'
                 ? [
                     Checkbox::make('keep_files')

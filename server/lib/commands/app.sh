@@ -187,8 +187,9 @@ cmd_app_delete() {
         die 2 "app '$name' hosts the Mandal panel; deleting it would take the panel down (set MANDAL_FORCE_PANEL=1 on the server to override)"
     fi
 
-    local php db type
+    local php db type domain
     php="$(conf_get "$(app_conf_path "$name")" PHP || true)"
+    domain="$(conf_get "$(app_conf_path "$name")" DOMAIN || true)"
     db="$(conf_get "$(app_conf_path "$name")" DATABASE || true)"
     type="$(conf_get "$(app_conf_path "$name")" TYPE || echo laravel)"
 
@@ -200,6 +201,7 @@ cmd_app_delete() {
     if [[ "$type" == "docker" ]]; then
         step "Removing Docker app $name"
         docker_app_delete "$name" "$keep_home"
+        app_delete_certificates "$domain"
         app_backup_cleanup "$name" "$keep_home"
         run_cmd rm -f "$(app_conf_path "$name")"
         printf '\nApp %s removed.\n' "$name"
@@ -209,6 +211,7 @@ cmd_app_delete() {
     step "Removing app $name"
     run_cmd rm -f "$MANDAL_NGINX_DIR/sites-enabled/${name}.conf" "$MANDAL_NGINX_DIR/sites-available/${name}.conf"
     nginx_check_and_reload
+    app_delete_certificates "$domain"
     if [[ -n "$php" ]]; then
         run_cmd rm -f "$MANDAL_PHP_DIR/$php/fpm/pool.d/${name}.conf"
         service_reload_or_restart "php${php}-fpm"
