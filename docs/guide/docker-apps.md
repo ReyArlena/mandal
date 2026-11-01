@@ -72,7 +72,7 @@ Create it without the nginx option. The Firewall page then lists `2456-2457/udp`
 
 ### Windows game servers and ntsync
 
-Some game servers only ship for Windows, and their images run them under Proton or Wine (Enshrouded, for example). They spend much of their time on Windows locks and events, which the kernel's ntsync driver handles far faster than Wine's fallbacks. It needs Linux 6.14 or newer: Ubuntu 26.04 has it, Ubuntu 24.04's standard 6.8 kernel does not.
+Some game servers only ship for Windows, and their images run them under Proton or Wine (Enshrouded, for example). They spend much of their time on Windows locks and events, which the kernel's ntsync driver handles far faster than Wine's fallbacks. It needs Linux 6.14 or newer with the ntsync module: Ubuntu 26.04 has it, Ubuntu 24.04's standard 6.8 kernel does not, and container-based VPSes (LXC, OpenVZ) cannot load kernel modules at all.
 
 Press **Enable** next to ntsync on the Server tab (`mandal ntsync:enable`), which loads the driver and lists it in `/etc/modules-load.d/ntsync.conf` for every boot. Then pass the device to the game's service and apply the compose file:
 

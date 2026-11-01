@@ -39,7 +39,7 @@
                     <dd class="flex flex-wrap items-center gap-2">
                         @if (! ($system['ntsync']['supported'] ?? false))
                             <x-filament::badge color="gray">Not supported</x-filament::badge>
-                            <span class="text-xs text-gray-500">needs Linux 6.14 or newer</span>
+                            <span class="text-xs text-gray-500">needs Linux 6.14 or newer with the ntsync module</span>
                         @else
                             @if ($this->ntsyncEnabled())
                                 <x-filament::badge color="success">Active</x-filament::badge>

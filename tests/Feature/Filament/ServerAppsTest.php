@@ -114,6 +114,24 @@ it('refuses a Docker app name an existing compose project uses, and a fixed cont
         ->assertHasActionErrors(['compose']);
 });
 
+it('asks for ntsync before a compose file that passes /dev/ntsync', function () {
+    $inventory = $this->inventory;
+    $inventory['system']['ntsync'] = ['supported' => true, 'active' => false, 'persistent' => false];
+    $this->ssh->respondWithJson('inventory', $inventory);
+    $compose = "services:\n  game:\n    image: x\n    devices:\n      - /dev/ntsync:/dev/ntsync\n";
+
+    livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
+        ->mountAction('createApp')
+        ->setActionData(['type' => 'docker', 'compose' => $compose])
+        ->assertHasActionErrors(['compose' => 'This file passes /dev/ntsync, which this server does not have yet. Enable ntsync on the Server tab first.'])
+        ->setActionData(['compose' => ServerApps::COMPOSE_TEMPLATE])
+        ->assertHasNoActionErrors(['compose']);
+
+    expect(ServerApps::composeProblem($compose, ['supported' => true, 'active' => true, 'persistent' => true]))->toBeNull()
+        ->and(ServerApps::composeProblem($compose, ['supported' => false, 'active' => false, 'persistent' => false]))->toContain('needs Linux 6.14 or newer')
+        ->and(ServerApps::composeProblem($compose))->toBeNull();
+});
+
 it('refuses a Laravel app name whose database already exists', function () {
     $inventory = $this->inventory;
     $inventory['database']['databases'] = ['old_blog'];

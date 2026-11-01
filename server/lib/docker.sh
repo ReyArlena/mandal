@@ -130,6 +130,12 @@ docker_check_project() {
     local fixed
     fixed="$(jq -r '[.services // {} | to_entries[] | select(.value.container_name) | "\(.key) (\(.value.container_name))"] | join(", ")' <<< "$config" 2> /dev/null || true)"
     [[ -z "$fixed" ]] || die "remove container_name from the compose file ($fixed): Mandal names containers <app>-<service>-1 after the app"
+    # Without the driver loaded the device is missing, and Docker would only
+    # fail at start with "error gathering device information".
+    if ! ntsync_active && jq -e '[.services // {} | .[] | .devices // [] | .[] | if type == "string" then split(":")[0] else .source end] | index("/dev/ntsync")' <<< "$config" > /dev/null 2>&1; then
+        ntsync_supported || die "the compose file passes /dev/ntsync, but kernel $(uname -r) has no ntsync driver (it needs Linux 6.14 or newer with the ntsync module); remove the device"
+        die "the compose file passes /dev/ntsync, which this server does not have yet; enable ntsync on the Server tab (mandal ntsync:enable) first"
+    fi
     if [[ "$proxy" == true ]]; then
         jq -e --arg port "$port" '[.services // {} | .[] | .ports // [] | .[] | select((.host_ip // "") == "127.0.0.1" and ((.published // "") | tostring) == $port)] | length > 0' <<< "$config" > /dev/null \
             || die "no service publishes 127.0.0.1:$port, which nginx would proxy to; add \"127.0.0.1:$port:<container port>\" to a service's ports"

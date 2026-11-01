@@ -13,7 +13,7 @@ cmd_ntsync_enable() {
         esac
     done
     require_root
-    ntsync_supported || die 2 "kernel $(uname -r) has no ntsync driver; it needs Linux 6.14 or newer"
+    ntsync_supported || die 2 "kernel $(uname -r) has no ntsync driver; it needs Linux 6.14 or newer with the ntsync module"
     if ntsync_active && ntsync_persistent; then
         printf 'ntsync is already active and loads at boot.\n'
         return 0

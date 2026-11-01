@@ -1488,7 +1488,7 @@ elif [[ "$*" == *"ancestor="* ]]; then
     printf 'def456 tool\n'
 elif [[ "$*" == *"config --format json"* ]]; then
     [[ "${MANDAL_FAKE_COMPOSE_FAIL:-0}" == 1 ]] && { echo "services.app.ports must be a list" >&2; exit 1; }
-    printf '{"services":{"app":{"image":"x","ports":%s%s}}}\n' "${MANDAL_FAKE_COMPOSE_PORTS:-[]}" "${MANDAL_FAKE_CONTAINER_NAME:+,\"container_name\":\"$MANDAL_FAKE_CONTAINER_NAME\"}"
+    printf '{"services":{"app":{"image":"x","ports":%s%s%s}}}\n' "${MANDAL_FAKE_COMPOSE_PORTS:-[]}" "${MANDAL_FAKE_CONTAINER_NAME:+,\"container_name\":\"$MANDAL_FAKE_CONTAINER_NAME\"}" "${MANDAL_FAKE_COMPOSE_DEVICES:+,\"devices\":$MANDAL_FAKE_COMPOSE_DEVICES}"
 elif [[ "$1" == "ps" ]]; then
     printf '%s\n' "${MANDAL_FAKE_DOCKER_PS:-}"
 fi
@@ -1514,6 +1514,14 @@ assert_eq "docker app:create without a proxy completes" "0" "$?"
 (cmd_app_create --name=tool --type=docker --from="$compose_file" --proxy --port=99999 --domain=tool.example.com --dry-run) > /dev/null 2>&1 && fail "docker app:create validates the proxy port" || pass
 : > "${TMP}/empty.yml"
 (cmd_app_create --name=tool --type=docker --from="${TMP}/empty.yml" --dry-run) > /dev/null 2>&1 && fail "docker app:create rejects an empty compose file" || pass
+mkdir -p "${TMP}/ntsync-check/docker/gamex"
+ntsync_devices='[{"source":"/dev/ntsync","target":"/dev/ntsync","permissions":"rwm"}]'
+nmissing="$(PATH="${TMP}/compose-bin:${TMP}/ntsync-bin:${PATH}" MANDAL_DOCKER_DIR="${TMP}/ntsync-check/docker" MANDAL_FAKE_COMPOSE_DEVICES="$ntsync_devices" docker_check_project gamex false "" 2>&1)"
+[[ "$nmissing" == *"enable ntsync on the Server tab"* ]] && pass || fail "the compose check asks for ntsync when a file passes /dev/ntsync" "$nmissing"
+nold="$(PATH="${TMP}/compose-bin:${PATH}" MANDAL_DOCKER_DIR="${TMP}/ntsync-check/docker" MANDAL_FAKE_COMPOSE_DEVICES='["/dev/ntsync:/dev/ntsync:rwm"]' docker_check_project gamex false "" 2>&1)"
+[[ "$nold" == *"has no ntsync driver"* ]] && pass || fail "the compose check explains a kernel without ntsync" "$nold"
+(PATH="${TMP}/compose-bin:${PATH}" MANDAL_DOCKER_DIR="${TMP}/ntsync-check/docker" MANDAL_FAKE_COMPOSE_DEVICES="$ntsync_devices" MANDAL_NTSYNC_DEVICE=/dev/null docker_check_project gamex false "") > /dev/null 2>&1 && pass || fail "the compose check accepts /dev/ntsync once the driver is loaded"
+(PATH="${TMP}/compose-bin:${PATH}" MANDAL_DOCKER_DIR="${TMP}/ntsync-check/docker" MANDAL_FAKE_COMPOSE_DEVICES='[{"source":"/dev/dri","target":"/dev/dri"}]' docker_check_project gamex false "") > /dev/null 2>&1 && pass || fail "the compose check leaves other devices alone"
 mkdir -p "${TMP}/kept/docker/oldgame/savegame"
 (PATH="${TMP}/compose-bin:${PATH}" MANDAL_DOCKER_DIR="${TMP}/kept/docker" MANDAL_FAKE_COMPOSE_FAIL=1 docker_app_create oldgame "$compose_file" false "" naked-only "" "" "") > /dev/null 2>&1
 [[ -d "${TMP}/kept/docker/oldgame/savegame" ]] && pass || fail "a failed docker app:create leaves a kept project folder alone"

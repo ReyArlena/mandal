@@ -119,6 +119,14 @@ class ServerApps extends Page
 
     public ?string $defaultPhp = null;
 
+    /**
+     * The server's ntsync driver as the inventory reports it: supported,
+     * active, persistent. Empty for a CLI that does not report it.
+     *
+     * @var array<string, bool>
+     */
+    public array $ntsync = [];
+
     public ?string $error = null;
 
     public function mount(int|string $record): void
@@ -164,6 +172,7 @@ class ServerApps extends Page
         $this->apps = array_values($inventory['apps'] ?? []);
         $this->phpVersions = array_values($inventory['php']['versions'] ?? []);
         $this->defaultPhp = $inventory['php']['default'] ?? null;
+        $this->ntsync = $inventory['system']['ntsync'] ?? [];
         $this->taken = [
             'projects' => array_values(array_map('strval', array_column($inventory['docker']['projects'] ?? [], 'Name'))),
             'databases' => array_values(array_map('strval', $inventory['database']['databases'] ?? [])),
@@ -211,11 +220,22 @@ class ServerApps extends Page
      * A compose file must not name its own containers: Mandal names them
      * after the app, so one file can serve several apps.
      */
-    public static function composeProblem(string $compose): ?string
+    /**
+     * @param  array<string, bool>  $ntsync  the server's ntsync state, when known
+     */
+    public static function composeProblem(string $compose, array $ntsync = []): ?string
     {
-        return preg_match('/^[ \t]+container_name[ \t]*:/m', $compose)
-            ? 'Remove container_name: Mandal names containers <app>-<service>-1 after the app, so the same file can be used for more than one app.'
-            : null;
+        if (preg_match('/^[ \t]+container_name[ \t]*:/m', $compose)) {
+            return 'Remove container_name: Mandal names containers <app>-<service>-1 after the app, so the same file can be used for more than one app.';
+        }
+
+        if ($ntsync !== [] && ! ($ntsync['active'] ?? false) && preg_match('#^[ \t]*-[ \t]*["\']?/dev/ntsync(:|["\']?[ \t]*$)#m', $compose)) {
+            return ($ntsync['supported'] ?? false)
+                ? 'This file passes /dev/ntsync, which this server does not have yet. Enable ntsync on the Server tab first.'
+                : 'This file passes /dev/ntsync, but this server\'s kernel has no ntsync driver (it needs Linux 6.14 or newer with the ntsync module). Remove the device.';
+        }
+
+        return null;
     }
 
     /**
@@ -346,7 +366,7 @@ class ServerApps extends Page
                     ->default(self::COMPOSE_TEMPLATE)
                     ->requiredIf('type', 'docker')
                     ->rules(['max:262144', fn (): Closure => function (string $attribute, mixed $value, Closure $fail): void {
-                        if (is_string($value) && ($problem = self::composeProblem($value)) !== null) {
+                        if (is_string($value) && ($problem = self::composeProblem($value, $this->ntsync)) !== null) {
                             $fail($problem);
                         }
                     }])
@@ -502,7 +522,7 @@ class ServerApps extends Page
         $compose = (string) preg_replace('/\.import$/', '.compose', $component->getStatePath());
         $this->resetErrorBag($compose);
 
-        if (($problem = self::composeProblem($import->compose)) !== null) {
+        if (($problem = self::composeProblem($import->compose, $this->ntsync)) !== null) {
             $this->addError($compose, $problem);
         }
 
