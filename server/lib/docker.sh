@@ -213,12 +213,18 @@ docker_human_size() {
 
 # docker_app_create name compose_file proxy port mode domain aliases files env...
 docker_app_create() {
-    local name="$1" compose="$2" proxy="$3" port="$4" mode="$5" domain="$6" aliases="$7" files="$8" dir
+    local name="$1" compose="$2" proxy="$3" port="$4" mode="$5" domain="$6" aliases="$7" files="$8" dir kept=false
     shift 8
     dir="$(docker_app_dir "$name")"
+    # A folder left by app:delete --keep-files is used again, and never
+    # removed when the new app fails to come together.
+    if [[ -d "$dir" ]]; then
+        kept=true
+        printf '+ using the existing folder %s\n' "$dir"
+    fi
     run_cmd install -d -m 0750 "$dir"
     if [[ -n "$files" ]] && ! (docker_unpack_files "$dir" "$files"); then
-        dry_run || rm -rf "$dir"
+        dry_run || [[ "$kept" == true ]] || rm -rf "$dir"
         die "app '$name' was not created"
     fi
     write_file "$dir/.env" 0600 < <(printf '%s\n' "$@")
@@ -226,7 +232,7 @@ docker_app_create() {
     # The check dies on failure, so it runs in a subshell and the files
     # written so far are removed before this process dies too.
     if ! (docker_check_project "$name" "$proxy" "$port"); then
-        dry_run || rm -rf "$dir"
+        dry_run || [[ "$kept" == true ]] || rm -rf "$dir"
         die "app '$name' was not created"
     fi
     if [[ "$proxy" == true ]]; then
@@ -311,8 +317,11 @@ docker_app_deploy() {
     printf '\nDeployed %s.\n' "$name"
 }
 
+# docker_app_delete name keep_data: with keep_data the project folder (bind
+# mounts such as ./data live there) and the named volumes stay.
 docker_app_delete() {
-    local name="$1" keep_data="$2"
+    local name="$1" keep_data="$2" dir
+    dir="$(docker_app_dir "$name")"
     if [[ "$keep_data" == true ]]; then
         docker_compose "$name" down --remove-orphans
     else
@@ -320,7 +329,11 @@ docker_app_delete() {
     fi
     run_cmd rm -f "$MANDAL_NGINX_DIR/sites-enabled/${name}.conf" "$MANDAL_NGINX_DIR/sites-available/${name}.conf"
     nginx_check_and_reload
-    run_cmd rm -rf "$(docker_app_dir "$name")"
+    if [[ "$keep_data" == true ]]; then
+        printf '+ keeping %s and the volumes; an app created with the same name uses them again\n' "$dir"
+    else
+        run_cmd rm -rf "$dir"
+    fi
 }
 
 # Whether any container of the project is running (false without Docker).

@@ -1475,6 +1475,9 @@ assert_eq "docker app:create without a proxy completes" "0" "$?"
 (cmd_app_create --name=tool --type=docker --from="$compose_file" --proxy --port=99999 --domain=tool.example.com --dry-run) > /dev/null 2>&1 && fail "docker app:create validates the proxy port" || pass
 : > "${TMP}/empty.yml"
 (cmd_app_create --name=tool --type=docker --from="${TMP}/empty.yml" --dry-run) > /dev/null 2>&1 && fail "docker app:create rejects an empty compose file" || pass
+mkdir -p "${TMP}/kept/docker/oldgame/savegame"
+(PATH="${TMP}/compose-bin:${PATH}" MANDAL_DOCKER_DIR="${TMP}/kept/docker" MANDAL_FAKE_COMPOSE_FAIL=1 docker_app_create oldgame "$compose_file" false "" naked-only "" "" "") > /dev/null 2>&1
+[[ -d "${TMP}/kept/docker/oldgame/savegame" ]] && pass || fail "a failed docker app:create leaves a kept project folder alone"
 
 (PATH="${TMP}/compose-bin:${PATH}" MANDAL_FAKE_COMPOSE_PORTS='[]' docker_app_create webx "$compose_file" true 20200 naked-only webx.example.com "" "") > /dev/null 2>&1 && fail "docker_app_create fails when the proxied port is not published" || pass
 [[ ! -e "${MANDAL_DOCKER_DIR}/webx" ]] && pass || fail "docker_app_create removes the project directory after a failed check"
@@ -1602,6 +1605,7 @@ ddelete="$(cmd_app_delete --name=tool --dry-run 2>&1)"
 [[ "$ddelete" == *"down --volumes --remove-orphans"* && "$ddelete" == *"rm -rf ${MANDAL_DOCKER_DIR}/tool"* && "$ddelete" == *"rm -f ${MANDAL_NGINX_DIR}/sites-enabled/tool.conf"* ]] && pass || fail "docker app:delete removes containers, volumes, files and the vhost"
 dkeep="$(cmd_app_delete --name=tool --keep-files --dry-run 2>&1)"
 [[ "$dkeep" == *"down --remove-orphans"* && "$dkeep" != *"--volumes"* ]] && pass || fail "docker app:delete can keep the volumes"
+[[ "$dkeep" == *"keeping ${MANDAL_DOCKER_DIR}/tool"* && "$dkeep" != *"rm -rf ${MANDAL_DOCKER_DIR}/tool"* ]] && pass || fail "docker app:delete --keep-files keeps the project folder"
 printf 'A=1\n' > "${TMP}/tool.env"
 denv="$(cmd_app_env --name=tool --from="${TMP}/tool.env" --dry-run 2>&1)"
 [[ "$denv" == *"write ${MANDAL_DOCKER_DIR}/tool/.env (0600 root:root)"* ]] && pass || fail "app:env targets the docker app's env file" "$(printf '%s' "$denv" | tail -n 3)"
