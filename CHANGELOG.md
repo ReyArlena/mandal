@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The New app form for Laravel apps keeps the **Deploy script** in a collapsed section and adds an optional **Environment file**. Left empty, Mandal generates the `.env` as before. Filled in, it is installed as the app's `.env` (`app:create --env-file`), with its `DB_` settings overwritten when a database is created. **Create a database and user** is now off by default and sits below it. The panel drops the file from the task once it is on the server.
 - **GitHub repository** in the New app form is a searchable list of the repositories the panel's GitHub token can see (cached for ten minutes); typing `owner/name` still picks any public repository. Without a token it stays a text field.
 - The server switcher reads **All servers** outside a server instead of "Choose a server", and its menu lists **All servers**, then the servers, then **Add server**, each group separated by a line.
 - The panel asks search engines never to index, follow or cache it: `robots.txt` disallows every path (it allowed everything before), and every response sends `X-Robots-Tag: noindex, nofollow, noarchive`.

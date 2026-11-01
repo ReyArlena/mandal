@@ -533,18 +533,38 @@ class ServerApps extends Page
                 Checkbox::make('https')
                     ->label('Public repository: clone over HTTPS without a deploy key')
                     ->visible(fn (callable $get): bool => $get('type') !== 'docker'),
+                Section::make('Deploy script')
+                    ->description('Saved as /home/<name>/deploy.sh; editable later from the app page.')
+                    ->collapsible()
+                    ->collapsed()
+                    ->compact()
+                    ->visible(fn (callable $get): bool => $get('type') !== 'docker')
+                    ->schema([
+                        CodeEditor::make('deploy_script')
+                            ->wrap()
+                            ->hiddenLabel()
+                            ->default(fn (): string => self::deployScriptTemplate())
+                            ->requiredIf('type', 'laravel')
+                            ->rules(['max:262144'])
+                            ->helperText('Runs inside each new release as the app user, before it goes live.'),
+                    ]),
+                Section::make('Environment file (optional)')
+                    ->description('Leave empty and Mandal writes a production .env for you.')
+                    ->collapsible()
+                    ->collapsed()
+                    ->compact()
+                    ->visible(fn (callable $get): bool => $get('type') !== 'docker')
+                    ->schema([
+                        CodeEditor::make('env_file')
+                            ->wrap()
+                            ->hiddenLabel()
+                            ->rules(['max:262144'])
+                            ->helperText('Left empty, the .env gets a new APP_KEY, APP_URL for the domain, Redis for the cache, sessions and queues, logging to daily files, and the database below. Anything written here is installed as the app\'s .env instead. Saved as /home/<name>/shared/.env and editable later from the app page.'),
+                    ]),
                 Checkbox::make('database')
                     ->label('Create a database and user')
-                    ->default(true)
-                    ->helperText('Named after the app, with a generated password. Both are written to the app\'s .env, which you can read from the app page; the panel does not keep the password.')
-                    ->visible(fn (callable $get): bool => $get('type') !== 'docker'),
-                CodeEditor::make('deploy_script')
-                    ->wrap()
-                    ->label('Deploy script')
-                    ->default(fn (): string => self::deployScriptTemplate())
-                    ->requiredIf('type', 'laravel')
-                    ->rules(['max:262144'])
-                    ->helperText('Saved as /home/<name>/deploy.sh and run inside each new release before it goes live. Editable later from the app page.')
+                    ->default(false)
+                    ->helperText('Named after the app, with a generated password, and written to the app\'s .env. With an environment file above, its DB_CONNECTION, DB_HOST, DB_PORT, DB_DATABASE, DB_USERNAME and DB_PASSWORD are overwritten with these. The panel does not keep the password.')
                     ->visible(fn (callable $get): bool => $get('type') !== 'docker'),
                 Textarea::make('env')
                     ->label('Environment variables')
@@ -580,8 +600,9 @@ class ServerApps extends Page
                         'repo' => $data['repo'] ?: null,
                         'branch' => $data['branch'] ?: 'main',
                         'https' => (bool) ($data['https'] ?? false),
-                        'database' => (bool) ($data['database'] ?? true),
+                        'database' => (bool) ($data['database'] ?? false),
                         'deploy_script' => rtrim((string) ($data['deploy_script'] ?? ''))."\n",
+                        'env_file' => trim((string) ($data['env_file'] ?? '')) === '' ? null : rtrim((string) $data['env_file'])."\n",
                     ];
                 }
 

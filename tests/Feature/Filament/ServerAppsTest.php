@@ -74,6 +74,35 @@ it('queues app creation with the chosen options', function () {
     Queue::assertPushed(CreateApp::class);
 });
 
+it('leaves the database unchecked by default and passes a given .env along', function () {
+    Queue::fake();
+
+    livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
+        ->mountAction('createApp')
+        ->assertActionDataSet(['database' => false])
+        ->assertSchemaComponentExists('deploy_script')
+        ->assertSchemaComponentExists('env_file')
+        ->setActionData(['name' => 'blog', 'domain' => 'blog.example.com', 'php' => '8.5', 'env_file' => "APP_NAME=Blog\n"])
+        ->callMountedAction()
+        ->assertHasNoActionErrors();
+
+    $task = $this->server->tasks()->sole();
+
+    expect($task->options['database'])->toBeFalse()
+        ->and($task->options['env_file'])->toBe("APP_NAME=Blog\n")
+        ->and((new CreateApp($task))->arguments())->toEndWith('--no-database');
+});
+
+it('writes no .env option when the environment file is left empty', function () {
+    Queue::fake();
+
+    livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
+        ->callAction('createApp', data: ['name' => 'blog', 'domain' => 'blog.example.com', 'php' => '8.5', 'env_file' => "  \n"])
+        ->assertHasNoActionErrors();
+
+    expect($this->server->tasks()->sole()->options['env_file'])->toBeNull();
+});
+
 it('validates the app name, domain and repository', function () {
     Queue::fake();
 

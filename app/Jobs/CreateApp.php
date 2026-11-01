@@ -10,6 +10,7 @@ use App\Mandal\MandalClient;
 use App\Models\Server;
 use App\Sources\SourceProviders;
 use App\Ssh\CommandResult;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -24,6 +25,11 @@ class CreateApp extends RunMandalTask
      * The imported backup's files, repacked for `app:create --files`.
      */
     private ?string $packed = null;
+
+    /**
+     * A Laravel app's own .env, written out for `app:create --env-file`.
+     */
+    private ?string $envFile = null;
 
     public function arguments(): string
     {
@@ -107,13 +113,19 @@ class CreateApp extends RunMandalTask
     /**
      * A Docker app started from an imported backup gets the backup's files,
      * repacked without its compose file and .env (the form supplies those).
+     * A Laravel app given its own .env gets that file.
      */
     protected function files(): array
     {
         $options = $this->task->options ?? [];
+
+        if (($options['type'] ?? 'laravel') !== 'docker') {
+            return $this->envFile($options);
+        }
+
         $import = $options['import'] ?? null;
 
-        if (($options['type'] ?? 'laravel') !== 'docker' || ! is_string($import) || $import === '') {
+        if (! is_string($import) || $import === '') {
             return [];
         }
 
@@ -143,11 +155,42 @@ class CreateApp extends RunMandalTask
             File::delete($this->packed);
         }
 
+        if ($this->envFile !== null) {
+            File::delete($this->envFile);
+        }
+
+        // The .env holds secrets; once on the server it is not kept here.
+        if (array_key_exists('env_file', $this->task->options ?? [])) {
+            $this->task->forceFill(['options' => Arr::except($this->task->options, 'env_file')])->save();
+        }
+
         $import = $this->task->options['import'] ?? null;
 
         if (is_string($import) && ($path = self::importPath($import)) !== null) {
             File::delete($path);
         }
+    }
+
+    /**
+     * The .env a Laravel app was given, as a private file for the upload.
+     *
+     * @param  array<string, mixed>  $options
+     * @return array<string, string>
+     */
+    private function envFile(array $options): array
+    {
+        $contents = rtrim((string) ($options['env_file'] ?? ''));
+
+        if ($contents === '' || str_contains($contents, "\0")) {
+            return [];
+        }
+
+        $this->envFile = storage_path('app/private/imports/task-'.$this->task->getKey().'.env');
+        File::ensureDirectoryExists(dirname($this->envFile), 0700);
+        File::put($this->envFile, $contents."\n");
+        chmod($this->envFile, 0600);
+
+        return ['--env-file' => $this->envFile];
     }
 
     /**

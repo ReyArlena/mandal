@@ -21,6 +21,9 @@ Usage: mandal app:create --name=<name> --domain=<domain> [options]
   --branch=<branch>       Branch to deploy (default: main)
   --keep-releases=<n>     Releases to keep (default: 5)
   --no-database           Do not create a database and user
+  --env-file=<file>       Laravel apps: the .env to install instead of a generated
+                          one; with a database, its DB_ settings are replaced
+                          (removed once used)
   --from=<file>           Docker apps: the compose file to run; Laravel apps: the
                           deploy script instead of the default (removed once used)
   --proxy                 Docker apps: serve the domain through nginx
@@ -34,13 +37,14 @@ EOF
 
 cmd_app_create() {
     local name="" domain="" www="redirect-to-naked" php="" repo="" branch="main" keep=5 database=true clone=ssh arg
-    local type="laravel" compose="" files="" proxy=false port="" aliases=() env=()
+    local type="laravel" compose="" files="" proxy=false port="" aliases=() env=() env_file=""
     for arg in "$@"; do
         case "$arg" in
             --name=*) name="${arg#*=}" ;;
             --type=*) type="${arg#*=}" ;;
             --from=*) compose="${arg#*=}" ;;
             --files=*) files="${arg#*=}" ;;
+            --env-file=*) env_file="${arg#*=}" ;;
             --proxy) proxy=true ;;
             --port=*) port="${arg#*=}" ;;
             --env=*) env+=("${arg#*=}") ;;
@@ -82,6 +86,8 @@ cmd_app_create() {
     load_all_drivers
 
     [[ -z "$files" || "$type" == "docker" ]] || die 64 "--files is only for Docker apps"
+    [[ -z "$env_file" || "$type" == "laravel" ]] || die 64 "--env-file is only for Laravel apps; use --env for a Docker app"
+    [[ -z "$env_file" ]] || app_env_file_check "$env_file"
     if [[ "$type" == "docker" ]]; then
         [[ -n "$compose" ]] || die 64 "--from=<compose file> is required for a Docker app"
         validate_compose_file "$compose"
@@ -144,7 +150,11 @@ cmd_app_create() {
     if [[ "$database" == true ]]; then
         app_create_database "$name"
     fi
-    app_write_env "$name" "$(app_primary_hostnames "$www" "$domain")" "$APP_DB_PASSWORD"
+    if [[ -n "$env_file" ]]; then
+        app_install_env "$name" "$env_file" "$APP_DB_PASSWORD"
+    else
+        app_write_env "$name" "$(app_primary_hostnames "$www" "$domain")" "$APP_DB_PASSWORD"
+    fi
     app_write_deploy_script "$name" "$compose"
     app_write_cron "$name" "$php"
     app_write_manifest "$name" \

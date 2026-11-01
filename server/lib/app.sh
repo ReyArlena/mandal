@@ -382,6 +382,52 @@ app_write_env() {
     write_file "$home/shared/.env" 0600 "$name:$name" < <(app_render_env "$name" "$domain" "$db" "$db" "$db_password" "$CACHE_PASSWORD")
 }
 
+# A .env to install: text and under 256 KB.
+app_env_file_check() {
+    local file="$1"
+    [[ -f "$file" && ! -L "$file" ]] || die 2 "file not found: $file"
+    if [[ "$(tr -d '\000' < "$file" | wc -c)" -ne "$(wc -c < "$file")" ]]; then
+        die 2 "the .env contains binary data"
+    fi
+    [[ "$(wc -c < "$file")" -le 262144 ]] || die 2 "the .env is larger than 256 KB"
+}
+
+# app_install_env name file db_password: install a .env given for the app.
+# With a database (a password), its DB_ settings are replaced so the app
+# reaches the database Mandal created; everything else is kept as given.
+app_install_env() {
+    local name="$1" from="$2" db_password="$3" home target db
+    home="$(app_home "$name")"
+    target="$home/shared/.env"
+    write_file "$target" 0600 "$name:$name" < "$from"
+    dry_run || rm -f "$from"
+    [[ -n "$db_password" ]] || return 0
+    db="$(app_db_name "$name")"
+    env_file_set "$target" DB_CONNECTION mysql
+    env_file_set "$target" DB_HOST 127.0.0.1
+    env_file_set "$target" DB_PORT 3306
+    env_file_set "$target" DB_DATABASE "$db"
+    env_file_set "$target" DB_USERNAME "$db"
+    env_file_set "$target" DB_PASSWORD "\"${db_password}\""
+}
+
+# env_file_set file key value: set KEY=value in a .env, replacing the first
+# definition (also one written as "export KEY=") and dropping repeats, or
+# appending it. The file keeps its owner and mode.
+env_file_set() {
+    local file="$1" key="$2" value="$3" tmp
+    printf '+ set %s in %s\n' "$key" "$file"
+    dry_run && return 0
+    tmp="$(mktemp)"
+    KEY="$key" LINE="${key}=${value}" awk '
+        $0 ~ ("^[[:space:]]*(export[[:space:]]+)?" ENVIRON["KEY"] "[[:space:]]*=") { if (!done) print ENVIRON["LINE"]; done = 1; next }
+        { print }
+        END { if (!done) print ENVIRON["LINE"] }
+    ' "$file" > "$tmp"
+    cat "$tmp" > "$file"
+    rm -f "$tmp"
+}
+
 # app_write_deploy_script name [file]: install the given script, or the
 # default when there is none yet.
 app_write_deploy_script() {

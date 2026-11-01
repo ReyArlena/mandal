@@ -6,6 +6,7 @@ use App\Jobs\DeleteApp;
 use App\Mandal\MandalClient;
 use App\Models\Server;
 use App\Models\Task;
+use Illuminate\Support\Facades\File;
 use Tests\Support\FakeSshClient;
 
 it('builds app:create arguments without optional parts', function () {
@@ -85,4 +86,48 @@ it('uploads the compose file and passes its path to app:create', function () {
         ->and($upload['contents'])->toBe("services:\n  game:\n    image: x\n")
         ->and(array_key_first($ssh->uploads))->toEndWith('.yml')
         ->and($ssh->ran("app:create --name=game --type=docker --from='/home/mandal/.mandal/"))->toBeTrue();
+});
+
+it('uploads a given .env with the deploy script and stops keeping it once used', function () {
+    $ssh = new FakeSshClient;
+    $ssh->respondTo('app:create --name=blog', "App blog created.\n");
+    $ssh->respondTo('printf %s "$HOME"', '/home/mandal');
+    $ssh->respondWithJson('inventory', ['apps' => []]);
+    $server = Server::factory()->provisioned()->create();
+    $task = Task::factory()->for($server)->create(['options' => [
+        'name' => 'blog', 'domain' => 'blog.example.com', 'database' => true,
+        'deploy_script' => "#!/usr/bin/env bash\necho hi\n", 'env_file' => "APP_NAME=Blog\nAPP_KEY=secret\n",
+    ]]);
+
+    (new CreateApp($task))->handle(new MandalClient($ssh));
+
+    $command = collect($ssh->commands)->first(fn (string $c): bool => str_contains($c, 'app:create'));
+    $env = collect($ssh->uploads)->first(fn (array $upload, string $path): bool => str_ends_with($path, '.env'));
+
+    expect($task->fresh()->status)->toBe(TaskStatus::Succeeded)
+        ->and($command)->toContain("--from='/home/mandal/.mandal/")
+        ->toContain("--env-file='/home/mandal/.mandal/")
+        ->not->toContain('--no-database')
+        ->and($env['contents'] ?? null)->toBe("APP_NAME=Blog\nAPP_KEY=secret\n")
+        ->and($env['mode'] ?? null)->toBe(0600)
+        ->and($task->fresh()->options)->not->toHaveKey('env_file')
+        ->and(File::exists(storage_path('app/private/imports/task-'.$task->id.'.env')))->toBeFalse();
+});
+
+it('sends a given .env alone when there is no deploy script', function () {
+    $ssh = new FakeSshClient;
+    $ssh->respondTo('app:create --name=blog', "App blog created.\n");
+    $ssh->respondTo('printf %s "$HOME"', '/home/mandal');
+    $ssh->respondWithJson('inventory', ['apps' => []]);
+    $server = Server::factory()->provisioned()->create();
+    $task = Task::factory()->for($server)->create(['options' => ['name' => 'blog', 'domain' => 'blog.example.com', 'deploy_script' => '', 'env_file' => "APP_NAME=Blog\n"]]);
+
+    (new CreateApp($task))->handle(new MandalClient($ssh));
+
+    $command = collect($ssh->commands)->first(fn (string $c): bool => str_contains($c, 'app:create'));
+
+    expect($task->fresh()->status)->toBe(TaskStatus::Succeeded)
+        ->and($command)->toContain('--env-file=')
+        ->not->toContain('--from=')
+        ->and($ssh->uploads)->toHaveCount(1);
 });

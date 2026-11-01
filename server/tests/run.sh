@@ -611,6 +611,28 @@ from_create="$(php_default_version() { echo 8.5; }; cmd_app_create --name=custom
 [[ "$from_create" == *"write ${MANDAL_HOME_DIR}/custom/deploy.sh (0750 custom:custom)"* ]] && pass || fail "app:create --from installs the given deploy script for a Laravel app"
 (php_default_version() { echo 8.5; }; cmd_app_create --name=custom --domain=custom.example.com --from="${TMP}/deploy-bad.sh" --dry-run) > /dev/null 2>&1 && fail "app:create --from rejects a broken deploy script" || pass
 
+printf 'APP_NAME=Mine\nDB_CONNECTION=sqlite\n' > "${TMP}/given.env"
+env_create="$(php_default_version() { echo 8.5; }; cmd_app_create --name=given --domain=given.example.com --env-file="${TMP}/given.env" --dry-run 2>&1)"
+[[ "$env_create" == *"write ${MANDAL_HOME_DIR}/given/shared/.env (0600 given:given)"* ]] && pass || fail "app:create --env-file installs the given .env"
+for key in DB_CONNECTION DB_HOST DB_PORT DB_DATABASE DB_USERNAME DB_PASSWORD; do
+    [[ "$env_create" == *"+ set ${key} in ${MANDAL_HOME_DIR}/given/shared/.env"* ]] && pass || fail "app:create --env-file sets ${key} for the new database"
+done
+env_nodb="$(php_default_version() { echo 8.5; }; cmd_app_create --name=given --domain=given.example.com --env-file="${TMP}/given.env" --no-database --dry-run 2>&1)"
+[[ "$env_nodb" != *"+ set DB_"* ]] && pass || fail "app:create --env-file without a database keeps the DB_ settings as given"
+(cmd_app_create --name=tool --type=docker --env-file="${TMP}/given.env" --dry-run) > /dev/null 2>&1 && fail "app:create refuses --env-file for a Docker app" || pass
+printf 'A=1\000\n' > "${TMP}/binary.env"
+(php_default_version() { echo 8.5; }; cmd_app_create --name=given --domain=given.example.com --env-file="${TMP}/binary.env" --dry-run) > /dev/null 2>&1 && fail "app:create --env-file rejects binary data" || pass
+
+envf="${TMP}/set.env"
+printf 'APP_NAME=Mine\nDB_HOST=db.internal\nexport DB_PASSWORD=old\nDB_HOST=again\n' > "$envf"
+env_file_set "$envf" DB_HOST 127.0.0.1 > /dev/null
+env_file_set "$envf" DB_PASSWORD '"s3cr&t/x"' > /dev/null
+env_file_set "$envf" DB_PORT 3306 > /dev/null
+assert_eq "env_file_set replaces the first definition, drops repeats and appends new keys" 'APP_NAME=Mine
+DB_HOST=127.0.0.1
+DB_PASSWORD="s3cr&t/x"
+DB_PORT=3306' "$(cat "$envf")"
+
 # ---------------------------------------------------------------------------
 # workers
 # ---------------------------------------------------------------------------

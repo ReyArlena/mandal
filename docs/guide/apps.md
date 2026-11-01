@@ -5,12 +5,14 @@ The **Apps** page creates Laravel apps on a provisioned server. Each app gets:
 - its own system user and home, `/home/<app>`, with `releases/`, `shared/` and `current` (the live release)
 - a PHP-FPM pool running as that user, listening on a Unix socket
 - an nginx site with per-app access and error logs, serving the chosen domain, aliases and `www` redirect mode
-- a MariaDB database and user, with the password written into the app's `.env`
+- optionally a MariaDB database and user (**Create a database and user**, off by default), with the password written into the app's `.env`
 - a production `.env` under `shared/.env`, linked into every release
 - the scheduler crontab (`artisan schedule:run` every minute)
 - an Ed25519 deploy key and an editable `deploy.sh`
 
 The exact paths are listed under [app:create](../reference/server-files#app-create).
+
+The New app form keeps the **Deploy script** and **Environment file** in collapsed sections. Left empty, the environment file is generated: a new `APP_KEY`, `APP_URL` for the domain, Redis for the cache, sessions and queues, daily log files and the database when one is created. Anything written there is installed as the app's `.env` instead (`app:create --env-file`); with **Create a database and user** checked, its `DB_CONNECTION`, `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME` and `DB_PASSWORD` are overwritten with the new database's details and the rest is kept as written. The panel does not keep the file once it is on the server.
 
 ## Deploying
 

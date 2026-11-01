@@ -71,7 +71,7 @@ A Laravel app named `<app>` with PHP `<v>`.
 | PHP | `/home/<app>/.local/bin/php` linked to `/usr/bin/php<v>`; pool `/etc/php/<v>/fpm/pool.d/<app>.conf` listening on `/run/php/php<v>-fpm-<app>.sock`, slow log `/var/log/php<v>-fpm-<app>-slow.log`; PHP-FPM reloaded |
 | nginx | `/etc/nginx/sites-available/<app>.conf` linked into `sites-enabled`; logs `/var/log/nginx/<app>-access.log` and `<app>-error.log`; `nginx -t` then reload |
 | Database | Database and user named after the app with hyphens replaced by underscores (`my-shop` gives `my_shop`@`localhost`), with a generated password. Skipped with `--no-database` |
-| Environment | `/home/<app>/shared/.env` (`0600`, app user): `APP_KEY`, `APP_URL`, database and cache credentials, with cache, queue and sessions on the cache driver |
+| Environment | `/home/<app>/shared/.env` (`0600`, app user): `APP_KEY`, `APP_URL`, database and cache credentials, with cache, queue and sessions on the cache driver. With `--env-file`, that file instead, its `DB_CONNECTION`, `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME` and `DB_PASSWORD` set to the new database when one is created |
 | Deploy script | `/home/<app>/deploy.sh` (`0750`, app user): Mandal's default, or the script uploaded with `--from=` |
 | Scheduler | The app user's crontab: `* * * * * php<v> /home/<app>/current/artisan schedule:run` |
 | Manifest | `/etc/mandal/apps/<app>.conf` |
