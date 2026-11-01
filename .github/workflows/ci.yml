@@ -15,7 +15,7 @@ jobs:
     name: Panel
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -55,7 +55,7 @@ jobs:
     name: Server CLI
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Shellcheck
         run: shellcheck -x server/bin/mandal server/lib/*.sh server/lib/commands/*.sh server/lib/roles/*/*.sh server/setup.sh server/install.sh server/tests/run.sh
@@ -67,7 +67,7 @@ jobs:
     name: Docs
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
 
