@@ -17,9 +17,9 @@ class DetailsPageController extends Controller
 
         abort_unless($page !== null, 404);
 
+        // X-Robots-Tag comes from PreventIndexing, as on every response.
         return response()
             ->view('details-pages.show', ['page' => $page])
-            ->header('X-Robots-Tag', 'noindex, nofollow')
             ->header('Referrer-Policy', 'no-referrer');
     }
 }

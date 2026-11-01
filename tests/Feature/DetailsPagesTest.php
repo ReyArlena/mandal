@@ -62,7 +62,7 @@ it('shows the page to visitors without signing in or contacting a server', funct
 
     $this->get('/p/friends-abc123xyz0')
         ->assertOk()
-        ->assertHeader('X-Robots-Tag', 'noindex, nofollow')
+        ->assertHeader('X-Robots-Tag', 'noindex, nofollow, noarchive')
         ->assertSeeInOrder(['Current Status', 'We switch games around.', 'Enshrouded', 'Online', 'play.example.com', 'ears', 'Minecraft (Vanilla)', 'Version 26.1.2 (Java)', '(must be added to whitelist)']);
 
     expect($this->ssh->commands)->toBe([]);
