@@ -33,3 +33,4 @@ Thumbs.db
 .env.before_lerd
 /docs/.vitepress/dist
 /docs/.vitepress/cache
+/redfield7-baseline/
