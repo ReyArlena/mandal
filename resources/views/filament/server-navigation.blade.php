@@ -1,10 +1,11 @@
-{{-- The open server's sections as a tab bar above the page title. --}}
+{{-- The open server's sections, or Servers and Mandal, as a tab bar above the page title. --}}
 @php
     $items = \App\Filament\ServerNavigation::items();
+    $label = \App\Filament\ServerNavigation::currentServer() ? 'Server sections' : 'Panel sections';
 @endphp
 
 @if ($items)
-    <x-filament::tabs contained label="Server sections" class="fi-server-tabs" style="scrollbar-width: none">
+    <x-filament::tabs contained :label="$label" class="fi-server-tabs" style="scrollbar-width: none">
         @foreach ($items as $item)
             <x-filament::tabs.item tag="a" :href="$item->getUrl()" :active="$item->isActive()" :icon="$item->getIcon()">
                 {{ $item->getLabel() }}

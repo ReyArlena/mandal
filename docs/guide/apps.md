@@ -24,9 +24,9 @@ Add the app's deploy key (shown on its page) to the GitHub repository; read-only
 
 ## GitHub and automatic deploys
 
-Under **Settings**, connect a fine-grained GitHub personal access token with repository permissions *Administration (read and write)*, *Webhooks (read and write)* and *Contents (read)* for the repositories you deploy. Mandal checks the token, stores it encrypted and shows when it expires. From then on, creating an app adds its deploy key to the repository and deleting the app removes it.
+Under **Settings > Source providers**, connect a fine-grained GitHub personal access token with repository permissions *Administration (read and write)*, *Webhooks (read and write)* and *Contents (read)* for the repositories you deploy. Mandal checks the token, stores it encrypted and shows when it expires. From then on, creating an app adds its deploy key to the repository and deleting the app removes it.
 
-To deploy on every push, set the panel's **Public URL** in Settings (reachable from the internet over HTTPS), then use **Enable auto deploy** on the app. Mandal adds a webhook to the repository and asks GitHub for a test delivery; if that delivery does not reach the panel, the webhook is removed again and the reason is shown. Only pushes to the app's configured branch deploy. Deliveries are verified with `X-Hub-Signature-256`, handled once, and refused while another task runs on the server. Manual deploys always work, so a panel on your own machine simply does without auto deploy.
+To deploy on every push, set the panel's **Public URL** in **Settings > General** (reachable from the internet over HTTPS), then use **Enable auto deploy** on the app. Mandal adds a webhook to the repository and asks GitHub for a test delivery; if that delivery does not reach the panel, the webhook is removed again and the reason is shown. Only pushes to the app's configured branch deploy. Deliveries are verified with `X-Hub-Signature-256`, handled once, and refused while another task runs on the server. Manual deploys always work, so a panel on your own machine simply does without auto deploy.
 
 ## The app page
 

@@ -3,7 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Catppuccin;
-use App\Filament\Pages\Settings;
+use App\Filament\Clusters\Settings\SettingsCluster;
 use App\Http\Controllers\AppBackupDownloadController;
 use Filament\Actions\Action;
 use Filament\Auth\MultiFactor\App\AppAuthentication;
@@ -43,12 +43,20 @@ class AdminPanelProvider extends PanelProvider
                 Action::make('settings')
                     ->label('Settings')
                     ->icon(Heroicon::OutlinedCog6Tooth)
-                    ->url(fn (): string => Settings::getUrl()),
+                    ->url(fn (): string => SettingsCluster::getUrl()),
             ])
             ->navigation(false)
             ->breadcrumbs(false)
             ->renderHook(PanelsRenderHook::PAGE_START, fn (): View => view('filament.server-navigation'))
             ->renderHook(PanelsRenderHook::TOPBAR_LOGO_AFTER, fn (): View => view('filament.server-switcher'))
+            // Pages with a getPageDescription() show it above their content,
+            // in body text, instead of as a subheading over the whole page.
+            ->renderHook(PanelsRenderHook::PAGE_HEADER_WIDGETS_BEFORE, function (array $scopes): ?View {
+                $page = $scopes[0] ?? null;
+                $description = is_string($page) && method_exists($page, 'getPageDescription') ? $page::getPageDescription() : null;
+
+                return filled($description) ? view('filament.page-description', ['description' => $description]) : null;
+            })
             ->multiFactorAuthentication([
                 AppAuthentication::make()->recoverable(),
             ], isRequired: true)
@@ -77,6 +85,7 @@ class AdminPanelProvider extends PanelProvider
             ->viteTheme('resources/css/filament/admin/theme.css')
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
+            ->discoverClusters(in: app_path('Filament/Clusters'), for: 'App\Filament\Clusters')
             ->pages([
                 Dashboard::class,
             ])

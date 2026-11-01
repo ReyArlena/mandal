@@ -49,11 +49,24 @@ it('keeps the parent section active on app and task pages', function () {
     expect(ServerNavigation::currentSection())->toBe('databases');
 });
 
-it('shows no tabs outside a server', function () {
-    openPage('/settings');
+it('switches between servers and settings above the servers table and settings pages', function () {
+    $labels = fn (): array => collect(ServerNavigation::items())->map(fn (NavigationItem $item): string => (string) $item->getLabel())->all();
+    $active = fn (): array => collect(ServerNavigation::items())->filter(fn (NavigationItem $item): bool => $item->isActive())->map(fn (NavigationItem $item): string => (string) $item->getLabel())->values()->all();
 
-    expect(ServerNavigation::items())->toBe([])
+    openPage('/servers');
+    expect($labels())->toBe(['Servers', 'Mandal'])
+        ->and($active())->toBe(['Servers'])
         ->and(ServerNavigation::currentServer())->toBeNull();
+
+    openPage('/settings/backup-destinations');
+    expect($labels())->toBe(['Servers', 'Mandal'])
+        ->and($active())->toBe(['Mandal']);
+});
+
+it('shows no tabs on other pages outside a server', function () {
+    openPage('/servers/create');
+
+    expect(ServerNavigation::items())->toBe([]);
 });
 
 it('switches to the same section of another server', function () {

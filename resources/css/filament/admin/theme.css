@@ -56,3 +56,18 @@
 .fi-tabs.fi-contained.fi-tab-choice {
     padding-inline: 0;
 }
+
+/* A sectioned page's sidebar is as wide as its longest entry, at least
+   200px; the content takes the rest. */
+.fi-page-sub-navigation-sidebar-ctn {
+    width: max-content;
+    min-width: 12.5rem;
+    flex: none;
+    white-space: nowrap;
+}
+
+/* Sectioned pages take a smaller heading, their sidebar does the rest. */
+.fi-page-has-sub-navigation .fi-header-heading {
+    font-size: var(--text-xl);
+    line-height: var(--text-xl--line-height);
+}

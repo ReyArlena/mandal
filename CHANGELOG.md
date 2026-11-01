@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Settings is split into sections with a sidebar as wide as its longest entry: **General**, **Source providers** and **Backup destinations**, at `/settings/<section>` (`/settings` opens General). Each section's description sits above its content in body text, under a smaller heading. The servers list and the settings pages have **Servers** and **Mandal** tabs to move between them; Settings stays in the user menu too.
 - Creating a Docker app sets it up without starting it: **Start** on the app page runs `docker compose up -d` in its own task, so a long image download shows there and a failed pull no longer leaves a half-created app behind without a manifest. Compose files that set `container_name` are refused, because containers are named `<app>-<service>-1` after the app and one file can serve several apps.
 - The New app form checks the name, domain, aliases and compose file as you type and disables **Create app** while one is wrong: names an app, compose project or (for Laravel apps) database already uses, reserved system names, domains an nginx site already answers to (with or without www.), and `container_name` in the compose file.
 - A successful Start or Restart of a Docker app offers **Follow container logs**, which opens the Logs page on its containers with live refresh on. The Logs page's Live/Tail button is now a **Live refresh** toggle, and `live=1` in its address turns it on.

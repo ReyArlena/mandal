@@ -2,7 +2,9 @@
 
 namespace App\Filament;
 
+use App\Filament\Clusters\Settings\SettingsCluster;
 use App\Filament\Resources\Servers\Pages\EditServer;
+use App\Filament\Resources\Servers\Pages\ListServers;
 use App\Filament\Resources\Servers\Pages\ServerApps;
 use App\Filament\Resources\Servers\Pages\ServerDatabases;
 use App\Filament\Resources\Servers\Pages\ServerFirewall;
@@ -14,15 +16,18 @@ use App\Filament\Resources\Servers\Pages\ViewServer;
 use App\Filament\Resources\Servers\ServerResource;
 use App\Models\Server;
 use Filament\Navigation\NavigationItem;
+use Filament\Pages\Page;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Collection;
 
 use function Filament\Support\original_request;
 
 /**
  * The tab bar above the page title lists the sections of the server being
- * looked at; outside a server there is none, as the servers table and the
- * switcher already list every server. The server switcher in the top bar
- * uses the same lookup to keep you in the section you are on when you switch.
+ * looked at. Above the servers table and the settings pages it switches
+ * between the two instead (Servers and Mandal); other pages have none. The
+ * server switcher in the top bar uses the same lookup to keep you in the
+ * section you are on when you switch.
  */
 class ServerNavigation
 {
@@ -63,7 +68,8 @@ class ServerNavigation
     private const array SERVER_WIDE_CHILD_PAGES = ['backups'];
 
     /**
-     * The sections of the open server, or none outside a server.
+     * The sections of the open server, the Servers and Mandal tabs on the
+     * servers table and settings pages, or none elsewhere.
      *
      * @return array<NavigationItem>
      */
@@ -71,7 +77,21 @@ class ServerNavigation
     {
         $server = static::currentServer();
 
-        return $server === null ? [] : static::sectionItems($server);
+        return $server === null ? static::panelItems() : static::sectionItems($server);
+    }
+
+    /**
+     * "servers" on the servers table, "mandal" on a settings page, or null.
+     */
+    public static function currentArea(): ?string
+    {
+        $class = original_request()->route()?->getControllerClass();
+
+        return match (true) {
+            $class === ListServers::class => 'servers',
+            is_string($class) && is_subclass_of($class, Page::class) && $class::getCluster() === SettingsCluster::class => 'mandal',
+            default => null,
+        };
     }
 
     /**
@@ -143,6 +163,29 @@ class ServerNavigation
         }
 
         return $items;
+    }
+
+    /**
+     * @return array<NavigationItem>
+     */
+    private static function panelItems(): array
+    {
+        $area = static::currentArea();
+
+        if ($area === null) {
+            return [];
+        }
+
+        return [
+            NavigationItem::make('Servers')
+                ->icon(Heroicon::OutlinedServerStack)
+                ->url(ServerResource::getUrl('index'))
+                ->isActiveWhen(fn (): bool => $area === 'servers'),
+            NavigationItem::make('Mandal')
+                ->icon(Heroicon::OutlinedCog6Tooth)
+                ->url(SettingsCluster::getUrl())
+                ->isActiveWhen(fn (): bool => $area === 'mandal'),
+        ];
     }
 
     /**

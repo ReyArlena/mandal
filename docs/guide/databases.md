@@ -26,7 +26,7 @@ The panel checks every server hourly and raises a notification when a scheduled 
 
 ### Backup destinations
 
-Destinations are S3-compatible buckets (AWS S3, Backblaze B2, Cloudflare R2, Wasabi, MinIO, Hetzner and others) added once under **Settings**, with an endpoint, bucket, optional path prefix, region and keys. The keys are stored encrypted in the panel and copied to a server only when a backup there starts using the destination; the server then keeps its own rclone config under `/etc/mandal/rclone.d/`, readable only by root. The local disk is always available and needs no setup.
+Destinations are S3-compatible buckets (AWS S3, Backblaze B2, Cloudflare R2, Wasabi, MinIO, Hetzner and others) added once under **Settings > Backup destinations**, with an endpoint, bucket, optional path prefix, region and keys. The keys are stored encrypted in the panel and copied to a server only when a backup there starts using the destination; the server then keeps its own rclone config under `/etc/mandal/rclone.d/`, readable only by root. The local disk is always available and needs no setup.
 
 Removing a destination switches every server off that remote; a backup that had no other destination is disabled. Files already in the bucket stay.
 

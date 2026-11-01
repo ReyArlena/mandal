@@ -1,6 +1,8 @@
 <?php
 
-use App\Filament\Pages\Settings;
+use App\Filament\Clusters\Settings\Pages\General;
+use App\Filament\Clusters\Settings\Pages\SourceProviders;
+use App\Filament\Clusters\Settings\SettingsCluster;
 use App\Models\Setting;
 use App\Models\SourceCredential;
 use App\Models\User;
@@ -14,7 +16,7 @@ beforeEach(function () {
 });
 
 it('saves the public URL without a trailing slash', function () {
-    livewire(Settings::class)
+    livewire(General::class)
         ->callAction('publicUrl', data: ['public_url' => 'https://panel.example.com/'])
         ->assertHasNoActionErrors()
         ->assertNotified('Public URL saved');
@@ -23,7 +25,7 @@ it('saves the public URL without a trailing slash', function () {
 });
 
 it('requires https for the public URL', function () {
-    livewire(Settings::class)
+    livewire(General::class)
         ->callAction('publicUrl', data: ['public_url' => 'http://panel.example.com'])
         ->assertHasActionErrors(['public_url']);
 });
@@ -31,7 +33,7 @@ it('requires https for the public URL', function () {
 it('connects GitHub after checking the token', function () {
     Http::fake(['api.github.com/user' => Http::response(['login' => 'acme'], 200, ['github-authentication-token-expiration' => '2027-03-01 00:00:00 UTC'])]);
 
-    livewire(Settings::class)
+    livewire(SourceProviders::class)
         ->callAction('addGitHub', data: ['name' => 'Laptop', 'token' => 'github_pat_'.str_repeat('a', 30)])
         ->assertHasNoActionErrors()
         ->assertNotified('GitHub connected as acme');
@@ -47,7 +49,7 @@ it('connects GitHub after checking the token', function () {
 it('does not store a token GitHub rejects', function () {
     Http::fake(['api.github.com/user' => Http::response(['message' => 'Bad credentials'], 401)]);
 
-    livewire(Settings::class)
+    livewire(SourceProviders::class)
         ->callAction('addGitHub', data: ['name' => 'Bad', 'token' => 'github_pat_'.str_repeat('b', 30)])
         ->assertNotified('GitHub rejected the token');
 
@@ -57,7 +59,7 @@ it('does not store a token GitHub rejects', function () {
 it('lists and removes tokens', function () {
     $credential = SourceCredential::factory()->create(['name' => 'Laptop', 'account' => 'acme']);
 
-    livewire(Settings::class)
+    livewire(SourceProviders::class)
         ->assertSee('Laptop')
         ->assertSee('acme')
         ->assertActionHidden('addGitHub')
@@ -65,4 +67,14 @@ it('lists and removes tokens', function () {
         ->assertNotified('Token removed');
 
     expect(SourceCredential::query()->count())->toBe(0);
+});
+
+it('opens the first settings section from /settings', function () {
+    livewire(SettingsCluster::class)->assertRedirect(General::getUrl());
+});
+
+it('shows a sidebar with every settings section', function () {
+    livewire(General::class)
+        ->assertOk()
+        ->assertSeeInOrder(['Source providers', 'Backup destinations']);
 });
