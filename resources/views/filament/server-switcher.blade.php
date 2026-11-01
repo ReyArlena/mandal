@@ -20,11 +20,19 @@
                     <x-filament::icon :icon="Heroicon::Server" class="h-4 w-4" :style="'color: var(--'.$current->statusColor().'-500)'" />
                     <span class="max-w-32 truncate sm:max-w-none">{{ $current->name }}</span>
                 @else
-                    <span class="whitespace-nowrap text-gray-500 dark:text-gray-400">Choose a server</span>
+                    <x-filament::icon :icon="Heroicon::OutlinedServerStack" class="h-4 w-4 text-gray-400" />
+                    <span class="whitespace-nowrap">All servers</span>
                 @endif
                 <x-filament::icon :icon="Heroicon::ChevronUpDown" class="h-4 w-4 text-gray-400" />
             </button>
         </x-slot>
+
+        {{-- Each list is a group; Filament draws a line between them. --}}
+        <x-filament::dropdown.list>
+            <x-filament::dropdown.list.item :href="ServerResource::getUrl('index')" tag="a" :icon="Heroicon::OutlinedServerStack">
+                All servers
+            </x-filament::dropdown.list.item>
+        </x-filament::dropdown.list>
 
         @if ($servers->isNotEmpty())
             <x-filament::dropdown.list>
@@ -44,9 +52,6 @@
         @endif
 
         <x-filament::dropdown.list>
-            <x-filament::dropdown.list.item :href="ServerResource::getUrl('index')" tag="a" :icon="Heroicon::OutlinedServerStack">
-                All servers
-            </x-filament::dropdown.list.item>
             <x-filament::dropdown.list.item :href="ServerResource::getUrl('create')" tag="a" :icon="Heroicon::OutlinedPlus">
                 Add server
             </x-filament::dropdown.list.item>

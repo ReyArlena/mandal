@@ -99,10 +99,12 @@ it('renders the switcher with every server and the current one', function () {
         ->toContain('Add server');
 });
 
-it('asks to choose a server outside one', function () {
+it('shows all servers outside one, with the server list between all servers and add server', function () {
     openPage('/servers');
 
-    expect(view('filament.server-switcher')->render())->toContain('Choose a server');
+    expect(view('filament.server-switcher')->render())
+        ->not->toContain('Choose a server')
+        ->toMatch('/All servers.*db-1.*web-1.*Add server/s');
 });
 
 it('offers settings in the user menu', function () {
