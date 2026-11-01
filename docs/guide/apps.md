@@ -37,7 +37,7 @@ To deploy on every push, set the panel's **Public URL** in Settings (reachable f
 - **Workers**: Supervisor programs running an artisan command (`queue:work`, `horizon`, `reverb:start`, anything else) as the app user, with the number of processes. Buttons in the add form fill in a queue worker, Horizon, Reverb or `schedule:work` (the last only for apps whose crontab entry was removed, since Mandal already runs `schedule:run` every minute). Every worker restarts after each deploy; **Restart workers** restarts them all, and each row has its own **Restart** (Supervisor sends SIGTERM, which `queue:work` and Horizon treat as "finish the current job, then exit").
 - **Logs**: opens the Logs page on the app's Laravel log.
 - **Backups**: archives of `shared/`, see below.
-- **Delete** removes everything the app created, including its certificate, its backup settings and local archives unless you keep the files. Options keep the database or the home directory.
+- **Delete** removes everything the app created, including its certificate, its logs (nginx, the PHP-FPM slow log and deploy logs), its backup settings and local archives unless you keep the files. Options keep the database or the home directory.
 
 ## Backups
 

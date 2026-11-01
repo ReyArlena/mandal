@@ -202,6 +202,7 @@ cmd_app_delete() {
         step "Removing Docker app $name"
         docker_app_delete "$name" "$keep_home"
         app_delete_certificates "$domain"
+        [[ "$keep_home" == true ]] || app_delete_logs "$name" ""
         app_backup_cleanup "$name" "$keep_home"
         run_cmd rm -f "$(app_conf_path "$name")"
         printf '\nApp %s removed.\n' "$name"
@@ -235,6 +236,7 @@ cmd_app_delete() {
             run_cmd userdel --remove "$name"
         fi
     fi
+    [[ "$keep_home" == true ]] || app_delete_logs "$name" "$php"
     app_backup_cleanup "$name" "$keep_home"
     run_cmd rm -f "$(app_conf_path "$name")"
     printf '\nApp %s removed.\n' "$name"

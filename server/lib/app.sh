@@ -87,6 +87,23 @@ app_delete_certificates() {
     done < <(app_certificates "$1")
 }
 
+# Logs the app left outside its home or project folder: nginx's, the
+# PHP-FPM slow log and the deploy logs, rotated copies included.
+app_delete_logs() {
+    local name="$1" php="$2" file
+    local -a files=()
+    for file in "$MANDAL_NGINX_LOG_DIR/${name}"-access.log* "$MANDAL_NGINX_LOG_DIR/${name}"-error.log*; do
+        [[ -e "$file" ]] && files+=("$file")
+    done
+    if [[ -n "$php" ]]; then
+        for file in "$MANDAL_VAR_LOG/php${php}-fpm-${name}"-slow.log*; do
+            [[ -e "$file" ]] && files+=("$file")
+        done
+    fi
+    [[ ${#files[@]} -eq 0 ]] || run_cmd rm -f "${files[@]}"
+    [[ ! -d "$MANDAL_DEPLOY_LOG_DIR/$name" ]] || run_cmd rm -rf "$MANDAL_DEPLOY_LOG_DIR/$name"
+}
+
 # Names that serve the app itself (not redirected).
 app_primary_hostnames() {
     local mode="$1" domain name

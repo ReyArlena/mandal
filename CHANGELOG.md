@@ -23,12 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New servers and new PHP versions accept 1 GB uploads: PHP-FPM gets `upload_max_filesize` and `post_max_size` of `1G`, `memory_limit` `256M` and 300 s for `max_execution_time` and `max_input_time`, and nginx `client_max_body_size 1g` instead of `64m`. On a server set up before this, the PHP page shows PHP's own values with a **PHP defaults** badge; set them with **Limits** and raise nginx's limit in its section.
 - `inventory` and `updates:status` run their collectors at once instead of one after another. Most of their time is spent starting processes (`systemctl`, `docker`, `fail2ban-client`, `supervisorctl`), so on a slow VPS the inventory took 8-9 s; it now takes about as long as its slowest part.
 - The inventory reads Docker with one `docker ps --all` for the Docker section and every Docker app, taking compose projects from the container labels instead of `docker compose ls` and one `docker compose ps` per app, and Docker's version from its package.
-- Deleting a Docker app describes it in Docker terms (containers, network, nginx site) and offers **Keep the project folder and volumes**, instead of the Laravel wording about pools, crontabs, system users and a database.
+- Deleting a Docker app describes it in Docker terms (containers, network, nginx site) and offers **Keep the project folder, volumes and logs**, instead of the Laravel wording about pools, crontabs, system users and a database.
 - Deleting a Docker app also removes the images its services used, unless another container still uses one. They stayed behind before, often several GB per app.
 - The Server tab always shows **Update CLI** once a server is connected, disabled with "Up to date (build ...)" when the server already runs the panel's build, instead of hiding it.
 
 ### Fixed
 
+- Deleting an app left its logs behind: the nginx access and error logs, the PHP-FPM slow log and the deploy logs, which an app created later with the same name inherited. They go too now, unless the files are kept.
 - Deleting an app left its Let's Encrypt certificate behind, and certbot kept renewing it, failing once the domain pointed elsewhere. `app:delete` now deletes the certificates that name the app's domain.
 - Deleting a Docker app with **Keep files** still removed its project folder, and with it the data in bind mounts such as `./data`; only the named volumes were kept. The folder now stays too, and creating an app with the same name uses it again instead of removing it when the new app fails to come together.
 - Saving PHP limits for the version the panel itself runs on ended in "Error while loading page" after ten seconds: the PHP-FPM reload waited for the request that asked for it until FPM killed it. `php:limits` now tests the configuration and queues the reload without waiting, so the request returns first. The limits were saved either way.

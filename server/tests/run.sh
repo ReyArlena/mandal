@@ -473,6 +473,8 @@ done
 (cmd_app_create --name=ok --domain=x.example.com --www=sideways --dry-run) > /dev/null 2>&1 && fail "app:create validates the www mode" || pass
 (cmd_app_create --name=ok --dry-run) > /dev/null 2>&1 && fail "app:create requires a domain" || pass
 
+mkdir -p "$MANDAL_NGINX_LOG_DIR" "$MANDAL_DEPLOY_LOG_DIR/shop"
+touch "$MANDAL_NGINX_LOG_DIR"/{shop-access.log,shop-access.log.2.gz,shop-error.log,shopping-access.log} "$MANDAL_VAR_LOG/php8.5-fpm-shop-slow.log"
 delete="$(cmd_app_delete --name=shop --dry-run 2>&1)"
 assert_eq "app:delete dry run completes" "0" "$?"
 for marker in "rm -f ${MANDAL_NGINX_DIR}/sites-enabled/shop.conf" "rm -f ${MANDAL_PHP_DIR}/8.5/fpm/pool.d/shop.conf" "DROP DATABASE IF EXISTS \`shop\`" "userdel --remove shop" "App shop removed."; do
@@ -481,6 +483,9 @@ done
 [[ "$delete" == *"certbot delete --non-interactive --cert-name shop.example.com"* && "$delete" != *"--cert-name old.example.com"* ]] && pass || fail "app:delete removes the certificate for the app's domain only"
 keep="$(cmd_app_delete --name=shop --keep-database --keep-files --dry-run 2>&1)"
 [[ "$keep" != *"DROP DATABASE"* && "$keep" == *"userdel shop"* ]] && pass || fail "app:delete can keep the database and files"
+[[ "$delete" == *"rm -f ${MANDAL_NGINX_LOG_DIR}/shop-access.log ${MANDAL_NGINX_LOG_DIR}/shop-access.log.2.gz ${MANDAL_NGINX_LOG_DIR}/shop-error.log ${MANDAL_VAR_LOG}/php8.5-fpm-shop-slow.log"* && "$delete" == *"rm -rf ${MANDAL_DEPLOY_LOG_DIR}/shop"* && "$delete" != *"shopping-access.log"* ]] && pass || fail "app:delete removes the app's logs" "$(printf '%s' "$delete" | grep log)"
+[[ "$keep" != *"shop-access.log"* && "$keep" != *"rm -rf ${MANDAL_DEPLOY_LOG_DIR}/shop"* ]] && pass || fail "app:delete --keep-files keeps the logs"
+rm -rf "$MANDAL_NGINX_LOG_DIR"/{shop-access.log.2.gz,shopping-access.log} "$MANDAL_VAR_LOG/php8.5-fpm-shop-slow.log" "$MANDAL_DEPLOY_LOG_DIR/shop"
 
 # ---------------------------------------------------------------------------
 # deployments
