@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\DetailsPages\GameStatuses;
 use App\Mandal\ComposeImport;
 use App\Ssh\PhpseclibSshClient;
 use App\Ssh\SshClient;
@@ -19,6 +20,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(SshClient::class, PhpseclibSshClient::class);
+        $this->app->scoped(GameStatuses::class);
 
         // Mandal's own icons, such as mandal-laravel and mandal-docker.
         $this->callAfterResolving(IconFactory::class, fn (IconFactory $icons) => $icons->add('mandal', [
@@ -33,6 +35,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         RateLimiter::for('webhooks', fn (Request $request): Limit => Limit::perMinute(30)->by($request->route('token') ?? $request->ip()));
+        RateLimiter::for('details-pages', fn (Request $request): Limit => Limit::perMinute(60)->by($request->ip()));
 
         // Backup imports are the panel's only uploads; Livewire's own limit
         // (12 MB, five minutes) would refuse them long before PHP does.

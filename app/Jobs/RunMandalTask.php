@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\DetailsPages\GameStatuses;
 use App\Mandal\ComposeImport;
 use App\Mandal\InvalidImport;
 use App\Mandal\MandalClient;
@@ -132,6 +133,7 @@ abstract class RunMandalTask implements ShouldBeUnique, ShouldQueue
 
         $task->markFinished($result->exitCode);
         $mandal->forgetInventory($server);
+        app(GameStatuses::class)->refresh($server);
 
         if ($result->successful()) {
             $this->succeeded($server, $result);

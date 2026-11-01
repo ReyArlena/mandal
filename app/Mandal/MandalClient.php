@@ -2,6 +2,7 @@
 
 namespace App\Mandal;
 
+use App\DetailsPages\GameStatuses;
 use App\Models\Server;
 use App\Ssh\CommandResult;
 use App\Ssh\SshClient;
@@ -53,7 +54,21 @@ class MandalClient
             Cache::forget($key);
         }
 
-        $inventory = Cache::remember($key, self::INVENTORY_TTL, fn (): array => $this->json($server, 'inventory'));
+        // A fresh read also brings the details pages linked to this server
+        // up to date; a failed one marks them unknown.
+        $inventory = Cache::remember($key, self::INVENTORY_TTL, function () use ($server): array {
+            try {
+                $inventory = $this->json($server, 'inventory');
+            } catch (SshException $exception) {
+                app(GameStatuses::class)->unreachable($server);
+
+                throw $exception;
+            }
+
+            app(GameStatuses::class)->record($server, $inventory);
+
+            return $inventory;
+        });
 
         $this->sawCliBuild($server, $inventory['mandal']['build'] ?? null);
 

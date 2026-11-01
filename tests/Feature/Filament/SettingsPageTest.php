@@ -76,5 +76,5 @@ it('opens the first settings section from /settings', function () {
 it('shows a sidebar with every settings section', function () {
     livewire(General::class)
         ->assertOk()
-        ->assertSeeInOrder(['Source providers', 'Backup destinations']);
+        ->assertSeeInOrder(['Source providers', 'Backup destinations', 'Server details pages']);
 });

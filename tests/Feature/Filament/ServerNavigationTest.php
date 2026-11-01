@@ -61,6 +61,9 @@ it('switches between servers and settings above the servers table and settings p
     openPage('/settings/backup-destinations');
     expect($labels())->toBe(['Servers', 'Mandal'])
         ->and($active())->toBe(['Mandal']);
+
+    openPage('/settings/details-pages/create');
+    expect($active())->toBe(['Mandal']);
 });
 
 it('shows no tabs on other pages outside a server', function () {

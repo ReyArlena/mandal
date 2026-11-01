@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Servers\Concerns;
 
+use App\DetailsPages\GameStatuses;
 use App\Enums\TaskType;
 use App\Filament\Resources\Servers\ServerResource;
 use App\Jobs\ControlApp;
@@ -679,6 +680,7 @@ trait ManagesApps
         }
 
         $mandal->forgetInventory($this->server());
+        app(GameStatuses::class)->refresh($this->server());
 
         Notification::make()->title($successTitle)->success()->send();
 
