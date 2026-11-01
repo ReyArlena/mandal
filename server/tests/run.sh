@@ -481,6 +481,12 @@ for marker in "rm -f ${MANDAL_NGINX_DIR}/sites-enabled/shop.conf" "rm -f ${MANDA
     if [[ "$delete" == *"$marker"* ]]; then pass; else fail "app:delete mentions: $marker"; fi
 done
 [[ "$delete" == *"certbot delete --non-interactive --cert-name shop.example.com"* && "$delete" != *"--cert-name old.example.com"* ]] && pass || fail "app:delete removes the certificate for the app's domain only"
+[[ "$delete" == *"crontab -u shop -r"* ]] && pass || fail "app:delete removes the crontab"
+mkdir -p "${TMP}/crontab-bin"
+printf '#!/usr/bin/env bash\n[[ "$*" == *-l* && -z "${MANDAL_FAKE_CRONTAB:-}" ]] && { echo "no crontab for $2" >&2; exit 1; }\nexit 0\n' > "${TMP}/crontab-bin/crontab"
+chmod +x "${TMP}/crontab-bin/crontab"
+assert_eq "app_remove_crontab skips a user without a crontab" "" "$(PATH="${TMP}/crontab-bin:${PATH}" app_remove_crontab shop 2>&1)"
+assert_eq "app_remove_crontab removes an existing crontab" "+ crontab -u shop -r" "$(PATH="${TMP}/crontab-bin:${PATH}" MANDAL_FAKE_CRONTAB=1 app_remove_crontab shop 2>&1)"
 keep="$(cmd_app_delete --name=shop --keep-database --keep-files --dry-run 2>&1)"
 [[ "$keep" != *"DROP DATABASE"* && "$keep" == *"userdel shop"* ]] && pass || fail "app:delete can keep the database and files"
 [[ "$delete" == *"rm -f ${MANDAL_NGINX_LOG_DIR}/shop-access.log ${MANDAL_NGINX_LOG_DIR}/shop-access.log.2.gz ${MANDAL_NGINX_LOG_DIR}/shop-error.log ${MANDAL_VAR_LOG}/php8.5-fpm-shop-slow.log"* && "$delete" == *"rm -rf ${MANDAL_DEPLOY_LOG_DIR}/shop"* && "$delete" != *"shopping-access.log"* ]] && pass || fail "app:delete removes the app's logs" "$(printf '%s' "$delete" | grep log)"

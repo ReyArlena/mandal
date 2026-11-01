@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Deleting a Laravel app whose crontab was already gone stopped halfway on "no crontab for <app>", after removing the site, pool and database but before the system user, home directory and manifest, and every retry stopped at the same place. The crontab is now removed only when there is one.
 - Deleting an app left its logs behind: the nginx access and error logs, the PHP-FPM slow log and the deploy logs, which an app created later with the same name inherited. They go too now, unless the files are kept.
 - Deleting an app left its Let's Encrypt certificate behind, and certbot kept renewing it, failing once the domain pointed elsewhere. `app:delete` now deletes the certificates that name the app's domain.
 - Deleting a Docker app with **Keep files** still removed its project folder, and with it the data in bind mounts such as `./data`; only the named volumes were kept. The folder now stays too, and creating an app with the same name uses it again instead of removing it when the new app fails to come together.

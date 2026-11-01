@@ -229,7 +229,7 @@ cmd_app_delete() {
         db_sql "DROP USER IF EXISTS '${db}'@'localhost'"
     fi
     if id "$name" > /dev/null 2>&1 || dry_run; then
-        run_cmd crontab -u "$name" -r
+        app_remove_crontab "$name"
         if [[ "$keep_home" == true ]]; then
             run_cmd userdel "$name"
         else

@@ -410,6 +410,13 @@ app_write_cron() {
     rm -f "$tmp"
 }
 
+# Removes the user's crontab when there is one: `crontab -r` fails on a
+# user without one, which would stop app:delete halfway.
+app_remove_crontab() {
+    dry_run || crontab -u "$1" -l > /dev/null 2>&1 || return 0
+    run_cmd crontab -u "$1" -r
+}
+
 app_write_manifest() {
     local name="$1" file
     shift
