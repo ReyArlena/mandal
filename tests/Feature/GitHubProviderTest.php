@@ -27,6 +27,23 @@ it('rejects a bad token', function () {
     expect(fn () => $this->github->tokenInfo())->toThrow(RuntimeException::class, 'rejected');
 });
 
+it('lists repositories across pages, most recently pushed first', function () {
+    $page = fn (int $from, int $count): array => array_map(fn (int $i): array => ['full_name' => "acme/repo-{$i}"], range($from, $from + $count - 1));
+
+    Http::fake([
+        'api.github.com/user/repos?per_page=100&page=1&sort=pushed' => Http::response($page(1, 100)),
+        'api.github.com/user/repos?per_page=100&page=2&sort=pushed' => Http::response($page(101, 3)),
+    ]);
+
+    $repos = $this->github->listRepositories();
+
+    expect($repos)->toHaveCount(103)
+        ->and($repos[0])->toBe('acme/repo-1')
+        ->and($repos[102])->toBe('acme/repo-103');
+
+    Http::assertSentCount(2);
+});
+
 it('adds a read-only deploy key', function () {
     Http::fake(['api.github.com/repos/acme/shop/keys' => Http::response(['id' => 42], 201)]);
 

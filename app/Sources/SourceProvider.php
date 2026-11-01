@@ -15,6 +15,13 @@ interface SourceProvider
     public function tokenInfo(): array;
 
     /**
+     * Repositories the token can see, as owner/name, most recently pushed first.
+     *
+     * @return list<string>
+     */
+    public function listRepositories(): array;
+
+    /**
      * @return list<string>
      */
     public function listBranches(string $repo): array;

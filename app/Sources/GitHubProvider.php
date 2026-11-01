@@ -31,6 +31,34 @@ class GitHubProvider implements SourceProvider
         ];
     }
 
+    /**
+     * Up to 500 repositories, so a large organisation cannot stall the form.
+     */
+    public function listRepositories(): array
+    {
+        $names = [];
+
+        for ($page = 1; $page <= 5; $page++) {
+            $response = $this->client()->get('/user/repos', ['per_page' => 100, 'page' => $page, 'sort' => 'pushed']);
+
+            $this->ensure($response->successful(), 'Could not list repositories');
+
+            $repos = (array) $response->json();
+
+            foreach ($repos as $repo) {
+                if (is_array($repo) && is_string($repo['full_name'] ?? null)) {
+                    $names[] = $repo['full_name'];
+                }
+            }
+
+            if (count($repos) < 100) {
+                break;
+            }
+        }
+
+        return array_values(array_unique($names));
+    }
+
     public function listBranches(string $repo): array
     {
         $response = $this->client()->get("/repos/{$this->path($repo)}/branches", ['per_page' => 100]);

@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **GitHub repository** in the New app form is a searchable list of the repositories the panel's GitHub token can see (cached for ten minutes); typing `owner/name` still picks any public repository. Without a token it stays a text field.
 - The server switcher reads **All servers** outside a server instead of "Choose a server", and its menu lists **All servers**, then the servers, then **Add server**, each group separated by a line.
 - The panel asks search engines never to index, follow or cache it: `robots.txt` disallows every path (it allowed everything before), and every response sends `X-Robots-Tag: noindex, nofollow, noarchive`.
 - Settings is split into sections with a sidebar as wide as its longest entry: **General**, **Source providers**, **Backup destinations** and **Server details pages**, at `/settings/<section>` (`/settings` opens General). Each section's description sits above its content in body text, under a smaller heading. The servers list and the settings pages have **Servers** and **Mandal** tabs to move between them; Settings stays in the user menu too.

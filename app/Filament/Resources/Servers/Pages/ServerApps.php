@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Servers\Pages;
 
+use App\Enums\SourceProviderType;
 use App\Enums\TaskStatus;
 use App\Enums\TaskType;
 use App\Enums\WwwMode;
@@ -12,6 +13,8 @@ use App\Mandal\ComposeImport;
 use App\Mandal\InvalidImport;
 use App\Mandal\MandalClient;
 use App\Models\Server;
+use App\Models\SourceCredential;
+use App\Sources\SourceProviders;
 use App\Ssh\SshException;
 use BackedEnum;
 use Closure;
@@ -33,9 +36,11 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+use Throwable;
 
 /**
  * The apps on a server, read from its manifests, with create and delete.
@@ -44,6 +49,9 @@ class ServerApps extends Page
 {
     use InteractsWithRecord;
     use ManagesApps;
+
+    /** A GitHub repository as owner/name. */
+    public const string REPO_PATTERN = '#^[A-Za-z0-9_][A-Za-z0-9_.-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*$#';
 
     /**
      * What the compose field starts with: one service, bound to loopback
@@ -294,6 +302,91 @@ class ServerApps extends Page
         ];
     }
 
+    /**
+     * A searchable list of the repositories the GitHub token can see, or a
+     * plain text field when the panel has no usable token.
+     */
+    private function repositoryField(): Field
+    {
+        $visible = fn (callable $get): bool => $get('type') !== 'docker';
+        $credential = SourceCredential::forProvider(SourceProviderType::GitHub);
+
+        if ($credential === null || $credential->isExpired()) {
+            return TextInput::make('repo')
+                ->label('GitHub repository')
+                ->placeholder('owner/name')
+                ->regex(self::REPO_PATTERN)
+                ->visible($visible);
+        }
+
+        return Select::make('repo')
+            ->label('GitHub repository')
+            ->placeholder('Choose, or type owner/name')
+            ->searchable()
+            ->preload()
+            ->options(fn (): array => $this->repositoryOptions())
+            ->getSearchResultsUsing(fn (string $search): array => $this->repositoryOptions($search))
+            ->getOptionLabelUsing(fn (?string $value): ?string => $value)
+            ->rule('regex:'.self::REPO_PATTERN)
+            ->helperText('Repositories your GitHub token can see. Type owner/name for any other public repository.')
+            ->visible($visible);
+    }
+
+    /**
+     * Repositories matching the search, at most 50; a search that is itself
+     * owner/name comes first, so any public repository can be chosen.
+     *
+     * @return array<string, string>
+     */
+    public function repositoryOptions(string $search = ''): array
+    {
+        $search = trim($search);
+        $repositories = $this->repositories();
+
+        if ($search !== '') {
+            $repositories = array_values(array_filter($repositories, fn (string $repo): bool => Str::contains($repo, $search, ignoreCase: true)));
+
+            if (preg_match(self::REPO_PATTERN, $search) && ! in_array(Str::lower($search), array_map(Str::lower(...), $repositories), true)) {
+                array_unshift($repositories, $search);
+            }
+        }
+
+        $repositories = array_slice($repositories, 0, 50);
+
+        return array_combine($repositories, $repositories);
+    }
+
+    /**
+     * The token's repositories, cached for ten minutes. A failed request is
+     * not cached, so the next keystroke tries again.
+     *
+     * @return list<string>
+     */
+    private function repositories(): array
+    {
+        $credential = SourceCredential::forProvider(SourceProviderType::GitHub);
+
+        if ($credential === null || $credential->isExpired()) {
+            return [];
+        }
+
+        $key = "github.repositories.{$credential->getKey()}.{$credential->updated_at?->timestamp}";
+
+        if (is_array($cached = Cache::get($key))) {
+            return $cached;
+        }
+
+        try {
+            $repositories = app(SourceProviders::class)->make(SourceProviderType::GitHub, $credential->token)->listRepositories();
+        } catch (Throwable) {
+            return [];
+        }
+
+        Cache::put($key, $repositories, now()->addMinutes(10));
+
+        return $repositories;
+    }
+
     private function createAppAction(): Action
     {
         return Action::make('createApp')
@@ -432,11 +525,7 @@ class ServerApps extends Page
                     ->requiredIf('type', 'laravel')
                     ->visible(fn (callable $get): bool => $get('type') !== 'docker')
                     ->selectablePlaceholder(false),
-                TextInput::make('repo')
-                    ->label('GitHub repository')
-                    ->placeholder('owner/name')
-                    ->regex('#^[A-Za-z0-9_][A-Za-z0-9_.-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*$#')
-                    ->visible(fn (callable $get): bool => $get('type') !== 'docker'),
+                $this->repositoryField(),
                 TextInput::make('branch')
                     ->default('main')
                     ->regex('#^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$#')

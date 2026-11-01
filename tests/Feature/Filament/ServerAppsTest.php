@@ -7,9 +7,13 @@ use App\Jobs\DeleteApp;
 use App\Jobs\DeployApp;
 use App\Jobs\RollbackApp;
 use App\Models\Server;
+use App\Models\SourceCredential;
 use App\Models\Task;
 use App\Models\User;
 use App\Ssh\SshClient;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\FakeSshClient;
 
@@ -281,4 +285,41 @@ it('rejects a docker app without a compose file, or with a proxy but no port or 
         ->assertHasActionErrors(['port', 'domain']);
 
     Queue::assertNothingPushed();
+});
+
+describe('choosing the repository', function () {
+    it('lists the repositories the GitHub token can see and accepts any typed owner/name', function () {
+        SourceCredential::factory()->create(['account' => 'acme']);
+        Http::fake(['api.github.com/user/repos*' => Http::response([['full_name' => 'acme/shop'], ['full_name' => 'acme/blog'], ['full_name' => 'Acme/Shop-Admin']])]);
+
+        $page = livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])->instance();
+
+        expect($page->repositoryOptions())->toBe(['acme/shop' => 'acme/shop', 'acme/blog' => 'acme/blog', 'Acme/Shop-Admin' => 'Acme/Shop-Admin'])
+            ->and($page->repositoryOptions('shop'))->toBe(['acme/shop' => 'acme/shop', 'Acme/Shop-Admin' => 'Acme/Shop-Admin'])
+            ->and($page->repositoryOptions('laravel/laravel'))->toBe(['laravel/laravel' => 'laravel/laravel'])
+            ->and($page->repositoryOptions('acme/shop'))->toBe(['acme/shop' => 'acme/shop', 'Acme/Shop-Admin' => 'Acme/Shop-Admin']);
+
+        Http::assertSentCount(1);
+
+        livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
+            ->mountAction('createApp')
+            ->assertSchemaComponentExists('repo', checkComponentUsing: fn ($component): bool => $component instanceof Select && $component->isSearchable());
+    });
+
+    it('keeps a text field without a GitHub token', function () {
+        livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
+            ->mountAction('createApp')
+            ->assertActionMounted('createApp')
+            ->assertSchemaComponentExists('repo', checkComponentUsing: fn ($component): bool => $component instanceof TextInput);
+    });
+
+    it('does not cache a failed repository list', function () {
+        SourceCredential::factory()->create(['account' => 'acme']);
+        Http::fakeSequence('api.github.com/user/repos*')->push(['message' => 'oops'], 500)->push([['full_name' => 'acme/shop']]);
+
+        $page = livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])->instance();
+
+        expect($page->repositoryOptions())->toBe([])
+            ->and($page->repositoryOptions())->toBe(['acme/shop' => 'acme/shop']);
+    });
 });
