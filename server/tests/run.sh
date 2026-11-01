@@ -592,7 +592,7 @@ printf 'A=1\x00B=2\n' > "${TMP}/bad.env"
 
 # app:deploy-script
 assert_eq "app:deploy-script --default prints the template file" "$(cat "${MANDAL_ROOT}/lib/templates/deploy.sh")" "$(cmd_app_deploy_script --default)"
-[[ "$(cmd_app_deploy_script --default)" == *'$MANDAL_APP'* && "$(cmd_app_deploy_script --default)" == *'$PHP artisan optimize'* ]] && pass || fail "the default deploy.sh names MANDAL_APP and runs optimize"
+[[ "$(cmd_app_deploy_script --default)" == *'set -euo pipefail'* && "$(cmd_app_deploy_script --default)" == *'$PHP artisan optimize'* ]] && pass || fail "the default deploy.sh stops on errors and runs optimize"
 mkdir -p "${MANDAL_HOME_DIR}/shop"
 printf '#!/usr/bin/env bash\necho custom\n' > "${MANDAL_HOME_DIR}/shop/deploy.sh"
 assert_eq "app:deploy-script prints the app's script" "$(printf '#!/usr/bin/env bash\necho custom')" "$(cmd_app_deploy_script --name=shop)"

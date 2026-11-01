@@ -28,6 +28,7 @@ use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Enums\Size;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\HtmlString;
 use RuntimeException;
 
 /**
@@ -64,6 +65,14 @@ trait ManagesApps
     public static function deployScriptTemplate(): string
     {
         return (string) file_get_contents(base_path('server/lib/templates/deploy.sh'));
+    }
+
+    /**
+     * What deploy.sh runs with, shown under every deploy script editor.
+     */
+    public static function deployScriptHelp(): HtmlString
+    {
+        return new HtmlString('Runs inside each new release as the app user, before it goes live. Available: <code>$MANDAL_APP</code> (the app name), <code>$RELEASE_DIR</code> (this release), <code>$SHARED_DIR</code> (.env and storage), <code>$PHP</code> (the app\'s PHP binary), <code>$BRANCH</code> and <code>$COMMIT</code>.');
     }
 
     /**
@@ -331,7 +340,7 @@ trait ManagesApps
             ->label('Deploy script')
             ->icon(Heroicon::OutlinedCommandLine)
             ->modalHeading(fn (array $arguments): string => "{$arguments['name']} deploy.sh")
-            ->modalDescription('Runs inside each new release as the app user before it goes live, with $MANDAL_APP, $RELEASE_DIR, $SHARED_DIR, $PHP, $BRANCH and $COMMIT set. Saved to /home/<app>/deploy.sh; bash checks the syntax first. Changes apply on the next deploy.')
+            ->modalDescription('Saved to /home/<app>/deploy.sh; bash checks the syntax first. Changes apply on the next deploy.')
             ->modalWidth(Width::ThreeExtraLarge)
             ->modalSubmitActionLabel('Save')
             ->fillForm(function (array $arguments): array {
@@ -354,7 +363,8 @@ trait ManagesApps
                     ->wrap()
                     ->hiddenLabel()
                     ->required()
-                    ->rules(['max:262144']),
+                    ->rules(['max:262144'])
+                    ->helperText(self::deployScriptHelp()),
             ])
             ->extraModalFooterActions(fn (array $arguments): array => [
                 Action::make('resetDeployScript')

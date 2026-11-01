@@ -546,7 +546,7 @@ class ServerApps extends Page
                             ->default(fn (): string => self::deployScriptTemplate())
                             ->requiredIf('type', 'laravel')
                             ->rules(['max:262144'])
-                            ->helperText('Runs inside each new release as the app user, before it goes live.'),
+                            ->helperText(self::deployScriptHelp()),
                     ]),
                 Section::make('Environment file (optional)')
                     ->description('Leave empty and Mandal writes a production .env for you.')
