@@ -252,7 +252,7 @@ class ServerApp extends Page
             $this->changeProxyPortAction()->arguments(['name' => $this->appName, 'port' => (string) ($this->appData['port'] ?? '')])->visible(fn (): bool => $this->isDocker() && ! empty($this->appData['proxy'])),
             $this->editEnvAction()->arguments(['name' => $this->appName]),
             $this->editDeployScriptAction()->arguments(['name' => $this->appName])->visible(fn (): bool => ! $this->isDocker()),
-            $this->deleteAppAction()->arguments(['name' => $this->appName])->visible(fn (): bool => empty($this->appData['panel'])),
+            $this->deleteAppAction()->arguments(['name' => $this->appName, 'type' => $this->isDocker() ? 'docker' : 'laravel'])->visible(fn (): bool => empty($this->appData['panel'])),
         ];
     }
 

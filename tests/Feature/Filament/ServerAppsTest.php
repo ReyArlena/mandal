@@ -148,6 +148,19 @@ it('queues app deletion with what to keep', function () {
     Queue::assertPushed(DeleteApp::class);
 });
 
+it('offers to keep only the project folder when deleting a Docker app', function () {
+    Queue::fake();
+
+    livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
+        ->mountAction('deleteApp', arguments: ['name' => 'game', 'type' => 'docker'])
+        ->assertSchemaComponentExists('keep_files')
+        ->assertSchemaComponentDoesNotExist('keep_database')
+        ->fillForm(['keep_files' => true])
+        ->callMountedAction();
+
+    expect((new DeleteApp($this->server->tasks()->sole()))->arguments())->toBe('app:delete --name=game --keep-files');
+});
+
 it('ignores a malformed name passed to delete', function () {
     Queue::fake();
 

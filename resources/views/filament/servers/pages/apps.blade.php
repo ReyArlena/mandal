@@ -61,7 +61,7 @@
                         @endif
                         <a href="{{ $this->logsUrl($app) }}" class="text-sm font-medium text-primary-600 hover:underline dark:text-primary-400">Logs</a>
                         @if (empty($app['panel']))
-                            {{ ($this->deleteAppAction)(['name' => $app['name']])->link() }}
+                            {{ ($this->deleteAppAction)(['name' => $app['name'], 'type' => $app['type'] ?? 'laravel'])->link() }}
                         @endif
                     </div>
                 </div>
