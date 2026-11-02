@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Filtering a log by text on the Logs page searched only the newest lines (the line limit) and missed older matches. Log files are now searched whole and Docker container output up to its last million lines, then the newest matches are kept (`logs:read --grep`).
 - Deleting a Laravel app whose crontab was already gone stopped halfway on "no crontab for <app>", after removing the site, pool and database but before the system user, home directory and manifest, and every retry stopped at the same place. The crontab is now removed only when there is one.
 - Deleting an app left its logs behind: the nginx access and error logs, the PHP-FPM slow log and the deploy logs, which an app created later with the same name inherited. They go too now, unless the files are kept.
 - Deleting an app left its Let's Encrypt certificate behind, and certbot kept renewing it, failing once the domain pointed elsewhere. `app:delete` now deletes the certificates that name the app's domain.

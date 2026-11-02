@@ -1085,6 +1085,8 @@ assert_json "logs:read --after returns nothing new" "$(cmd_logs_read --source=ng
 printf '127.0.0.1 - - [27/Oct/2026:04:05:00 +0000] "GET /new HTTP/1.1" 200 12\n' >> "$MANDAL_NGINX_LOG_DIR/shop-access.log"
 assert_json "logs:read --after returns only new lines" "$(cmd_logs_read --source=nginx:shop:access --after="$cursor")" '.lines | join("")' '127.0.0.1 - - [27/Oct/2026:04:05:00 +0000] "GET /new HTTP/1.1" 200 12'
 assert_json "logs:read --grep filters case-insensitively" "$(cmd_logs_read --source=nginx:shop:access --grep=PAGE29 --lines=1000)" '.lines | length' "11"
+assert_json "logs:read --grep searches past the newest lines" "$(cmd_logs_read --source=nginx:shop:access --grep=/page5 --lines=50)" '.lines | map(select(test("/page5 "))) | length' "1"
+assert_json "logs:read --grep keeps the newest matches up to --lines" "$(cmd_logs_read --source=nginx:shop:access --grep=/page --lines=3)" '.lines | length' "3"
 assert_json "logs:read reports a missing file" "$(cmd_logs_read --source=php:shop:slow)" '.exists' "false"
 
 laravel="$(cmd_logs_read --source=laravel:shop)"
@@ -1112,6 +1114,8 @@ docker_read="$(PATH="${TMP}/docker-bin:${PATH}" MANDAL_DOCKER_DIR="${TMP}/srv" c
 assert_json "docker logs return the container output" "$docker_read" '.lines | length' "2"
 assert_eq "docker logs read the app's compose project" "compose --project-directory ${TMP}/srv/tool --project-name tool logs --no-color --timestamps --tail 20" "$(cat "$MANDAL_FAKE_DOCKER_ARGS")"
 assert_json "docker logs filter by text" "$(PATH="${TMP}/docker-bin:${PATH}" MANDAL_DOCKER_DIR="${TMP}/srv" cmd_logs_read --source=docker:tool --grep=HEALTH)" '.lines | length' "1"
+assert_eq "a docker log search looks back further than the lines it returns" "compose --project-directory ${TMP}/srv/tool --project-name tool logs --no-color --timestamps --tail ${MANDAL_LOGS_SCAN_LINES}" "$(cat "$MANDAL_FAKE_DOCKER_ARGS")"
+assert_json "a docker log search keeps the newest matches up to --lines" "$(PATH="${TMP}/docker-bin:${PATH}" MANDAL_DOCKER_DIR="${TMP}/srv" cmd_logs_read --source=docker:tool --grep=app-1 --lines=1)" '.lines | join("")' "app-1  | 2026-10-27T04:00:01.000000000Z GET /health"
 docker_cursor="$(jq -r .cursor <<< "$docker_read")"
 PATH="${TMP}/docker-bin:${PATH}" MANDAL_DOCKER_DIR="${TMP}/srv" cmd_logs_read --source=docker:tool --after="$docker_cursor" > /dev/null
 assert_eq "docker live tail asks only for output after the cursor" "compose --project-directory ${TMP}/srv/tool --project-name tool logs --no-color --timestamps --since ${docker_cursor}" "$(cat "$MANDAL_FAKE_DOCKER_ARGS")"

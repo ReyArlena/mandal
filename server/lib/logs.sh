@@ -10,6 +10,9 @@ MANDAL_VAR_LOG="${MANDAL_VAR_LOG:-/var/log}"
 MANDAL_LOGS_MAX_BYTES="${MANDAL_LOGS_MAX_BYTES:-524288}"
 # shellcheck disable=SC2034  # used by commands/logs.sh
 MANDAL_LOGS_MAX_LINES=5000
+# How far back a search of a container's output looks, in lines, so a
+# search reaches past the newest lines without reading a huge log whole.
+MANDAL_LOGS_SCAN_LINES="${MANDAL_LOGS_SCAN_LINES:-1000000}"
 
 # Every source as TSV: id, label, kind, target, app, scope
 # kind: file (target is a path), journal (target is a unit, or "kernel"),
@@ -93,11 +96,14 @@ logs_read_file() {
     size="$(stat -c %s "$path")"
     if [[ -n "$after" && "$after" =~ ^[0-9]+$ && "$after" -le "$size" ]]; then
         content="$(tail -c +"$((after + 1))" "$path" | head -c "$MANDAL_LOGS_MAX_BYTES")"
+        if [[ -n "$pattern" ]]; then
+            content="$(printf '%s\n' "$content" | { grep -i -F -- "$pattern" || true; } | tail -n "$lines")"
+        fi
+    elif [[ -n "$pattern" ]]; then
+        # The whole file is searched, then the newest matches kept.
+        content="$({ grep -i -F -- "$pattern" "$path" || true; } | tail -n "$lines" | tail -c "$MANDAL_LOGS_MAX_BYTES")"
     else
         content="$(tail -n "$lines" "$path" | tail -c "$MANDAL_LOGS_MAX_BYTES")"
-    fi
-    if [[ -n "$pattern" ]]; then
-        content="$(printf '%s\n' "$content" | { grep -i -F -- "$pattern" || true; } | tail -n "$lines")"
     fi
     [[ "$(printf '%s' "$content" | wc -c)" -ge "$MANDAL_LOGS_MAX_BYTES" ]] && truncated=true
     printf '%s\n' "$content" | jq -R -s --arg cursor "$size" --argjson truncated "$truncated" '
@@ -189,12 +195,15 @@ logs_read_docker() {
     if [[ "$after" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z$ ]]; then
         args+=(--since "$after")
     else
-        args+=(--tail "$lines")
+        # A search looks back much further than the lines it returns, so a
+        # match older than the newest lines is still found.
+        args+=(--tail "$([[ -n "$pattern" ]] && echo "$MANDAL_LOGS_SCAN_LINES" || echo "$lines")")
         [[ -n "$since" ]] && args+=(--since "$(date -u -d "$since" +%Y-%m-%dT%H:%M:%SZ)")
     fi
-    output="$(docker compose --project-directory "$dir" --project-name "$app" "${args[@]}" 2>&1 | tail -n "$lines" | head -c "$MANDAL_LOGS_MAX_BYTES" || true)"
     if [[ -n "$pattern" ]]; then
-        output="$(printf '%s\n' "$output" | { grep -i -F -- "$pattern" || true; })"
+        output="$(docker compose --project-directory "$dir" --project-name "$app" "${args[@]}" 2>&1 | { grep -i -F -- "$pattern" || true; } | tail -n "$lines" | tail -c "$MANDAL_LOGS_MAX_BYTES")"
+    else
+        output="$(docker compose --project-directory "$dir" --project-name "$app" "${args[@]}" 2>&1 | tail -n "$lines" | head -c "$MANDAL_LOGS_MAX_BYTES" || true)"
     fi
     printf '%s\n' "$output" | jq -R -s --arg cursor "$cursor" '
         {exists: true, lines: (split("\n") | map(select(length > 0))), cursor: $cursor, truncated: false}
