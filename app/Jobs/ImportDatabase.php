@@ -7,9 +7,7 @@ use Illuminate\Support\Facades\File;
 use InvalidArgumentException;
 
 /**
- * Runs `mandal db:import` with a dump uploaded through the panel. The CLI
- * backs the database up first, so the previous contents can be restored
- * from the Backups tab.
+ * Runs `mandal db:import` with a dump uploaded through the panel.
  */
 class ImportDatabase extends RunMandalTask
 {

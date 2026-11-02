@@ -15,13 +15,17 @@ use App\Models\Server;
 use App\Models\Task;
 use App\Ssh\SshException;
 use BackedEnum;
+use Carbon\CarbonImmutable;
+use Carbon\Exceptions\InvalidFormatException;
 use Filament\Actions\Action;
-use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Str;
 
 /**
  * Backup configuration, history and restores for one server.
@@ -30,6 +34,8 @@ class ServerBackups extends Page
 {
     use FormatsBytes;
     use InteractsWithRecord;
+
+    private const DATABASE_PATTERN = '/^[a-z0-9_]{1,64}$/';
 
     protected static string $resource = ServerResource::class;
 
@@ -46,6 +52,9 @@ class ServerBackups extends Page
     public array $backups = [];
 
     public ?string $error = null;
+
+    /** @var list<string>|null */
+    private ?array $databases = null;
 
     public function mount(int|string $record): void
     {
@@ -146,7 +155,7 @@ class ServerBackups extends Page
                 $file = (string) ($arguments['file'] ?? '');
                 $where = (string) ($arguments['where'] ?? '');
 
-                if (! preg_match('/^[a-z0-9_]{1,64}$/', $database) || ! preg_match('/^[a-z0-9_]+-\d{14}\.sql\.zst$/', $file) || ! in_array($where, ['local', 'remote'], true)) {
+                if (! preg_match(self::DATABASE_PATTERN, $database) || ! preg_match('/^[a-z0-9_]+-\d{14}\.sql\.zst$/', $file) || ! in_array($where, ['local', 'remote'], true)) {
                     return;
                 }
 
@@ -189,20 +198,30 @@ class ServerBackups extends Page
             ->icon(Heroicon::OutlinedArrowUturnLeft)
             ->link()
             ->modalHeading(fn (array $arguments): string => "Restore {$arguments['file']}")
-            ->modalDescription('The backup is loaded into a new database next to the live one, so you can check it before switching the app over. Nothing is overwritten.')
+            ->modalDescription('Left empty, the backup is loaded into a new database next to the live one, so you can check it before switching the app over.')
             ->modalSubmitActionLabel('Restore')
             ->schema([
-                TextInput::make('into')
+                ServerDatabases::overwriteWarning()
+                    ->visible(fn (Get $get): bool => in_array($get('into'), $this->databases(), true)),
+                Select::make('into')
                     ->label('Restore into database')
                     ->placeholder('Leave empty for <database>_restore_<timestamp>')
-                    ->regex('/^[a-z0-9_]{1,64}$/')
-                    ->helperText('A new database is created; the app user is given access to it.'),
+                    ->searchable()
+                    ->preload()
+                    ->live()
+                    ->options(fn (): array => $this->databaseOptions())
+                    ->getSearchResultsUsing(fn (string $search): array => $this->databaseOptions($search))
+                    ->getOptionLabelUsing(fn (?string $value): ?string => $value)
+                    ->rule('regex:'.self::DATABASE_PATTERN)
+                    ->helperText(fn (?string $state): string => $state !== null && in_array($state, $this->databases(), true)
+                        ? "{$state} is emptied and replaced by this backup; its users keep their access."
+                        : 'Choose a database to replace, or type a new name. A new database has no users; give one access on the Databases page.'),
             ])
             ->action(function (array $arguments, array $data): void {
                 $database = (string) ($arguments['database'] ?? '');
                 $file = (string) ($arguments['file'] ?? '');
 
-                if (! preg_match('/^[a-z0-9_]{1,64}$/', $database) || ! preg_match('/^[a-z0-9_]+-\d{14}\.sql\.zst$/', $file)) {
+                if (! preg_match(self::DATABASE_PATTERN, $database) || ! preg_match('/^[a-z0-9_]+-\d{14}\.sql\.zst$/', $file)) {
                     return;
                 }
 
@@ -212,6 +231,84 @@ class ServerBackups extends Page
                     'into' => $data['into'] ?: null,
                 ], "Restoring {$file}");
             });
+    }
+
+    /**
+     * A server timestamp as "3 hours ago" with the exact time for a tooltip,
+     * or null when there is none.
+     *
+     * @return array{ago: string, exact: string}|null
+     */
+    public function moment(?string $at): ?array
+    {
+        if (blank($at)) {
+            return null;
+        }
+
+        try {
+            $time = CarbonImmutable::parse($at)->setTimezone(config('app.timezone'));
+        } catch (InvalidFormatException) {
+            return null;
+        }
+
+        return ['ago' => $time->diffForHumans(), 'exact' => $time->format('j M Y, H:i T')];
+    }
+
+    /**
+     * What the last run did: "shop, 2 KB" for a backup, the log text as it is
+     * for anything else.
+     */
+    public function lastRunDetail(string $rest): string
+    {
+        if (preg_match('/^(\S+) \S+ (\d+)$/', $rest, $match)) {
+            return "{$match[1]}, {$this->bytes((int) $match[2])}";
+        }
+
+        return $rest;
+    }
+
+    /**
+     * Databases on the server matching the search; a search that is itself
+     * a valid name and not one of them comes first, as a new database.
+     *
+     * @return array<string, string>
+     */
+    public function databaseOptions(string $search = ''): array
+    {
+        $search = trim($search);
+        $databases = $this->databases();
+
+        if ($search !== '') {
+            $databases = array_values(array_filter($databases, fn (string $name): bool => Str::contains($name, $search, ignoreCase: true)));
+
+            if (preg_match(self::DATABASE_PATTERN, $search) && ! in_array($search, $databases, true)) {
+                return [$search => "{$search} (new database)"] + array_combine($databases, $databases);
+            }
+        }
+
+        return array_combine($databases, $databases);
+    }
+
+    /**
+     * The server's databases, read once per request; empty when they cannot
+     * be read, so a name can still be typed.
+     *
+     * @return list<string>
+     */
+    private function databases(): array
+    {
+        if ($this->databases !== null) {
+            return $this->databases;
+        }
+
+        try {
+            $result = app(MandalClient::class)->run($this->server(), 'db:list', timeoutSeconds: 60);
+            $names = $result->successful() ? array_column($result->json()['databases'] ?? [], 'name') : [];
+        } catch (SshException) {
+            $names = [];
+        }
+
+        return $this->databases = array_values(array_filter($names, 'is_string'));
     }
 
     /**

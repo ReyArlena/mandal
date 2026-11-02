@@ -151,10 +151,10 @@ No system user is created for a Docker app, and no firewall rules are written: D
 | `db:create`, `db:delete` | `CREATE DATABASE` / `DROP DATABASE` through the Unix socket as root |
 | `db:user:create`, `db:user:update`, `db:user:delete` | `CREATE USER '<user>'@'localhost'`, `ALTER USER ... IDENTIFIED BY` (password read from an uploaded file), `DROP USER` |
 | `db:access` | `GRANT ALL ON <db>.*` and `REVOKE` per user |
-| `db:import` | Writes a backup of the database to `/var/backups/mandal/db/<db>/<db>-<timestamp>.sql.zst` first, optionally `DROP DATABASE` and `CREATE DATABASE` (grants are kept), then runs the uploaded dump through `mariadb <db>` and removes it |
+| `db:import` | Optionally `DROP DATABASE` and `CREATE DATABASE` (grants are kept), then runs the uploaded dump through `mariadb <db>` and removes it |
 | `db:export` | Nothing: streams `mariadb-dump` to the panel |
 
-Apart from the backup `db:import` takes, nothing is written outside MariaDB. Databases and users that belong to an app are refused.
+Nothing is written outside MariaDB. Databases and users that belong to an app are refused.
 
 ## Backups
 
@@ -166,7 +166,7 @@ Every backup target (the server's databases, or one app) has a local and a remot
 | `backup:remote-list` | Nothing; lists the remotes with `used_by` |
 | `backup:configure` | `/etc/mandal/backups/databases.conf` from an uploaded file (`ENABLED`, `LOCAL`, `LOCAL_SCHEDULE`, `LOCAL_KEEP`, `REMOTE`, `REMOTE_SCHEDULE`, `REMOTE_KEEP`, `REMOTE_PATH`); `/etc/cron.d/mandal-backups`; `/var/backups/mandal/db` (`0700`). `--defaults` writes a local nightly backup (02:30, seven copies) only when the file does not exist yet; provisioning and `panel:install` run it |
 | `backup:run` | `/var/backups/mandal/db/<database>/<database>-<timestamp>.sql.zst` (`0600`); the panel's SQLite copied to `/var/backups/mandal/db/<app>-sqlite/`; with a remote, `rclone copy` to `<bucket>/<prefix>/<subfolder>/db/<database>/` and the remote pruned to `REMOTE_KEEP`; local copies pruned to `LOCAL_KEEP`, or the dump removed after the upload when local is off (`--destination=local` or `remote` serve one side only). A remote that cannot be reached is logged as `failed-remote` and the dump kept locally. `/var/log/mandal/backups.log` appended. Lock `/run/lock/mandal-backup.lock` |
-| `backup:restore` | A new database `<database>_restore_<time of the restore>` (or `--into=`), filled from the dump, with the original database's user granted all privileges on it. A backup that only exists remotely is downloaded first |
+| `backup:restore` | A new database `<database>_restore_<time of the restore>` (or `--into=`), filled from the dump; an existing `--into=` database is dropped and recreated first (grants are kept). No users or grants are created. A backup that only exists remotely is downloaded first |
 | `backup:delete` | One dump removed locally, or `rclone deletefile` on the remote |
 | `backup:status` | Nothing; reports the database target, its last run and every app target with its last run |
 

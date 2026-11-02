@@ -44,6 +44,7 @@
                                 </x-filament::dropdown.list.item>
                             </x-filament::dropdown.list>
                         </x-filament::dropdown>
+                        {{ ($this->backupDatabaseAction)(['name' => $database['name']]) }}
                         @unless ($database['app'] ?? null)
                             {{ ($this->deleteDatabaseAction)(['name' => $database['name']]) }}
                         @endunless

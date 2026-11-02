@@ -82,6 +82,22 @@ it('shows each destination with its schedule, the last run and the backups', fun
         ->assertSee('1 local, 1 remote');
 });
 
+it('shows backup times and the last run in words, with the exact time on hover', function () {
+    $this->travelTo('2026-10-27T04:30:04Z');
+    $this->ssh->respondWithJson('inventory', configuredInventory($this->inventory));
+    $this->ssh->respondWithJson('backup:list', [[
+        'database' => 'shop',
+        'local' => [['file' => 'shop-20261027023000.sql.zst', 'size' => 2048, 'modified' => '2026-10-27T02:30:04.6815645660Z']],
+        'remote' => [],
+    ]]);
+
+    livewire(ServerBackups::class, ['record' => $this->server->getRouteKey()])
+        ->assertSee('2 hours ago')
+        ->assertSeeHtml('title="27 Oct 2026, 02:30 UTC"')
+        ->assertSee('shop, 2 KB')
+        ->assertDontSee('2026-10-27T02:30:04');
+});
+
 it('pushes the destination and saves settings through uploaded files so secrets stay off the command line', function () {
     offsiteDestination();
     $this->inventory['backups'] = ['configured' => false];
@@ -170,6 +186,29 @@ it('queues a backup run and a restore', function () {
 
     Queue::assertPushed(RunBackup::class);
     Queue::assertPushed(RestoreBackup::class);
+});
+
+it('restores into a database chosen from the server or a new name', function () {
+    Queue::fake();
+    $this->ssh->respondWithJson('inventory', configuredInventory($this->inventory));
+    $this->ssh->respondWithJson('backup:list', []);
+    $this->ssh->respondWithJson('db:list', ['databases' => [['name' => 'shop'], ['name' => 'shop_staging'], ['name' => 'blog']], 'users' => []]);
+
+    $page = livewire(ServerBackups::class, ['record' => $this->server->getRouteKey()])->instance();
+
+    expect($page->databaseOptions())->toBe(['shop' => 'shop', 'shop_staging' => 'shop_staging', 'blog' => 'blog'])
+        ->and($page->databaseOptions('shop'))->toBe(['shop' => 'shop', 'shop_staging' => 'shop_staging'])
+        ->and($page->databaseOptions('shop_check'))->toBe(['shop_check' => 'shop_check (new database)'])
+        ->and($page->databaseOptions('Shop;drop'))->toBe([]);
+
+    livewire(ServerBackups::class, ['record' => $this->server->getRouteKey()])
+        ->mountAction('restore', arguments: ['database' => 'shop', 'file' => 'shop-20261027023000.sql.zst'])
+        ->fillForm(['into' => 'shop_staging'])
+        ->callMountedAction()
+        ->assertHasNoActionErrors()
+        ->assertNotified('Restoring shop-20261027023000.sql.zst');
+
+    expect($this->server->tasks()->sole()->options['into'])->toBe('shop_staging');
 });
 
 it('builds restore arguments only from safe values', function () {

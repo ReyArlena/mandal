@@ -6,6 +6,8 @@ use App\Enums\TaskType;
 use App\Filament\Resources\Servers\Concerns\FormatsBytes;
 use App\Filament\Resources\Servers\ServerResource;
 use App\Jobs\ImportDatabase;
+use App\Jobs\RunBackup;
+use App\Jobs\RunMandalTask;
 use App\Mandal\ComposeImport;
 use App\Mandal\MandalClient;
 use App\Models\Server;
@@ -21,6 +23,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
+use Filament\Schemas\Components\Callout;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Str;
 
@@ -55,6 +58,8 @@ class ServerDatabases extends Page
     public array $overview = [];
 
     public ?string $error = null;
+
+    public bool $backupsConfigured = false;
 
     public function mount(int|string $record): void
     {
@@ -97,6 +102,12 @@ class ServerDatabases extends Page
         }
 
         $this->overview = $result->json();
+
+        try {
+            $this->backupsConfigured = (bool) (app(MandalClient::class)->inventory($server)['backups']['configured'] ?? false);
+        } catch (SshException) {
+            $this->backupsConfigured = false;
+        }
 
         if (! ($this->overview['installed'] ?? false) || ($this->overview['active'] ?? '') !== 'active') {
             $this->error = 'The database server is not running.';
@@ -222,9 +233,10 @@ class ServerDatabases extends Page
             ->icon(Heroicon::OutlinedArrowUpTray)
             ->link()
             ->modalHeading(fn (array $arguments): string => "Import into {$arguments['name']}")
-            ->modalDescription('A .sql dump, or one compressed with gzip (.sql.gz) or zstd (.sql.zst) like the backups and exports here. The database is backed up first, so its previous contents can be restored from the Backups tab. The import runs as the database administrator, so a dump that switches to or creates a database (USE, CREATE DATABASE) is refused.')
+            ->modalDescription('A .sql dump, or one compressed with gzip (.sql.gz) or zstd (.sql.zst) like the backups and exports here. The import runs as the database administrator, so a dump that switches to or creates a database (USE, CREATE DATABASE) is refused.')
             ->modalSubmitActionLabel('Import')
             ->schema([
+                self::overwriteWarning(),
                 FileUpload::make('file')
                     ->label('Dump')
                     ->required()
@@ -254,6 +266,44 @@ class ServerDatabases extends Page
                     'replace' => (bool) ($data['replace'] ?? false),
                 ], "Importing into {$name}");
             });
+    }
+
+    /**
+     * One backup of a database now, to the destinations set on the Backups
+     * tab and counted with the scheduled ones it keeps.
+     */
+    public function backupDatabaseAction(): Action
+    {
+        return Action::make('backupDatabase')
+            ->label('Backup')
+            ->icon(Heroicon::OutlinedArchiveBox)
+            ->link()
+            ->disabled(fn (): bool => ! $this->backupsConfigured)
+            ->tooltip(fn (): ?string => $this->backupsConfigured ? null : 'Set up backups on the Backups tab first.')
+            ->requiresConfirmation()
+            ->modalIcon(Heroicon::OutlinedArchiveBox)
+            ->modalHeading(fn (array $arguments): string => "Back up {$arguments['name']} now?")
+            ->modalDescription('One backup to the destinations set on the Backups tab. It counts towards the number of backups kept there, so the oldest may be removed.')
+            ->modalSubmitActionLabel('Back up')
+            ->action(function (array $arguments): void {
+                $name = $this->validName($arguments, self::DATABASE_PATTERN);
+
+                if ($name === null) {
+                    return;
+                }
+
+                $this->queueTask(TaskType::Backup, RunBackup::class, ['database' => $name], "Backing up {$name}");
+            });
+    }
+
+    /**
+     * Shown before an import or a restore replaces a database's data.
+     */
+    public static function overwriteWarning(): Callout
+    {
+        return Callout::make('Data in this database will be overwritten')
+            ->description('Export or back up the database first if you want to keep it. Stop the app or put it in maintenance mode first, or it may show errors while this runs.')
+            ->warning();
     }
 
     public function deleteDatabaseAction(): Action
@@ -454,7 +504,7 @@ class ServerDatabases extends Page
     }
 
     /**
-     * @param  class-string<ImportDatabase>  $job
+     * @param  class-string<RunMandalTask>  $job
      * @param  array<string, mixed>  $options
      */
     private function queueTask(TaskType $type, string $job, array $options, string $title): void

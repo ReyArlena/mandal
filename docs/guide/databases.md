@@ -13,11 +13,13 @@ Users sign in from the server itself (MariaDB listens on 127.0.0.1 only) and get
 
 MariaDB's `root` authenticates through the Unix socket, so `sudo mariadb` on the server is the way to run anything the panel does not offer.
 
-### Import and export
+### Import, export and backup
 
 **Export** on a database downloads a dump, as plain `.sql` or compressed `.sql.zst`, made the same way as the backups (`mariadb-dump --single-transaction --routines --triggers --events`). The file is named like a backup, `<database>-<timestamp>.sql`.
 
-**Import** takes a `.sql` dump, or one compressed with gzip (`.sql.gz`) or zstd (`.sql.zst`), so backups and exports from here import as they are. Before anything changes, the database is backed up into the usual backup set, so **Restore** on the Backups tab brings its previous contents back. **Empty the database first** drops every table before the import; without it the dump runs on top of the current tables, which suits most dumps since they drop and recreate the tables they contain. The import runs as MariaDB's `root`, so a dump that switches to or creates another database (`USE`, `CREATE DATABASE`, as `mariadb-dump --databases` writes) is refused; export a single database instead. The upload limit is the panel's own (shown in the form).
+**Backup** on a database takes one backup of it now (`backup:run --database=`), to the destinations set under Backups below, and lists it with the scheduled ones. It counts towards the number of backups kept, so the oldest may be removed. It is greyed out until backups are set up.
+
+**Import** takes a `.sql` dump, or one compressed with gzip (`.sql.gz`) or zstd (`.sql.zst`), so backups and exports from here import as they are. Nothing is backed up first: a warning in the form says the data will be overwritten, so export or back up the database first if you want to keep it, and stop the app or put it in maintenance mode while it runs. **Empty the database first** drops every table before the import; without it the dump runs on top of the current tables, which suits most dumps since they drop and recreate the tables they contain. The import runs as MariaDB's `root`, so a dump that switches to or creates another database (`USE`, `CREATE DATABASE`, as `mariadb-dump --databases` writes) is refused; export a single database instead. The upload limit is the panel's own (shown in the form).
 
 ## Backups
 
@@ -27,7 +29,7 @@ MariaDB's `root` authenticates through the Unix socket, so `sudo mariadb` on the
 - **Local** keeps copies under `/var/backups/mandal/db/<database>/` on the server, with its own frequency (hourly, every 6 hours, daily, weekly, or any cron line) and number of copies to keep.
 - **Remote** uploads to one of the [backup destinations](#backup-destinations) from Settings, with its own frequency and retention, into an optional subfolder. The form shows the full `s3://` path the files go to.
 
-The run is logged to `/var/log/mandal/backups.log`, and the page shows the last run. Any backup, local or remote, can be restored into a fresh database next to the live one for checking; restoring over a live database is left to you on purpose. **Delete** removes one copy.
+The run is logged to `/var/log/mandal/backups.log`, and the page shows the last run. Any backup, local or remote, can be restored. Left empty, **Restore into database** loads it into a fresh database next to the live one (`<database>_restore_<timestamp>`) for checking; it is an ordinary database from then on, backed up with the others until you delete it. The field also lists the server's databases and takes a new name. Picking an existing database empties it and loads the backup, with the same warning as Import and no backup first; its users keep their access. Restores never create users or change access, so give a new database's user access on the Databases page. **Delete** removes one copy.
 
 The panel checks every server hourly and raises a notification when a scheduled run failed. The files involved are listed under [backups](../reference/server-files#backups).
 

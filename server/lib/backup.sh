@@ -511,12 +511,11 @@ backup_last_run_json() {
 # Databases
 # ---------------------------------------------------------------------------
 
-# The databases to back up: everything that is not a system schema or a
-# database produced by backup:restore (those are copies for checking).
+# The databases to back up: everything that is not a system schema.
 backup_databases() {
     local list
     list="$(db_list | jq -r '.databases[]')"
-    printf '%s\n' "$list" | { grep -vE '^$|_restore_[0-9]{14}$' || true; } | sort -u
+    printf '%s\n' "$list" | { grep -v '^$' || true; } | sort -u
 }
 
 backup_file_name() {
@@ -660,15 +659,17 @@ backup_restore() {
         run_cmd rclone_cmd "$BACKUP_REMOTE" copy "$(remote_target "$BACKUP_REMOTE" "$BACKUP_REMOTE_PATH" "db/$db")/$name" "$tmp/"
         file="$tmp/$name"
     fi
+    if db_list | jq -e --arg name "$into" '.databases | index($name)' > /dev/null; then
+        # Grants on the database survive the drop, so its users keep access.
+        step "Emptying $into"
+        db_sql "DROP DATABASE \`${into}\`"
+    fi
     step "Restoring $name into database $into"
     db_sql "CREATE DATABASE IF NOT EXISTS \`${into}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
     printf '+ zstd -dc %s | mariadb %s\n' "$file" "$into"
-    if ! dry_run; then
-        zstd -dc "$file" | mariadb "$into"
-    fi
-    if [[ "$into" != "$db" ]]; then
-        db_sql "GRANT ALL PRIVILEGES ON \`${into}\`.* TO '${db}'@'localhost'"
-        db_sql "FLUSH PRIVILEGES"
+    if ! dry_run && ! zstd -dc "$file" | mariadb "$into"; then
+        [[ -n "$tmp" ]] && rm -rf "$tmp"
+        die "the restore stopped part-way, so $into may be incomplete"
     fi
     [[ -n "$tmp" ]] && ! dry_run && rm -rf "$tmp"
     printf '\nRestored %s into %s.\n' "$name" "$into"

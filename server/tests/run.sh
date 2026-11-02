@@ -663,7 +663,7 @@ assert_json "worker:list is empty for an app without workers" "$(cmd_worker_list
 # ---------------------------------------------------------------------------
 
 export MANDAL_FAKE_RCLONE_LOG="${TMP}/rclone.log"
-assert_eq "restored copies are not backed up again" "shop" "$(MANDAL_FAKE_DBS=$'mysql\nshop\nshop_restore_20261027041515' backup_databases | tr '\n' ' ' | sed 's/ $//')"
+assert_eq "restored copies are backed up like any database" "shop shop_restore_20261027041515" "$(MANDAL_FAKE_DBS=$'mysql\nshop\nshop_restore_20261027041515' backup_databases | tr '\n' ' ' | sed 's/ $//')"
 assert_json "backup status is unconfigured at first" "$(backup_status_json)" '.configured' "false"
 assert_json "backup status has no remote and no apps at first" "$(backup_status_json)" '(.remote | tostring) + "|" + (.apps | length | tostring)' "null|0"
 assert_json "inventory carries a backups section" "$(cmd_inventory)" '.backups.configured' "false"
@@ -823,11 +823,17 @@ assert_eq "backup:delete removes a remote file with deletefile" "deletefile rust
 
 restore="$(cmd_backup_restore --database=shop --file=shop-20261022020000.sql.zst --dry-run 2>&1)"
 assert_eq "backup:restore dry run completes" "0" "$?"
-[[ "$restore" == *"CREATE DATABASE IF NOT EXISTS \`shop_restore_"* && "$restore" == *"zstd -dc ${MANDAL_BACKUP_DIR}/shop/shop-20261022020000.sql.zst | mariadb shop_restore_"* && "$restore" == *"GRANT ALL PRIVILEGES ON \`shop_restore_"* ]] && pass || fail "backup:restore restores into a new database the app user can read"
+[[ "$restore" == *"CREATE DATABASE IF NOT EXISTS \`shop_restore_"* && "$restore" == *"zstd -dc ${MANDAL_BACKUP_DIR}/shop/shop-20261022020000.sql.zst | mariadb shop_restore_"* ]] && pass || fail "backup:restore restores into a new database"
+[[ "$restore" != *"GRANT"* && "$restore" != *"CREATE USER"* ]] && pass || fail "backup:restore leaves database access alone"
 remote_restore="$(cmd_backup_restore --database=shop --file=shop-20261019020000.sql.zst --dry-run 2>&1)"
 [[ "$remote_restore" == *"rclone_cmd rustfs copy rustfs:my-backups/srv1/prod/db/shop/shop-20261019020000.sql.zst"* ]] && pass || fail "backup:restore downloads a backup that only exists remotely"
 (cmd_backup_restore --database=shop --file='../etc/passwd' --dry-run) > /dev/null 2>&1 && fail "backup:restore validates the file name" || pass
 (cmd_backup_restore --database=shop --file=shop-20261021020000.sql.zst --into='shop;drop' --dry-run) > /dev/null 2>&1 && fail "backup:restore validates the target database" || pass
+[[ "$restore" != *"DROP DATABASE"* ]] && pass || fail "backup:restore has nothing to empty for a new database"
+over="$(MANDAL_FAKE_DBS=$'mysql\nshop\nshop_copy' cmd_backup_restore --database=shop --file=shop-20261022020000.sql.zst --into=shop_copy --dry-run 2>&1)"
+assert_eq "backup:restore into an existing database completes" "0" "$?"
+[[ "$over" == *"DROP DATABASE \`shop_copy\`"* && "$over" == *"| mariadb shop_copy"* ]] && pass || fail "backup:restore empties an existing database first"
+[[ "$over" != *"+ dump "* && "$over" != *"GRANT"* ]] && pass || fail "backup:restore neither backs up nor changes access of an existing database"
 
 # defaults, as written by provisioning
 rm -f "${MANDAL_BACKUPS_CONF_DIR}/databases.conf" "$MANDAL_BACKUP_CRON"
@@ -1154,7 +1160,7 @@ out="$(cmd_db_user_delete --name=reporter --dry-run 2>&1)"
 dump="${TMP}/import.sql"
 printf 'DROP TABLE IF EXISTS `orders`;\nCREATE TABLE `orders` (`id` int);\nINSERT INTO `orders` VALUES (1);\n' > "$dump"
 out="$(cmd_db_import --name=reports --file="$dump" --dry-run 2>&1)"
-[[ "$out" == *"dump reports -> ${MANDAL_BACKUP_DIR}/reports/reports-"*".sql.zst"* && "$out" == *"cat ${dump} | mariadb reports"* ]] && pass || fail "db:import backs the database up, then imports a plain .sql dump"
+[[ "$out" == *"cat ${dump} | mariadb reports"* && "$out" != *"+ dump "* ]] && pass || fail "db:import imports a plain .sql dump without a backup"
 [[ "$out" != *"DROP DATABASE"* ]] && pass || fail "db:import keeps the existing tables unless asked to replace them"
 out="$(cmd_db_import --name=reports --file="$dump" --replace --dry-run 2>&1)"
 [[ "$out" == *"DROP DATABASE \`reports\`"* && "$out" == *"CREATE DATABASE \`reports\` CHARACTER SET utf8mb4"* ]] && pass || fail "db:import --replace empties the database first"

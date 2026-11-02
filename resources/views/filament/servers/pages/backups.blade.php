@@ -52,7 +52,14 @@
                 <dd class="sm:col-span-3">
                     @if ($last)
                         <x-filament::badge :color="($last['status'] ?? '') === 'ok' ? 'success' : 'danger'">{{ $last['status'] ?? 'unknown' }}</x-filament::badge>
-                        <span class="ml-1 text-xs text-gray-500">{{ $last['at'] ?? '' }} {{ $last['rest'] ?? '' }}</span>
+                        <span class="ml-1 text-xs text-gray-500">
+                            @if ($moment = $this->moment($last['at'] ?? null))
+                                <span title="{{ $moment['exact'] }}">{{ $moment['ago'] }}</span>
+                            @endif
+                            @if (filled($last['rest'] ?? ''))
+                                {{ $moment ? '· ' : '' }}{{ $this->lastRunDetail($last['rest']) }}
+                            @endif
+                        </span>
                     @else
                         <span class="text-gray-500">Never</span>
                     @endif
@@ -73,7 +80,9 @@
                         <span class="font-mono">{{ $file['file'] }}</span>
                         <span class="flex items-center gap-3 text-xs text-gray-500">
                             <span>{{ $this->bytes($file['size'] ?? 0) }}</span>
-                            <span>{{ $file['modified'] ?? '' }}</span>
+                            @if ($moment = $this->moment($file['modified'] ?? null))
+                                <span title="{{ $moment['exact'] }}">{{ $moment['ago'] }}</span>
+                            @endif
                             <x-filament::badge :color="$file['where'] === 'local' ? 'gray' : 'info'">{{ $file['where'] }}</x-filament::badge>
                             {{ ($this->restoreAction)(['database' => $entry['database'], 'file' => $file['file']]) }}
                             {{ ($this->deleteBackupAction)(['database' => $entry['database'], 'file' => $file['file'], 'where' => $file['where']]) }}

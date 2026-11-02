@@ -4,11 +4,13 @@ use App\Enums\TaskStatus;
 use App\Enums\TaskType;
 use App\Filament\Resources\Servers\Pages\ServerDatabases;
 use App\Jobs\ImportDatabase;
+use App\Jobs\RunBackup;
 use App\Mandal\MandalClient;
 use App\Models\Server;
 use App\Models\Task;
 use App\Models\User;
 use App\Ssh\SshClient;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
@@ -59,6 +61,30 @@ it('queues an import with the uploaded dump', function () {
         ->and(Storage::disk('local')->exists($task->options['file']))->toBeTrue();
 
     Queue::assertPushed(ImportDatabase::class);
+});
+
+it('backs up one database when backups are set up', function () {
+    Queue::fake();
+    $this->ssh->respondWithJson('inventory', ['backups' => ['configured' => true]]);
+
+    livewire(ServerDatabases::class, ['record' => $this->server->getRouteKey()])
+        ->assertActionEnabled(TestAction::make('backupDatabase')->arguments(['name' => 'shop']))
+        ->callAction('backupDatabase', arguments: ['name' => 'shop'])
+        ->assertNotified('Backing up shop');
+
+    $task = $this->server->tasks()->sole();
+
+    expect($task->type)->toBe(TaskType::Backup)
+        ->and((new RunBackup($task))->arguments())->toBe('backup:run --database=shop');
+
+    Queue::assertPushed(RunBackup::class);
+});
+
+it('disables the database backup until backups are set up', function () {
+    $this->ssh->respondWithJson('inventory', ['backups' => ['configured' => false]]);
+
+    livewire(ServerDatabases::class, ['record' => $this->server->getRouteKey()])
+        ->assertActionDisabled(TestAction::make('backupDatabase')->arguments(['name' => 'shop']));
 });
 
 it('refuses files that are not dumps', function () {

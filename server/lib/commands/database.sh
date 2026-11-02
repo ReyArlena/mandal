@@ -363,7 +363,7 @@ db_dump_cat() {
 }
 
 cmd_db_import() {
-    local arg name="" file="" replace=false kind backup
+    local arg name="" file="" replace=false kind
     load_all_drivers
     for arg in "$@"; do
         case "$arg" in
@@ -392,15 +392,6 @@ cmd_db_import() {
         audit "db:import $name$([[ "$replace" == true ]] && echo " replace")"
     fi
 
-    # A backup like the nightly ones, so the Backups tab can restore it. Its
-    # name has a one-second timestamp, so an import right after another waits.
-    backup="$MANDAL_BACKUP_DIR/$name/$(backup_file_name "$name")"
-    while [[ -e "$backup" ]] && ! dry_run; do
-        sleep 1
-        backup="$MANDAL_BACKUP_DIR/$name/$(backup_file_name "$name")"
-    done
-    step "Backing up $name before the import"
-    backup_dump "$name" "$backup" || die "could not back up $name first; nothing was imported"
 
     if [[ "$replace" == true ]]; then
         # Grants on the database survive the drop, so its users keep access.
@@ -414,9 +405,9 @@ cmd_db_import() {
     if ! dry_run; then
         if ! db_dump_cat "$file" "$kind" | mariadb "$name"; then
             rm -f "$file"
-            die "the import stopped part-way, so $name may be partly changed; its previous contents are in backup $(basename "$backup") on the Backups tab"
+            die "the import stopped part-way, so $name may be partly changed"
         fi
         rm -f "$file"
     fi
-    printf '\nImported into %s. Its previous contents are in backup %s.\n' "$name" "$(basename "$backup")"
+    printf '\nImported into %s.\n' "$name"
 }

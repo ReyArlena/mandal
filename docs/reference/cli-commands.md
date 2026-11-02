@@ -25,7 +25,7 @@
 | `backup:list` | List local and remote database backups as JSON |
 | `backup:remote` | Add or update an S3-compatible remote from --from=&lt;file&gt; (--name=), or --remove it |
 | `backup:remote-list` | List the remotes and which backups use them as JSON |
-| `backup:restore` | Restore a backup into a new database (--database= --file=) |
+| `backup:restore` | Restore a backup into a new or existing database (--database= --file= [--into=]) |
 | `backup:run` | Back up every database (or one with --database=) to --destination=local, remote or all |
 | `backup:status` | Show the backup configuration and last runs as JSON |
 | `benchmark` | Time the CLI's start, the inventory collectors and the read commands the panel runs, as JSON |

@@ -10,7 +10,7 @@ MANDAL_COMMANDS+=("backup:configure|Set database backup destinations from --from
 MANDAL_COMMANDS+=("backup:run|Back up every database (or one with --database=) to --destination=local, remote or all|write")
 MANDAL_COMMANDS+=("backup:list|List local and remote database backups as JSON|read")
 MANDAL_COMMANDS+=("backup:status|Show the backup configuration and last runs as JSON|read")
-MANDAL_COMMANDS+=("backup:restore|Restore a backup into a new database (--database= --file=)|write")
+MANDAL_COMMANDS+=("backup:restore|Restore a backup into a new or existing database (--database= --file= [--into=])|write")
 MANDAL_COMMANDS+=("backup:delete|Delete one database backup (--database= --file= --where=local or remote)|write")
 
 cmd_backup_remote() {
