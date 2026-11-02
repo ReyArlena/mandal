@@ -45,6 +45,9 @@ class ServerApp extends Page
 
     public const string BACKUP_FILE_PATTERN = '/^[a-z][a-z0-9-]{1,31}-[0-9]{14}\.tar\.zst$/';
 
+    /** The copy of a Docker app's exclude patterns in its project directory. */
+    public const string EXCLUDE_COPY = 'mandal-backup-exclude.txt';
+
     public const string NOT_DEPLOYED_NOTICE = 'Set up backups once the app has been deployed and is running, so every production file is present.';
 
     protected static string $resource = ServerResource::class;
@@ -66,11 +69,15 @@ class ServerApp extends Page
     public array $workers = [];
 
     /**
-     * What `app:backup-list` reports: config, configured, last_run, backups.
+     * What `app:backup-list` reports: config, configured, last_run,
+     * suggested_exclude, backups.
      *
      * @var array<string, mixed>
      */
     public array $backups = [];
+
+    /** Whether the open backup settings took their patterns from the project copy. */
+    public bool $excludeFromCopy = false;
 
     /**
      * The two-level tree from `app:backup-tree`, read when the backup
@@ -279,6 +286,12 @@ class ServerApp extends Page
 
                 $config = $this->backupConfig();
                 $exclude = array_values(array_filter(is_array($config['exclude'] ?? null) ? $config['exclude'] : [], 'is_string'));
+                $suggested = array_values(array_filter(is_array($this->backups['suggested_exclude'] ?? null) ? $this->backups['suggested_exclude'] : [], 'is_string'));
+                $this->excludeFromCopy = $exclude === [] && $suggested !== [];
+
+                if ($this->excludeFromCopy) {
+                    $exclude = $suggested;
+                }
 
                 return [
                     ...BackupTargetForm::fill($config),
@@ -289,6 +302,15 @@ class ServerApp extends Page
             })
             ->schema(fn (): array => [
                 Callout::make(self::NOT_DEPLOYED_NOTICE)->warning()->visible(fn (): bool => ! $this->isDeployed()),
+                Callout::make('Exclude patterns filled in from the project')
+                    ->description('They come from '.self::EXCLUDE_COPY.' in the app directory, which a restored or imported project brings along. Save to use them.')
+                    ->info()
+                    ->visible(fn (): bool => $this->excludeFromCopy),
+                Callout::make('These patterns exclude '.self::EXCLUDE_COPY)
+                    ->key('excludeCopyWarning')
+                    ->description('Archives will not carry the patterns, so a project restored or imported from them will not bring them along.')
+                    ->warning()
+                    ->visible(fn (Get $get): bool => $this->isDocker() && self::excludesCopy(self::excludeLines($get('exclude')))),
                 BackupTargetForm::enabledToggle(),
                 Tabs::make('exclude_tabs')
                     ->tabs([
@@ -311,9 +333,9 @@ class ServerApp extends Page
                                     ->hiddenLabel()
                                     ->rows(8)
                                     ->placeholder("valheim-data/steamcmd\n**/backups/*.zip")
-                                    ->helperText('One path or glob per line, relative to the app directory. A directory name excludes that directory; ** matches across folders.')
+                                    ->helperText(fn (): string => 'One path or glob per line, relative to the app directory. A directory name excludes that directory; ** matches across folders.'.($this->isDocker() ? ' A copy is kept in '.self::EXCLUDE_COPY.' in the app directory, so archives carry the patterns.' : ''))
                                     ->rules([fn (): Closure => $this->excludeLinesRule()])
-                                    ->live(onBlur: true)
+                                    ->live(debounce: 500)
                                     ->afterStateUpdated(function (Set $set, ?string $state): void {
                                         $set('exclude_tree', array_values(array_intersect($this->treePaths(), self::excludeLines($state))));
                                     }),
@@ -491,6 +513,29 @@ class ServerApp extends Page
      *
      * @return list<string>
      */
+    /**
+     * Whether tar would drop the project copy of the patterns, matching the
+     * way the CLI turns lines into anchored patterns where * spans folders.
+     *
+     * @param  list<string>  $lines
+     */
+    private static function excludesCopy(array $lines): bool
+    {
+        foreach ($lines as $line) {
+            $pattern = rtrim($line, '/');
+
+            $candidates = str_starts_with($pattern, '**/') ? [$pattern, substr($pattern, 3)] : [$pattern];
+
+            foreach ($candidates as $candidate) {
+                if ($candidate !== '' && fnmatch('./'.$candidate, './'.self::EXCLUDE_COPY)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     private static function excludeLines(?string $text): array
     {
         return array_values(array_filter(array_map('trim', explode("\n", (string) $text)), fn (string $line): bool => $line !== ''));

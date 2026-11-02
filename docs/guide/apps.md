@@ -48,7 +48,7 @@ The **Backups** card on the app page archives `shared/` (storage, uploads and `.
 **Backup settings** has:
 
 - **Enable backups** for the schedule. **Back up now** runs regardless.
-- **Exclude**: tick directories and files from a two-level view of the app directory, with sizes, or type paths and globs on the **Patterns** tab (one per line, relative to the app directory; `**` matches across folders). The two stay in step: ticking adds a line, unticking removes it, and lines you typed stay as they are.
+- **Exclude**: tick directories and files from a two-level view of the app directory, with sizes, or type paths and globs on the **Patterns** tab (one per line, relative to the app directory; `**` matches across folders). The two stay in step: ticking adds a line, unticking removes it, and lines you typed stay as they are. For a Docker app, saving also writes the patterns to `mandal-backup-exclude.txt` in its project directory (generated, not for editing), so every archive carries them. An app created from an imported project brings that file along, and its backup settings open with those patterns filled in until a list is saved. A pattern that matches the file itself (such as `*.txt`, or ticking it) leaves it out of the archives, and the settings warn while one does.
 - **Local** and **Remote** destinations with their own frequency and copies to keep, as for [database backups](./databases#backups). Remote uploads go to a destination from Settings; the form shows the full `s3://` path.
 
 Archives land under `/var/backups/mandal/apps/<app>/` and are listed newest first with **Download** (streamed from the server, or from the bucket for remote-only copies) and **Delete**. The panel raises a notification when a scheduled run fails.

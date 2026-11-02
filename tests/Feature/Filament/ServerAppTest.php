@@ -173,3 +173,65 @@ it('shows a docker app without nginx with its public ports and no certificate ac
         ->assertDontSee('Domain')
         ->assertActionHidden('requestCertificate');
 });
+
+it('fills the backup excludes from the project copy until a list is saved', function (array $saved, array $suggested, string $expected, bool $fromCopy) {
+    $inventory = json_decode(file_get_contents(base_path('tests/Fixtures/inventory.json')), true);
+    $inventory['apps'][] = ['name' => 'game', 'type' => 'docker', 'proxy' => false, 'home' => '/srv/docker/game', 'ports' => [], 'containers' => []];
+    $this->ssh->respondWithJson('inventory', $inventory);
+    $this->ssh->respondWithJson('app:backup-list --name=game', [
+        'config' => ['enabled' => false, 'local' => ['enabled' => true, 'schedule' => '0 3 * * *', 'keep' => 7], 'remote' => null, 'pause' => true, 'exclude' => $saved],
+        'configured' => $saved !== [],
+        'last_run' => null,
+        'suggested_exclude' => $suggested,
+        'backups' => [],
+    ]);
+    $this->ssh->respondWithJson('app:backup-tree --name=game', ['root' => '/srv/docker/game', 'entries' => []]);
+
+    livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'game'])
+        ->mountAction('backupSettings', ['name' => 'game'])
+        ->assertActionDataSet(['exclude' => $expected])
+        ->assertSet('excludeFromCopy', $fromCopy);
+})->with([
+    'copy only' => [[], ['data/steamcmd', '**/*.bak'], "data/steamcmd\n**/*.bak", true],
+    'saved list' => [['logs'], [], 'logs', false],
+    'neither' => [[], [], '', false],
+]);
+
+it('warns while the patterns would drop the project copy from archives', function (string $exclude, bool $warns) {
+    $inventory = json_decode(file_get_contents(base_path('tests/Fixtures/inventory.json')), true);
+    $inventory['apps'][] = ['name' => 'game', 'type' => 'docker', 'proxy' => false, 'home' => '/srv/docker/game', 'ports' => [], 'containers' => []];
+    $this->ssh->respondWithJson('inventory', $inventory);
+    $this->ssh->respondWithJson('app:backup-list --name=game', ['config' => ['enabled' => false, 'pause' => true, 'exclude' => []], 'configured' => false, 'last_run' => null, 'backups' => []]);
+    $this->ssh->respondWithJson('app:backup-tree --name=game', ['root' => '/srv/docker/game', 'entries' => [['path' => 'mandal-backup-exclude.txt', 'type' => 'file', 'size' => 200, 'children' => []]]]);
+
+    $page = livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'game'])
+        ->mountAction('backupSettings', ['name' => 'game'])
+        ->setActionData(['exclude' => $exclude]);
+
+    $warns
+        ? $page->assertSchemaComponentVisible('excludeCopyWarning', 'mountedActionSchema0')
+        : $page->assertSchemaComponentHidden('excludeCopyWarning', 'mountedActionSchema0');
+})->with([
+    'a glob' => ['*.txt', true],
+    'any depth' => ['**/*.txt', true],
+    'the file itself' => ['mandal-backup-exclude.txt', true],
+    'everything' => ['*', true],
+    'a folder' => ["data\nlogs/", false],
+    'a deeper glob' => ['data/*.txt', false],
+    'nothing' => ['', false],
+]);
+
+it('warns when the project copy is ticked in the tree', function () {
+    $inventory = json_decode(file_get_contents(base_path('tests/Fixtures/inventory.json')), true);
+    $inventory['apps'][] = ['name' => 'game', 'type' => 'docker', 'proxy' => false, 'home' => '/srv/docker/game', 'ports' => [], 'containers' => []];
+    $this->ssh->respondWithJson('inventory', $inventory);
+    $this->ssh->respondWithJson('app:backup-list --name=game', ['config' => ['enabled' => false, 'pause' => true, 'exclude' => []], 'configured' => false, 'last_run' => null, 'backups' => []]);
+    $this->ssh->respondWithJson('app:backup-tree --name=game', ['root' => '/srv/docker/game', 'entries' => [['path' => 'mandal-backup-exclude.txt', 'type' => 'file', 'size' => 200, 'children' => []]]]);
+
+    livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'game'])
+        ->mountAction('backupSettings', ['name' => 'game'])
+        ->assertSchemaComponentHidden('excludeCopyWarning', 'mountedActionSchema0')
+        ->setActionData(['exclude_tree' => ['mandal-backup-exclude.txt']])
+        ->assertActionDataSet(['exclude' => 'mandal-backup-exclude.txt'])
+        ->assertSchemaComponentVisible('excludeCopyWarning', 'mountedActionSchema0');
+});
