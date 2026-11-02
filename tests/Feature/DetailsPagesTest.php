@@ -1,5 +1,6 @@
 <?php
 
+use App\DetailsPages\DetailsPagesTransfer;
 use App\DetailsPages\GameStatuses;
 use App\Enums\GameStatus;
 use App\Filament\Clusters\Settings\Resources\DetailsPages\Pages\CreateDetailsPage;
@@ -14,6 +15,8 @@ use App\Ssh\SshClient;
 use App\Ssh\SshException;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\Repeater;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\Support\FakeSshClient;
 
 use function Pest\Livewire\livewire;
@@ -306,4 +309,72 @@ describe('in the panel', function () {
             ->assertSeeHtml('fi-page-description')
             ->assertSee('Public pages for players');
     });
+
+    it('exports every page and its servers without the containers they follow', function () {
+        $this->page->entries()->createMany([
+            ['sort' => 0, 'name' => 'Enshrouded', 'address' => 'play.example.com:15637', 'password' => 'hunter2', 'status_source' => DetailsPageEntry::SOURCE_CONTAINER, 'server_id' => $this->server->id, 'container' => 'enshrouded-enshrouded-1'],
+            ['sort' => 1, 'name' => 'Minecraft', 'version' => '26.1.2', 'address' => 'mc.example.com', 'status_source' => DetailsPageEntry::SOURCE_MANUAL, 'status' => GameStatus::Paused],
+        ]);
+
+        $export = app(DetailsPagesTransfer::class)->export();
+        $json = json_encode($export);
+
+        expect($export['format'])->toBe(DetailsPagesTransfer::FORMAT)
+            ->and($export['pages'][0])->toMatchArray(['name' => 'Friends', 'slug' => 'friends-abc123xyz0', 'title' => 'Current Status'])
+            ->and($export['pages'][0]['entries'][0])->toBe(['name' => 'Enshrouded', 'version' => null, 'address' => 'play.example.com:15637', 'password' => 'hunter2', 'status_source' => 'container', 'status' => null])
+            ->and($export['pages'][0]['entries'][1])->toMatchArray(['name' => 'Minecraft', 'status_source' => 'manual', 'status' => 'paused'])
+            ->and($json)->not->toContain('enshrouded-enshrouded-1')
+            ->and($json)->not->toContain('server_id');
+
+        livewire(ListDetailsPages::class)
+            ->callAction('export')
+            ->assertFileDownloaded('details-pages-'.now()->format('Y-m-d').'.json');
+    });
+
+    it('imports pages alongside the existing ones and skips addresses in use', function () {
+        $this->page->entries()->create(['sort' => 0, 'name' => 'Valheim', 'address' => 'old.example.com']);
+        $file = UploadedFile::fake()->createWithContent('pages.json', json_encode([
+            'format' => DetailsPagesTransfer::FORMAT,
+            'version' => 1,
+            'pages' => [
+                ['name' => 'Friends again', 'slug' => 'friends-abc123xyz0', 'entries' => []],
+                ['name' => 'Guild', 'slug' => 'guild-q8w7e6r5t4', 'title' => null, 'intro' => null, 'hide_branding' => true, 'hide_credit' => false, 'entries' => [
+                    ['name' => 'Enshrouded', 'address' => 'play.example.com:15637', 'password' => 'hunter2', 'status_source' => 'container', 'status' => null],
+                    ['name' => 'Minecraft', 'address' => 'mc.example.com', 'status_source' => 'manual', 'status' => 'online'],
+                ]],
+            ],
+        ]));
+
+        livewire(ListDetailsPages::class)
+            ->callAction('import', data: ['file' => $file])
+            ->assertHasNoActionErrors()
+            ->assertNotified('Imported 1 page');
+
+        $guild = DetailsPage::query()->where('slug', 'guild-q8w7e6r5t4')->sole();
+
+        expect(DetailsPage::query()->count())->toBe(2)
+            ->and($this->page->fresh()->name)->toBe('Friends')
+            ->and($this->page->entries()->pluck('name')->all())->toBe(['Valheim'])
+            ->and($guild->hide_branding)->toBeTrue()
+            ->and($guild->entries->map->only(['sort', 'name', 'password', 'status_source', 'server_id', 'container'])->all())->toBe([
+                ['sort' => 0, 'name' => 'Enshrouded', 'password' => 'hunter2', 'status_source' => 'container', 'server_id' => null, 'container' => null],
+                ['sort' => 1, 'name' => 'Minecraft', 'password' => null, 'status_source' => 'manual', 'server_id' => null, 'container' => null],
+            ])
+            ->and($guild->entries[1]->status)->toBe(GameStatus::Online)
+            ->and(Storage::disk('local')->files('imports'))->toBe([]);
+    });
+
+    it('refuses a file that is not an export or has invalid fields', function (array $contents) {
+        $file = UploadedFile::fake()->createWithContent('pages.json', json_encode($contents));
+
+        livewire(ListDetailsPages::class)
+            ->callAction('import', data: ['file' => $file])
+            ->assertNotified('Could not import the pages');
+
+        expect(DetailsPage::query()->count())->toBe(1);
+    })->with([
+        'not an export' => [['pages' => []]],
+        'bad address' => [['format' => DetailsPagesTransfer::FORMAT, 'version' => 1, 'pages' => [['name' => 'X', 'slug' => 'Not A Slug', 'entries' => []]]]],
+        'newer version' => [['format' => DetailsPagesTransfer::FORMAT, 'version' => 99, 'pages' => []]],
+    ]);
 });

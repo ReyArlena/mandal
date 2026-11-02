@@ -94,6 +94,8 @@ The device is readable and writable by every user, as the kernel creates it; it 
 
 A container's status is stored, not fetched for each visitor: the panel updates it whenever it reads that server (opening its Server or Apps page) and after every task on it, such as Start or Stop. A page never connects to a server, so visitors reload it to see a change you made in the panel, and a container that stops on its own (a crash, a reboot) shows as running until the panel next reads that server.
 
+**Export** downloads every page and its game servers as one JSON file, passwords included, so keep it private. It leaves out which container a status follows, since containers differ between servers. **Import** takes such a file on any panel and only adds: each page keeps its address, a page whose address is already in use is skipped, and existing pages are never changed. A status that followed a container comes back set to **Docker container** with none chosen, and shows nothing until you pick one.
+
 ## Example: a web app behind nginx
 
 ```yaml
