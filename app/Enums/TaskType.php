@@ -13,6 +13,7 @@ enum TaskType: string implements HasLabel
     case Rollback = 'rollback';
     case Control = 'control';
     case Certificate = 'certificate';
+    case AppSettings = 'app-settings';
     case UpdateCli = 'update-cli';
     case Backup = 'backup';
     case Restore = 'restore';
@@ -31,6 +32,7 @@ enum TaskType: string implements HasLabel
             self::Rollback => 'Roll back',
             self::Control => 'Start, stop or restart',
             self::Certificate => 'Request certificate',
+            self::AppSettings => 'App settings',
             self::UpdateCli => 'Update CLI',
             self::Backup => 'Back up',
             self::Restore => 'Restore backup',

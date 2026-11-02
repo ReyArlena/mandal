@@ -33,6 +33,7 @@ To deploy on every push, set the panel's **Public URL** in **Settings > General*
 ## The app page
 
 - **Details**: domain and www mode, PHP version, repository and branch, auto deploy, database, user and home, and the deploy key to add to the repository. Repository, branch and releases to keep are changed on the server with `mandal app:configure --repo= --branch= --keep-releases=`.
+- **Settings**: changes the www handling (redirect www to the naked domain, the naked domain to www, or the naked domain only) with `mandal app:configure --www=`. The nginx site is written again, and an app with HTTPS gets its certificate reissued for the new names after a DNS check of any added name (skippable behind NAT). If certbot fails, the previous setting is put back. `APP_URL` in the `.env` is not changed. The app hosting the panel has no Settings button.
 - **Releases**: every release with its commit, and a **Roll back** button per release.
 - **.env**: edit the production environment file. It is uploaded as a file, never passed on a command line.
 - **SSL**: requests a Let's Encrypt certificate with Certbot's nginx plugin after checking that the domain and every alias resolve to the server. Certbot edits the nginx site to add the certificate and the HTTPS redirect, and Mandal does not rewrite the site afterwards, so those lines stay.

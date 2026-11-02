@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PHP-FPM limits per version on the PHP page (`php:limits`): `upload_max_filesize`, `post_max_size`, `memory_limit`, `max_execution_time` and `max_input_time`, written to the version's `99-mandal.ini`. nginx's `client_max_body_size` for every site can be changed there too (`nginx:limits`), and the inventory reports it.
 - **Backup** for each database on the Databases page takes one backup of that database now, to the destinations set on the Backups page (`backup:run --database=`). It stays disabled until backups are set up.
 - A Docker app's backup exclude patterns are also written to `mandal-backup-exclude.txt` in its project directory, so archives carry them. An app created from an imported project brings the file along, and its backup settings open with those patterns until a list is saved.
+- **Settings** on the app page of an app nginx serves changes its www handling after it is created (`app:configure --www=`, with `--skip-dns-check`). The nginx site is written again; with HTTPS, certbot reissues the same certificate for the new names after checking that any added name points at the server, and a failed certbot puts the previous site and setting back. The Details card shows the www handling by its label. `app:configure` also takes `--dry-run`.
 
 ### Changed
 

@@ -30,6 +30,25 @@ ssl_dns_mismatches() {
     done
 }
 
+# app_certbot email cert_name host...: certbot's nginx plugin gets or keeps
+# a certificate for the host names and switches their sites to HTTPS. With
+# cert_name that certificate is reused, its names changed to these.
+app_certbot() {
+    local email="$1" cert="$2" host
+    shift 2
+    local args=(--nginx --non-interactive --agree-tos --redirect --keep-until-expiring --expand)
+    if [[ -n "$email" ]]; then
+        args+=(--email "$email")
+    else
+        args+=(--register-unsafely-without-email)
+    fi
+    [[ -z "$cert" ]] || args+=(--cert-name "$cert")
+    for host in "$@"; do
+        args+=(-d "$host")
+    done
+    run_cmd certbot "${args[@]}"
+}
+
 cmd_app_ssl() {
     local email="" skip_dns=false arg manifest mode domain aliases hosts mismatches
     deploy_parse_name "$@"
@@ -70,19 +89,8 @@ cmd_app_ssl() {
         audit "app:ssl $DEPLOY_NAME"
     fi
 
-    local args=(--nginx --non-interactive --agree-tos --redirect --keep-until-expiring --expand)
-    if [[ -n "$email" ]]; then
-        args+=(--email "$email")
-    else
-        args+=(--register-unsafely-without-email)
-    fi
-    local host
-    for host in "${hosts[@]}"; do
-        args+=(-d "$host")
-    done
-
     step "Requesting a certificate for ${hosts[*]}"
-    run_cmd certbot "${args[@]}"
+    app_certbot "$email" "" "${hosts[@]}"
     nginx_check_and_reload
     dry_run || conf_set "$manifest" SSL "true"
     dry_run || conf_set "$manifest" SSL_AT "$(date -u +%Y-%m-%dT%H:%M:%SZ)"

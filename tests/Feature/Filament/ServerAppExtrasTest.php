@@ -1,8 +1,10 @@
 <?php
 
 use App\Enums\TaskType;
+use App\Enums\WwwMode;
 use App\Filament\Resources\Servers\Pages\ServerApp;
 use App\Filament\Resources\Servers\Pages\ViewServer;
+use App\Jobs\ConfigureApp;
 use App\Jobs\RequestCertificate;
 use App\Jobs\UpdateCli;
 use App\Mandal\CliArchive;
@@ -42,6 +44,43 @@ it('queues a certificate request with the email and DNS option', function () {
         ->and((new RequestCertificate($task))->arguments())->toBe("app:ssl --name=shop --email='ops@example.com' --skip-dns-check");
 
     Queue::assertPushed(RequestCertificate::class);
+});
+
+it('queues a www handling change from the app settings', function () {
+    Queue::fake();
+
+    livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'shop'])
+        ->assertSee('Redirect www to the naked domain')
+        ->mountAction('appSettings', arguments: ['name' => 'shop', 'type' => 'laravel', 'www' => 'redirect-to-naked', 'ssl' => true])
+        ->assertActionDataSet(['www' => WwwMode::RedirectToNaked])
+        ->setActionData(['www' => 'redirect-to-www', 'skip_dns_check' => true])
+        ->callMountedAction()
+        ->assertNotified('Saving the settings for shop');
+
+    $task = $this->server->tasks()->sole();
+
+    expect($task->type)->toBe(TaskType::AppSettings)
+        ->and((new ConfigureApp($task))->arguments())->toBe('app:configure --name=shop --www=redirect-to-www --skip-dns-check');
+
+    Queue::assertPushed(ConfigureApp::class);
+});
+
+it('offers app settings only for apps nginx serves', function () {
+    $this->inventory['apps'][] = ['name' => 'game', 'type' => 'docker', 'proxy' => false, 'containers' => [], 'ports' => []];
+    $this->ssh->respondWithJson('inventory', $this->inventory);
+    $this->ssh->respondTo('app:backup-list', '{}');
+
+    livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'shop'])
+        ->assertActionVisible('appSettings');
+
+    livewire(ServerApp::class, ['record' => $this->server->getRouteKey(), 'app' => 'game'])
+        ->assertActionHidden('appSettings');
+});
+
+it('refuses an unknown www mode on a settings task', function () {
+    $task = Task::factory()->create(['options' => ['name' => 'shop', 'www' => 'sideways']]);
+
+    expect(fn () => (new ConfigureApp($task))->arguments())->toThrow(ValueError::class);
 });
 
 it('drops an invalid certificate email', function () {

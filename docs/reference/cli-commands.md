@@ -9,7 +9,7 @@
 | `app:backup-list` | Show an app's backup settings, last run and archives as JSON (--name=) |
 | `app:backup-tree` | List an app's backup root two levels deep with sizes as JSON (--name=) |
 | `app:compose` | Print a Docker app's compose file, or replace it with --from=&lt;file&gt; |
-| `app:configure` | Change an app's repository, branch, releases to keep, or a Docker app's proxied port |
+| `app:configure` | Change an app's repository, branch, releases to keep, www handling (--www= [--skip-dns-check]) or a Docker app's proxied port |
 | `app:control` | Start, stop or restart a Docker app (--name= --action=start/stop/restart) |
 | `app:create` | Create a Laravel app (user, pool, site, database) |
 | `app:delete` | Remove an app and everything mandal created for it |

@@ -354,6 +354,73 @@ app_write_vhost() {
     nginx_check_and_reload
 }
 
+# app_change_www name mode skip_dns: serves the app's domain and aliases
+# with a new www mode. The nginx site is written again; a site with a
+# certificate gets it back from certbot for the new names, after checking
+# the names it adds point at this server. If certbot fails, the previous
+# site and mode are put back.
+app_change_www() {
+    local name="$1" mode="$2" skip_dns="$3" manifest domain aliases old type site previous ssl cert mismatches host
+    local -a old_hosts hosts added=()
+    validate_www_mode "$mode"
+    manifest="$(app_conf_path "$name")"
+    domain="$(conf_get "$manifest" DOMAIN 2> /dev/null || true)"
+    [[ -n "$domain" ]] || die 2 "app '$name' has no domain"
+    type="$(conf_get "$manifest" TYPE 2> /dev/null || echo laravel)"
+    if [[ "$type" == "docker" ]]; then
+        [[ "$(conf_get "$manifest" PROXY 2> /dev/null || echo false)" == "true" ]] || die 2 "app '$name' is not served through nginx"
+    fi
+    old="$(conf_get "$manifest" WWW 2> /dev/null || echo redirect-to-naked)"
+    if [[ "$old" == "$mode" ]]; then
+        printf 'www handling for %s is already %s.\n' "$name" "$mode"
+        return 0
+    fi
+    aliases="$(conf_get "$manifest" ALIASES 2> /dev/null || true)"
+    ssl="$(conf_get "$manifest" SSL 2> /dev/null || echo false)"
+    # shellcheck disable=SC2086  # aliases are space separated by design
+    mapfile -t old_hosts < <(app_hostnames "$old" "$domain" $aliases)
+    # shellcheck disable=SC2086
+    mapfile -t hosts < <(app_hostnames "$mode" "$domain" $aliases)
+    for host in "${hosts[@]}"; do
+        printf '%s\n' "${old_hosts[@]}" | grep -qxF -- "$host" || added+=("$host")
+    done
+
+    if [[ "$ssl" == "true" && "$skip_dns" == false && ${#added[@]} -gt 0 ]]; then
+        mismatches="$(ssl_dns_mismatches "${added[@]}")"
+        if [[ -n "$mismatches" ]]; then
+            printf 'error: the certificate needs these host names, which do not point at this server yet:\n%s\n' "$mismatches" >&2
+            printf 'Fix the DNS records and try again, or skip the DNS check if the server is behind NAT. Nothing was changed.\n' >&2
+            exit 3
+        fi
+    fi
+
+    site="$MANDAL_NGINX_DIR/sites-available/${name}.conf"
+    previous="$(cat "$site" 2> /dev/null || true)"
+    step "Serving $name with www handling $mode (was $old)"
+    if [[ "$type" == "docker" ]]; then
+        docker_write_proxy "$name" "$mode" "$(conf_get "$manifest" PORT)" "$domain" "$aliases"
+    else
+        # shellcheck disable=SC2086
+        app_write_vhost "$name" "$(conf_get "$manifest" PHP)" "$mode" "$domain" $aliases
+    fi
+    dry_run || conf_set "$manifest" WWW "$mode"
+
+    if [[ "$ssl" == "true" ]]; then
+        cert="$(app_certificates "$domain" | awk 'NR == 1')"
+        step "Getting the certificate back for ${hosts[*]}"
+        if ! app_certbot "$(server_conf_get CERTBOT_EMAIL 2> /dev/null || true)" "$cert" "${hosts[@]}"; then
+            if ! dry_run; then
+                printf '%s\n' "$previous" > "$site"
+                conf_set "$manifest" WWW "$old"
+                nginx_check_and_reload
+            fi
+            die "certbot failed, so the previous site and www handling ($old) were put back"
+        fi
+        nginx_check_and_reload
+    fi
+    printf '\n%s now uses www handling %s.\n' "$name" "$mode"
+}
+
 # Sets APP_DB_PASSWORD for the caller.
 # shellcheck disable=SC2034
 app_create_database() {

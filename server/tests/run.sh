@@ -1720,6 +1720,46 @@ printf 'TYPE=docker\nPROXY=false\n' > "${MANDAL_APPS_DIR}/game.conf"
 (cmd_app_configure --name=game --port=20001 --dry-run) > /dev/null 2>&1 && fail "app:configure --port refuses an app without the proxy" || pass
 rm -f "${MANDAL_APPS_DIR}/game.conf" "${MANDAL_NGINX_DIR}/sites-available/tool.conf"
 printf 'TYPE=docker\nDOMAIN=tool.example.com\nWWW=redirect-to-naked\nPROXY=true\nPORT=20000\n' > "${MANDAL_APPS_DIR}/tool.conf"
+
+# app:configure --www rewrites the site; a site with a certificate gets it
+# back from certbot under its old name, and a failed certbot puts it back.
+www_dry="$(cmd_app_configure --name=shop --www=naked-only --dry-run 2>&1)"
+assert_eq "app:configure --www dry run completes" "0" "$?"
+[[ "$www_dry" == *"write ${MANDAL_NGINX_DIR}/sites-available/shop.conf"* && "$www_dry" == *"shop now uses www handling naked-only."* ]] && pass || fail "app:configure --www rewrites the nginx site"
+[[ "$www_dry" != *"certbot --nginx"* ]] && pass || fail "app:configure --www leaves certbot alone without a certificate"
+[[ "$(cmd_app_configure --name=shop --www=redirect-to-naked --dry-run 2>&1)" == *"already redirect-to-naked"* ]] && pass || fail "app:configure --www does nothing when the mode is unchanged"
+(cmd_app_configure --name=shop --www=sideways --dry-run) > /dev/null 2>&1 && fail "app:configure --www validates the mode" || pass
+printf 'TYPE=docker\nDOMAIN=game.example.com\nPROXY=false\n' > "${MANDAL_APPS_DIR}/game.conf"
+(cmd_app_configure --name=game --www=naked-only --dry-run) > /dev/null 2>&1 && fail "app:configure --www refuses an app nginx does not serve" || pass
+rm -f "${MANDAL_APPS_DIR}/game.conf"
+
+www_ngx="${TMP}/www-nginx"
+mkdir -p "${www_ngx}/sites-available" "${www_ngx}/sites-enabled" "${TMP}/www-bin"
+cat > "${TMP}/www-bin/certbot" << FAKE
+#!/usr/bin/env bash
+[[ "\$1" == certificates ]] && exec "${FIXTURES}/bin/certbot" "\$@"
+printf '%s\n' "\$*" >> "${TMP}/www-certbot.log"
+exit \${WWW_CERTBOT_EXIT:-0}
+FAKE
+chmod +x "${TMP}/www-bin/certbot"
+printf 'TYPE=laravel\nDOMAIN=shop.example.com\nWWW=naked-only\nPHP=8.5\nSSL=true\n' > "${MANDAL_APPS_DIR}/wwwshop.conf"
+printf 'served with a certificate\n' > "${www_ngx}/sites-available/wwwshop.conf"
+resolve_addresses() { case "$1" in shop.example.com) echo 203.0.113.10 ;; *) echo 198.51.100.1 ;; esac; }
+(nginx_check_and_reload() { :; }; PATH="${TMP}/www-bin:${PATH}" MANDAL_NGINX_DIR="$www_ngx" cmd_app_configure --name=wwwshop --www=redirect-to-naked) > /dev/null 2>&1
+assert_eq "app:configure --www refuses names that do not point here" "3" "$?"
+assert_eq "a refused www change leaves the site alone" "served with a certificate" "$(cat "${www_ngx}/sites-available/wwwshop.conf")"
+assert_eq "a refused www change leaves the mode alone" "naked-only" "$(conf_get "${MANDAL_APPS_DIR}/wwwshop.conf" WWW)"
+(nginx_check_and_reload() { :; }; PATH="${TMP}/www-bin:${PATH}" MANDAL_NGINX_DIR="$www_ngx" WWW_CERTBOT_EXIT=1 cmd_app_configure --name=wwwshop --www=redirect-to-naked --skip-dns-check) > /dev/null 2>&1 && fail "app:configure --www fails when certbot does" || pass
+assert_eq "a failed certbot puts the site back" "served with a certificate" "$(cat "${www_ngx}/sites-available/wwwshop.conf")"
+assert_eq "a failed certbot puts the mode back" "naked-only" "$(conf_get "${MANDAL_APPS_DIR}/wwwshop.conf" WWW)"
+rm -f "${TMP}/www-certbot.log"
+resolve_addresses() { echo 203.0.113.10; }
+(nginx_check_and_reload() { :; }; PATH="${TMP}/www-bin:${PATH}" MANDAL_NGINX_DIR="$www_ngx" cmd_app_configure --name=wwwshop --www=redirect-to-www) > /dev/null 2>&1
+assert_eq "app:configure --www completes with a certificate" "0" "$?"
+assert_eq "app:configure --www saves the mode" "redirect-to-www" "$(conf_get "${MANDAL_APPS_DIR}/wwwshop.conf" WWW)"
+grep -qF 'return 301 $scheme://www.shop.example.com$request_uri;' "${www_ngx}/sites-available/wwwshop.conf" && pass || fail "app:configure --www redirects to the new primary name"
+[[ "$(cat "${TMP}/www-certbot.log" 2> /dev/null)" == *"--cert-name shop.example.com -d shop.example.com -d www.shop.example.com"* ]] && pass || fail "app:configure --www asks certbot for the new names on the same certificate"
+rm -rf "$www_ngx" "${TMP}/www-bin" "${TMP}/www-certbot.log" "${MANDAL_APPS_DIR}/wwwshop.conf"
 ddeploy="$(cmd_app_deploy --name=tool --dry-run 2>&1)"
 [[ "$ddeploy" == *"--project-name tool pull"* && "$ddeploy" == *"up -d --remove-orphans"* && "$ddeploy" != *"git clone"* ]] && pass || fail "docker app:deploy pulls and recreates instead of cloning"
 ddelete="$(cmd_app_delete --name=tool --dry-run 2>&1)"

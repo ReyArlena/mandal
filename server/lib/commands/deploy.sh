@@ -5,7 +5,7 @@
 MANDAL_COMMANDS+=("app:deploy|Deploy an app from its repository (zero downtime)|write")
 MANDAL_COMMANDS+=("app:rollback|Switch an app back to an earlier release|write")
 MANDAL_COMMANDS+=("app:releases|List an app's releases as JSON|read")
-MANDAL_COMMANDS+=("app:configure|Change an app's repository, branch, releases to keep, or a Docker app's proxied port|write")
+MANDAL_COMMANDS+=("app:configure|Change an app's repository, branch, releases to keep, www handling (--www= [--skip-dns-check]) or a Docker app's proxied port|write")
 
 deploy_parse_name() {
     local arg
@@ -73,8 +73,14 @@ cmd_app_releases() {
 }
 
 cmd_app_configure() {
-    local arg manifest
+    local arg manifest skip_dns=false
     deploy_parse_name "$@"
+    for arg in "$@"; do
+        case "$arg" in
+            --skip-dns-check) skip_dns=true ;;
+            --dry-run) export MANDAL_DRY_RUN=1 ;;
+        esac
+    done
     require_root
     app_exists "$DEPLOY_NAME" || die "app '$DEPLOY_NAME' does not exist"
     manifest="$(app_conf_path "$DEPLOY_NAME")"
@@ -96,6 +102,8 @@ cmd_app_configure() {
             --https) conf_set "$manifest" CLONE https ;;
             --ssh) conf_set "$manifest" CLONE ssh ;;
             --port=*) docker_change_proxy_port "$DEPLOY_NAME" "${arg#*=}" ;;
+            --www=*) app_change_www "$DEPLOY_NAME" "${arg#*=}" "$skip_dns" ;;
+            --skip-dns-check | --dry-run) ;;
             --keep-releases=*)
                 [[ "${arg#*=}" =~ ^[1-9][0-9]?$ ]] || die 2 "--keep-releases must be between 1 and 99"
                 conf_set "$manifest" KEEP_RELEASES "${arg#*=}"

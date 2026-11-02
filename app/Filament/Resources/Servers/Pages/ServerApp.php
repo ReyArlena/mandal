@@ -256,6 +256,9 @@ class ServerApp extends Page
                 ->color('gray')
                 ->url(fn (): string => ServerApps::logsUrlFor($this->server(), ['name' => $this->appName, 'type' => $this->appData['type'] ?? 'laravel'])),
             $this->editComposeAction()->arguments(['name' => $this->appName])->visible(fn (): bool => $this->isDocker()),
+            $this->appSettingsAction()
+                ->arguments(['name' => $this->appName, 'type' => $this->isDocker() ? 'docker' : 'laravel', 'www' => (string) ($this->appData['www'] ?? ''), 'ssl' => ! empty($this->appData['ssl'])])
+                ->visible(fn (): bool => $this->hasDomain() && empty($this->appData['panel'])),
             $this->changeProxyPortAction()->arguments(['name' => $this->appName, 'port' => (string) ($this->appData['port'] ?? '')])->visible(fn (): bool => $this->isDocker() && ! empty($this->appData['proxy'])),
             $this->editEnvAction()->arguments(['name' => $this->appName]),
             $this->editDeployScriptAction()->arguments(['name' => $this->appName])->visible(fn (): bool => ! $this->isDocker()),

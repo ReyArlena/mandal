@@ -4,7 +4,9 @@ namespace App\Filament\Resources\Servers\Concerns;
 
 use App\DetailsPages\GameStatuses;
 use App\Enums\TaskType;
+use App\Enums\WwwMode;
 use App\Filament\Resources\Servers\ServerResource;
+use App\Jobs\ConfigureApp;
 use App\Jobs\ControlApp;
 use App\Jobs\DeleteApp;
 use App\Jobs\DeployApp;
@@ -21,6 +23,7 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\CodeEditor;
 use Filament\Forms\Components\CodeEditor\Enums\Language;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Actions;
@@ -203,6 +206,46 @@ trait ManagesApps
                     'email' => $data['email'] ?: null,
                     'skip_dns_check' => (bool) ($data['skip_dns_check'] ?? false),
                 ], "Requesting a certificate for {$name}");
+            });
+    }
+
+    /**
+     * Settings of an app served through nginx that can change after it is
+     * created: for now how www and the naked domain are handled.
+     */
+    public function appSettingsAction(): Action
+    {
+        return Action::make('appSettings')
+            ->label('Settings')
+            ->icon(Heroicon::OutlinedCog6Tooth)
+            ->color('gray')
+            ->modalHeading(fn (array $arguments): string => "{$arguments['name']} settings")
+            ->modalDescription(fn (array $arguments): string => 'Saving writes the nginx site again. With HTTPS, certbot then reissues the certificate for the new set of names, after checking that any added name points at this server; if that fails, the previous setting is kept.'
+                .(($arguments['type'] ?? 'laravel') === 'laravel' ? ' APP_URL in the app\'s .env is not changed.' : ''))
+            ->modalSubmitActionLabel('Save')
+            ->fillForm(fn (array $arguments): array => ['www' => WwwMode::tryFrom((string) ($arguments['www'] ?? '')) ?? WwwMode::default()])
+            ->schema(fn (array $arguments): array => [
+                Radio::make('www')
+                    ->label('www handling')
+                    ->options(WwwMode::class)
+                    ->required(),
+                Checkbox::make('skip_dns_check')
+                    ->label('Skip the DNS check (server behind NAT)')
+                    ->visible(! empty($arguments['ssl'])),
+            ])
+            ->action(function (array $arguments, array $data): void {
+                $name = $this->appName($arguments);
+                $www = $data['www'] instanceof WwwMode ? $data['www'] : WwwMode::tryFrom((string) $data['www']);
+
+                if ($name === null || $www === null) {
+                    return;
+                }
+
+                $this->queueTask(TaskType::AppSettings, ConfigureApp::class, [
+                    'name' => $name,
+                    'www' => $www->value,
+                    'skip_dns_check' => (bool) ($data['skip_dns_check'] ?? false),
+                ], "Saving the settings for {$name}");
             });
     }
 

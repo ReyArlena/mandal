@@ -33,7 +33,7 @@
                         <dd class="col-span-2"><x-filament::badge color="warning">Hosts this panel</x-filament::badge> <span class="ml-1 text-xs text-gray-500">It cannot be deleted from here, and the web firewall rules are protected.</span></dd>
                     @endif
                     <dt class="text-gray-500 dark:text-gray-400">www</dt>
-                    <dd class="col-span-2">{{ $app['www'] ?? 'redirect-to-naked' }}</dd>
+                    <dd class="col-span-2">{{ (\App\Enums\WwwMode::tryFrom((string) ($app['www'] ?? '')) ?? \App\Enums\WwwMode::default())->getLabel() }}</dd>
                     @endif
                     @if ($this->isDocker())
                         <dt class="text-gray-500 dark:text-gray-400">nginx</dt>

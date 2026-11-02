@@ -41,6 +41,7 @@ Docker publishes ports straight past ufw: anything in `ports:` not bound to `127
 
 - **Compose file**: edit and apply. An invalid file is refused and the current one kept. If a proxied app's loopback port moves to another port in the new file, nginx follows it when there is exactly one candidate; otherwise the file is refused with a message to change the port first.
 - **Upstream port**: moves nginx to another loopback port the file publishes (`mandal app:configure --port=`).
+- **Settings**: for a proxied app, changes the www handling (`mandal app:configure --www=`), as for [Laravel apps](./apps).
 - **Start**, **Stop**, **Restart**: `docker compose up -d`, `stop` and `restart`. Stopping waits for a clean shutdown and keeps container state.
 - **Pull and restart**: `docker compose pull` then `up -d --remove-orphans`, so the latest images are used. Pull progress is shown in the task output.
 - **Logs**: opens the Logs page on the container output.
