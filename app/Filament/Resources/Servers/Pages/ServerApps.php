@@ -433,7 +433,7 @@ class ServerApps extends Page
                     ->schema([
                         FileUpload::make('import')
                             ->hiddenLabel()
-                            ->helperText(fn (): string => 'Its compose file (compose.yaml, compose.yml, docker-compose.yaml or docker-compose.yml) fills the field below and is saved as compose.yml; a .env fills the environment variables, and every other file is copied into /srv/docker/<name> before the containers start. Max upload size to this panel: '.ComposeImport::human(ComposeImport::maxUploadBytes()).' (set by the panel\'s own PHP; on a panel Mandal hosts, raise it on that server\'s PHP page).')
+                            ->helperText(fn (): string => 'Its compose file (compose.yaml, compose.yml, docker-compose.yaml or docker-compose.yml) fills the field below and is saved as compose.yml; a .env fills the environment variables, and every other file is copied into /srv/docker/<name> before the containers start. Max upload size to this panel: '.ComposeImport::human(ComposeImport::maxUploadBytes()).' (the lower of the panel\'s PHP and nginx limits; on a panel Mandal hosts, raise them on that server\'s PHP page).')
                             ->disk('local')
                             ->directory('imports')
                             ->visibility('private')

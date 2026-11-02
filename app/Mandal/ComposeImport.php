@@ -2,6 +2,8 @@
 
 namespace App\Mandal;
 
+use App\Models\Server;
+use App\Ssh\SshException;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Symfony\Component\Process\Process;
@@ -160,17 +162,44 @@ final class ComposeImport
         }
     }
 
+    /** Addresses the panel uses for the server it runs on. */
+    private const array PANEL_HOSTS = ['127.0.0.1', '::1', 'localhost'];
+
     /**
-     * What the panel accepts in one upload: the smallest of PHP's two limits
-     * and the configured import limit.
+     * What the panel accepts in one upload: the smallest of PHP's two limits,
+     * nginx's limit on the server the panel runs on and the configured import
+     * limit.
      */
     public static function maxUploadBytes(): int
     {
         return min(
             self::bytes((string) ini_get('upload_max_filesize')) ?: PHP_INT_MAX,
             self::bytes((string) ini_get('post_max_size')) ?: PHP_INT_MAX,
+            self::panelNginxBytes() ?: PHP_INT_MAX,
             self::configuredUploadBytes(),
         );
+    }
+
+    /**
+     * nginx's client_max_body_size on the server the panel runs on, when the
+     * panel manages that server; 0 when it is unknown or unlimited. A larger
+     * upload gets a 413 from nginx before PHP sees it.
+     */
+    private static function panelNginxBytes(): int
+    {
+        $server = Server::query()->whereIn('host', self::PANEL_HOSTS)->first();
+
+        if ($server === null || ! $server->isProvisioned()) {
+            return 0;
+        }
+
+        try {
+            $size = app(MandalClient::class)->inventory($server)['nginx']['client_max_body_size']['value'] ?? null;
+        } catch (SshException) {
+            return 0;
+        }
+
+        return is_string($size) ? self::bytes($size) : 0;
     }
 
     /**

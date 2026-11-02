@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The upload limit shown under the database **Import** and the New app **Import backup** fields counted only the panel's PHP limits. When the panel runs on a server it manages, it now also counts that server's nginx `client_max_body_size`, so the field refuses a file nginx would reject. Before, a larger file got "413 Request Entity Too Large" from nginx and Firefox kept restarting the upload from 0%.
 - Filtering a log by text on the Logs page searched only the newest lines (the line limit) and missed older matches. Log files are now searched whole and Docker container output up to its last million lines, then the newest matches are kept (`logs:read --grep`).
 - Deleting a Laravel app whose crontab was already gone stopped halfway on "no crontab for <app>", after removing the site, pool and database but before the system user, home directory and manifest, and every retry stopped at the same place. The crontab is now removed only when there is one.
 - Deleting an app left its logs behind: the nginx access and error logs, the PHP-FPM slow log and the deploy logs, which an app created later with the same name inherited. They go too now, unless the files are kept.

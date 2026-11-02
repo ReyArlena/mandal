@@ -205,7 +205,7 @@ class ServerDatabases extends Page
                     ->maxSize(intdiv(ComposeImport::maxUploadBytes(), 1024))
                     ->rules(['extensions:sql,gz,zst'])
                     ->validationMessages(['extensions' => 'Choose a .sql, .sql.gz or .sql.zst file.'])
-                    ->helperText(fn (): string => 'Max upload size to this panel: '.ComposeImport::human(ComposeImport::maxUploadBytes()).'.'),
+                    ->helperText(fn (): string => 'Max upload size to this panel: '.ComposeImport::human(ComposeImport::maxUploadBytes()).' (the lower of its PHP and nginx limits).'),
                 Checkbox::make('replace')
                     ->label('Empty the database first')
                     ->helperText('Drops every table before importing, so nothing from before is left. Without it the dump runs on top of the current tables; most dumps drop and recreate the tables they contain.'),

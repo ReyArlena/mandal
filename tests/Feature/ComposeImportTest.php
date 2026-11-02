@@ -11,6 +11,7 @@ use App\Models\Server;
 use App\Models\Task;
 use App\Models\User;
 use App\Ssh\SshClient;
+use App\Ssh\SshException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
@@ -183,6 +184,35 @@ it('converts sizes and caps uploads at the smallest limit', function () {
         ->and(ComposeImport::human(19134385))->toBe('18.2 MB')
         ->and(ComposeImport::maxUploadBytes())->toBe(1024);
 });
+
+it('caps uploads at nginx\'s limit on the server the panel runs on', function () {
+    $ssh = new FakeSshClient;
+    $this->app->instance(SshClient::class, $ssh);
+    $ssh->respondWithJson('inventory', ['nginx' => ['client_max_body_size' => ['value' => '64k', 'managed' => true]]]);
+    Server::factory()->provisioned()->create(['host' => '10.0.0.9']);
+
+    expect(ComposeImport::maxUploadBytes())->toBeGreaterThan(65536);
+
+    Server::factory()->provisioned()->create(['host' => '127.0.0.1']);
+
+    expect(ComposeImport::maxUploadBytes())->toBe(65536);
+});
+
+it('ignores nginx\'s limit when the panel\'s server cannot be read or sets none', function (?string $value, bool $fails) {
+    $ssh = new FakeSshClient;
+    $this->app->instance(SshClient::class, $ssh);
+    $baseline = ComposeImport::maxUploadBytes();
+    $fails
+        ? $ssh->connectionFailure = new SshException('connection refused')
+        : $ssh->respondWithJson('inventory', ['nginx' => ['client_max_body_size' => ['value' => $value]]]);
+    Server::factory()->provisioned()->create(['host' => '127.0.0.1']);
+
+    expect(ComposeImport::maxUploadBytes())->toBe($baseline);
+})->with([
+    'unreachable' => [null, true],
+    'unlimited' => ['0', false],
+    'not reported' => [null, false],
+]);
 
 describe('creating an app from an import', function () {
     beforeEach(function () {
