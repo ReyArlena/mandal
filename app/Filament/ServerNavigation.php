@@ -56,6 +56,7 @@ class ServerNavigation
     private const array CHILD_PAGES = [
         'app' => 'apps',
         'backups' => 'databases',
+        'database-users' => 'databases',
         'task' => 'tasks',
     ];
 
@@ -65,7 +66,7 @@ class ServerNavigation
      *
      * @var list<string>
      */
-    private const array SERVER_WIDE_CHILD_PAGES = ['backups'];
+    private const array SERVER_WIDE_CHILD_PAGES = ['backups', 'database-users'];
 
     /**
      * The sections of the open server, the Servers and Mandal tabs on the

@@ -6,6 +6,7 @@ use App\Backups\BackupTargetForm;
 use App\Backups\RemoteSync;
 use App\Enums\TaskType;
 use App\Filament\Resources\Servers\Concerns\FormatsBytes;
+use App\Filament\Resources\Servers\Concerns\HasDatabaseSidebar;
 use App\Filament\Resources\Servers\ServerResource;
 use App\Jobs\RestoreBackup;
 use App\Jobs\RunBackup;
@@ -28,12 +29,15 @@ use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Str;
 
 /**
- * Backup configuration, history and restores for one server.
+ * Backup configuration, history and restores for one server, the last page
+ * in the database sidebar.
  */
 class ServerBackups extends Page
 {
     use FormatsBytes;
-    use InteractsWithRecord;
+    use HasDatabaseSidebar, InteractsWithRecord {
+        HasDatabaseSidebar::getSubNavigation insteadof InteractsWithRecord;
+    }
 
     private const DATABASE_PATTERN = '/^[a-z0-9_]{1,64}$/';
 
@@ -44,6 +48,11 @@ class ServerBackups extends Page
     protected static ?string $title = 'Backups';
 
     protected string $view = 'filament.servers.pages.backups';
+
+    public static function getPageDescription(): string
+    {
+        return 'Every database is dumped and compressed on a schedule, kept on the server and optionally in a destination from Settings.';
+    }
 
     /** @var array<string, mixed> */
     public array $status = [];

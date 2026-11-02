@@ -2,6 +2,7 @@
 
 use App\Filament\Resources\Servers\Pages\ServerBackups;
 use App\Filament\Resources\Servers\Pages\ServerDatabases;
+use App\Filament\Resources\Servers\Pages\ServerDatabaseUsers;
 use App\Models\Server;
 use App\Models\User;
 use App\Ssh\SshClient;
@@ -32,14 +33,25 @@ beforeEach(function () {
     $this->ssh->respondTo('printf %s "$HOME"', '/home/mandal');
 });
 
-it('lists databases and users with their access', function () {
+it('lists databases with the users that can use them', function () {
     livewire(ServerDatabases::class, ['record' => $this->server->getRouteKey()])
         ->assertOk()
+        ->assertSee('MariaDB 11.8.6')
         ->assertSee('reports')
         ->assertSee('16 KB, 3 tables')
         ->assertSee('app shop')
         ->assertSee('reporter')
-        ->assertSee('Not managed by Mandal');
+        ->assertDontSee('Not managed by Mandal')
+        ->assertActionDoesNotExist('createUser');
+});
+
+it('lists users with their databases on their own page', function () {
+    livewire(ServerDatabaseUsers::class, ['record' => $this->server->getRouteKey()])
+        ->assertOk()
+        ->assertSee('reporter')
+        ->assertSee('app shop')
+        ->assertSee('Not managed by Mandal')
+        ->assertActionVisible('createUser');
 });
 
 it('formats sizes, including empty databases', function () {
@@ -53,11 +65,13 @@ it('formats sizes, including empty databases', function () {
 });
 
 it('offers delete only for databases and users no app uses', function () {
-    $html = livewire(ServerDatabases::class, ['record' => $this->server->getRouteKey()])->html();
+    $databases = livewire(ServerDatabases::class, ['record' => $this->server->getRouteKey()])->html();
+    $users = livewire(ServerDatabaseUsers::class, ['record' => $this->server->getRouteKey()])->html();
 
-    expect($html)
+    expect($databases)
         ->toContain("mountAction('deleteDatabase', JSON.parse('{\\u0022name\\u0022:\\u0022reports\\u0022}')")
         ->not->toContain("mountAction('deleteDatabase', JSON.parse('{\\u0022name\\u0022:\\u0022shop\\u0022}')")
+        ->and($users)
         ->toContain("mountAction('deleteUser', JSON.parse('{\\u0022name\\u0022:\\u0022reporter\\u0022}')")
         ->not->toContain("mountAction('deleteUser', JSON.parse('{\\u0022name\\u0022:\\u0022shop\\u0022}')");
 });
@@ -86,7 +100,7 @@ it('refuses a database name that already exists or is invalid', function () {
 it('creates a user with the password in an uploaded file', function () {
     $this->ssh->respondTo('db:user:create', "User analyst created.\n");
 
-    livewire(ServerDatabases::class, ['record' => $this->server->getRouteKey()])
+    livewire(ServerDatabaseUsers::class, ['record' => $this->server->getRouteKey()])
         ->callAction('createUser', data: ['name' => 'analyst', 'password' => 'Str0ng-and-long-enough', 'databases' => ['reports']])
         ->assertHasNoActionErrors()
         ->assertNotified('User analyst created');
@@ -100,7 +114,7 @@ it('creates a user with the password in an uploaded file', function () {
 });
 
 it('rejects a password the server would refuse', function () {
-    livewire(ServerDatabases::class, ['record' => $this->server->getRouteKey()])
+    livewire(ServerDatabaseUsers::class, ['record' => $this->server->getRouteKey()])
         ->callAction('createUser', data: ['name' => 'analyst', 'password' => "it's short"])
         ->assertHasActionErrors(['password']);
 
@@ -123,7 +137,7 @@ it('sets who can use a database', function () {
 it('updates a user without a new password over the command line', function () {
     $this->ssh->respondTo('db:user:update', "User reporter updated.\n");
 
-    livewire(ServerDatabases::class, ['record' => $this->server->getRouteKey()])
+    livewire(ServerDatabaseUsers::class, ['record' => $this->server->getRouteKey()])
         ->callAction('editUser', arguments: ['name' => 'reporter'], data: ['databases' => ['reports', 'shop'], 'password' => null])
         ->assertNotified('User reporter saved');
 
@@ -134,7 +148,7 @@ it('updates a user without a new password over the command line', function () {
 it('uploads a new password when one is given', function () {
     $this->ssh->respondTo('db:user:update', "User reporter updated.\n");
 
-    livewire(ServerDatabases::class, ['record' => $this->server->getRouteKey()])
+    livewire(ServerDatabaseUsers::class, ['record' => $this->server->getRouteKey()])
         ->callAction('editUser', arguments: ['name' => 'reporter'], data: ['databases' => ['reports'], 'password' => 'Another-l0ng-password']);
 
     expect($this->ssh->ran('db:user:update --name=reporter --database=reports --from='))->toBeTrue()
@@ -147,7 +161,9 @@ it('deletes a database and a user', function () {
 
     livewire(ServerDatabases::class, ['record' => $this->server->getRouteKey()])
         ->callAction('deleteDatabase', arguments: ['name' => 'reports'])
-        ->assertNotified('Database reports deleted')
+        ->assertNotified('Database reports deleted');
+
+    livewire(ServerDatabaseUsers::class, ['record' => $this->server->getRouteKey()])
         ->callAction('deleteUser', arguments: ['name' => 'reporter'])
         ->assertNotified('User reporter deleted');
 
@@ -180,10 +196,18 @@ it('explains when the server is not provisioned', function () {
     expect($this->ssh->commands)->toBeEmpty();
 });
 
-it('links the databases and backups tabs', function () {
+it('links Databases, Users and Backups in a sidebar on each of them', function (string $page) {
     $this->ssh->respondWithJson('inventory', ['backups' => ['configured' => false]]);
+    $base = "/servers/{$this->server->getKey()}";
 
-    livewire(ServerBackups::class, ['record' => $this->server->getRouteKey()])
-        ->assertSee("/servers/{$this->server->getKey()}/databases")
-        ->assertSee('Databases');
-});
+    livewire($page, ['record' => $this->server->getRouteKey()])
+        ->assertSeeHtml('fi-page-sub-navigation')
+        ->assertSeeHtml("{$base}/databases\"")
+        ->assertSeeHtml("{$base}/databases/users\"")
+        ->assertSeeHtml("{$base}/backups\"")
+        ->assertSeeInOrder(['Databases', 'Users', 'Backups']);
+})->with([
+    'databases' => ServerDatabases::class,
+    'users' => ServerDatabaseUsers::class,
+    'backups' => ServerBackups::class,
+]);

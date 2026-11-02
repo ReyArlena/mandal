@@ -9,6 +9,7 @@ use App\Filament\Resources\Servers\Pages\ServerApp;
 use App\Filament\Resources\Servers\Pages\ServerApps;
 use App\Filament\Resources\Servers\Pages\ServerBackups;
 use App\Filament\Resources\Servers\Pages\ServerDatabases;
+use App\Filament\Resources\Servers\Pages\ServerDatabaseUsers;
 use App\Filament\Resources\Servers\Pages\ServerFirewall;
 use App\Filament\Resources\Servers\Pages\ServerLogs;
 use App\Filament\Resources\Servers\Pages\ServerPhp;
@@ -60,6 +61,7 @@ class ServerResource extends Resource
             'php' => ServerPhp::route('/{record}/php'),
             'firewall' => ServerFirewall::route('/{record}/firewall'),
             'databases' => ServerDatabases::route('/{record}/databases'),
+            'database-users' => ServerDatabaseUsers::route('/{record}/databases/users'),
             'backups' => ServerBackups::route('/{record}/backups'),
             'logs' => ServerLogs::route('/{record}/logs'),
             'updates' => ServerUpdates::route('/{record}/updates'),

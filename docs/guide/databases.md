@@ -2,7 +2,7 @@
 
 ## Databases
 
-The **Databases** page lists every MariaDB database with its size and the users who can use it, and every database user with their databases. From there you can:
+A server's **Databases** tab has a sidebar with three pages: **Databases** lists every MariaDB database with its size and the users who can use it, **Users** lists every database user with their databases, and **Backups** holds the schedule and the copies. From there you can:
 
 - create databases and users, and choose which users can use a database (from either side)
 - change a user's password
@@ -23,7 +23,7 @@ MariaDB's `root` authenticates through the Unix socket, so `sudo mariadb` on the
 
 ## Backups
 
-**Backups** is the second tab of the Databases page. Every database on the server is dumped with `mariadb-dump` and compressed with zstd; when the server hosts the panel, the panel's SQLite database is copied into the same set. A freshly provisioned server already keeps a nightly local copy (02:30 UTC, seven copies); **Settings** changes that:
+**Backups** is the third page in the sidebar. Every database on the server is dumped with `mariadb-dump` and compressed with zstd; when the server hosts the panel, the panel's SQLite database is copied into the same set. A freshly provisioned server already keeps a nightly local copy (02:30 UTC, seven copies); **Settings** changes that:
 
 - **Enable backups** switches the schedule on or off. **Back up now** works either way.
 - **Local** keeps copies under `/var/backups/mandal/db/<database>/` on the server, with its own frequency (hourly, every 6 hours, daily, weekly, or any cron line) and number of copies to keep.

@@ -4,13 +4,14 @@ namespace App\Filament\Resources\Servers\Pages;
 
 use App\Enums\TaskType;
 use App\Filament\Resources\Servers\Concerns\FormatsBytes;
+use App\Filament\Resources\Servers\Concerns\HasDatabaseSidebar;
+use App\Filament\Resources\Servers\Concerns\InteractsWithDatabases;
 use App\Filament\Resources\Servers\ServerResource;
 use App\Jobs\ImportDatabase;
 use App\Jobs\RunBackup;
 use App\Jobs\RunMandalTask;
 use App\Mandal\ComposeImport;
 use App\Mandal\MandalClient;
-use App\Models\Server;
 use App\Models\Task;
 use App\Ssh\CommandResult;
 use App\Ssh\SshException;
@@ -25,17 +26,19 @@ use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
 use Filament\Schemas\Components\Callout;
 use Filament\Support\Icons\Heroicon;
-use Illuminate\Support\Str;
 
 /**
- * The server's databases and database users: create them, choose who can
- * use which database, change passwords, import and export dumps and delete
- * what no app uses.
+ * The server's databases: create them, choose who can use each, import,
+ * export and back them up, and delete what no app uses. Users and Backups
+ * sit beside it in the sidebar.
  */
 class ServerDatabases extends Page
 {
     use FormatsBytes;
-    use InteractsWithRecord;
+    use HasDatabaseSidebar, InteractsWithRecord {
+        HasDatabaseSidebar::getSubNavigation insteadof InteractsWithRecord;
+    }
+    use InteractsWithDatabases;
 
     /** Database names, as the CLI accepts them. */
     public const string DATABASE_PATTERN = '/^[a-z0-9_]{1,64}$/';
@@ -54,80 +57,40 @@ class ServerDatabases extends Page
 
     protected string $view = 'filament.servers.pages.databases';
 
-    /** @var array<string, mixed> */
-    public array $overview = [];
-
-    public ?string $error = null;
-
     public bool $backupsConfigured = false;
+
+    public static function getPageDescription(): string
+    {
+        return 'Apps get a database when they are created. Each one lists the users that can use it.';
+    }
 
     public function mount(int|string $record): void
     {
         $this->record = $this->resolveRecord($record);
 
         $this->load();
-    }
 
-    protected function server(): Server
-    {
-        /** @var Server $server */
-        $server = $this->getRecord();
-
-        return $server;
-    }
-
-    public function load(): void
-    {
-        $this->error = null;
-        $server = $this->server();
-
-        if (! $server->isProvisioned()) {
-            $this->error = 'Provision this server before managing its databases.';
-
-            return;
-        }
-
-        try {
-            $result = app(MandalClient::class)->run($server, 'db:list', timeoutSeconds: 60);
-        } catch (SshException $exception) {
-            $this->error = $exception->getMessage();
-
-            return;
-        }
-
-        if ($result->failed()) {
-            $this->error = trim($result->errorOutput ?: $result->output) ?: 'The server could not list its databases.';
-
-            return;
-        }
-
-        $this->overview = $result->json();
-
-        try {
-            $this->backupsConfigured = (bool) (app(MandalClient::class)->inventory($server)['backups']['configured'] ?? false);
-        } catch (SshException) {
-            $this->backupsConfigured = false;
-        }
-
-        if (! ($this->overview['installed'] ?? false) || ($this->overview['active'] ?? '') !== 'active') {
-            $this->error = 'The database server is not running.';
+        if ($this->error === null) {
+            try {
+                $this->backupsConfigured = (bool) (app(MandalClient::class)->inventory($this->server())['backups']['configured'] ?? false);
+            } catch (SshException) {
+                $this->backupsConfigured = false;
+            }
         }
     }
 
     /**
-     * @return list<array<string, mixed>>
+     * The database server and its version, such as "MariaDB 10.11.14".
      */
-    public function databases(): array
+    public function engine(): string
     {
-        return $this->overview['databases'] ?? [];
-    }
+        $driver = (string) ($this->overview['driver'] ?? 'mariadb');
 
-    /**
-     * @return list<array<string, mixed>>
-     */
-    public function users(): array
-    {
-        return $this->overview['users'] ?? [];
+        return trim(match ($driver) {
+            'mariadb' => 'MariaDB',
+            'mysql' => 'MySQL',
+            default => $driver,
+        }.' '.($this->overview['version'] ?? ''));
     }
 
     /**
@@ -147,12 +110,7 @@ class ServerDatabases extends Page
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('refresh')
-                ->label('Refresh')
-                ->icon(Heroicon::OutlinedArrowPath)
-                ->color('gray')
-                ->action(fn () => $this->load()),
-            $this->createUserAction(),
+            $this->refreshAction(),
             $this->createDatabaseAction(),
         ];
     }
@@ -279,11 +237,11 @@ class ServerDatabases extends Page
             ->icon(Heroicon::OutlinedArchiveBox)
             ->link()
             ->disabled(fn (): bool => ! $this->backupsConfigured)
-            ->tooltip(fn (): ?string => $this->backupsConfigured ? null : 'Set up backups on the Backups tab first.')
+            ->tooltip(fn (): ?string => $this->backupsConfigured ? null : 'Set up backups on the Backups page first.')
             ->requiresConfirmation()
             ->modalIcon(Heroicon::OutlinedArchiveBox)
             ->modalHeading(fn (array $arguments): string => "Back up {$arguments['name']} now?")
-            ->modalDescription('One backup to the destinations set on the Backups tab. It counts towards the number of backups kept there, so the oldest may be removed.')
+            ->modalDescription('One backup to the destinations set on the Backups page. It counts towards the number of backups kept there, so the oldest may be removed.')
             ->modalSubmitActionLabel('Back up')
             ->action(function (array $arguments): void {
                 $name = $this->validName($arguments, self::DATABASE_PATTERN);
@@ -332,177 +290,6 @@ class ServerDatabases extends Page
             });
     }
 
-    private function createUserAction(): Action
-    {
-        return Action::make('createUser')
-            ->label('New user')
-            ->icon(Heroicon::OutlinedUserPlus)
-            ->color('gray')
-            ->visible(fn (): bool => $this->error === null)
-            ->modalHeading('Create a database user')
-            ->modalDescription('The user signs in from this server only (the database listens on 127.0.0.1). Copy the password before saving; it is not shown again.')
-            ->modalSubmitActionLabel('Create user')
-            ->schema([
-                TextInput::make('name')
-                    ->required()
-                    ->regex(self::USER_PATTERN)
-                    ->notIn(fn (): array => collect($this->users())->pluck('user')->all())
-                    ->helperText('Up to 32 lower-case letters, digits or underscores, starting with a letter.'),
-                $this->passwordField()->required(),
-                CheckboxList::make('databases')
-                    ->label('Databases')
-                    ->options(fn (): array => $this->databaseOptions()),
-            ])
-            ->action(function (array $data): void {
-                $arguments = 'db:user:create --name='.$data['name'].$this->repeat('--database', $data['databases'] ?? [], self::DATABASE_PATTERN);
-
-                $this->runSynchronously(
-                    fn (MandalClient $mandal): CommandResult => $mandal->runWithUpload($this->server(), $arguments, 'PASSWORD='.$data['password']."\n", '.conf', timeoutSeconds: 60),
-                    "User {$data['name']} created",
-                    'Could not create the user',
-                );
-            });
-    }
-
-    public function editUserAction(): Action
-    {
-        return Action::make('editUser')
-            ->label('Edit')
-            ->icon(Heroicon::OutlinedPencilSquare)
-            ->link()
-            ->modalHeading(fn (array $arguments): string => "Edit {$arguments['name']}")
-            ->modalDescription(fn (array $arguments): string => $this->appOfUser((string) $arguments['name'])
-                ? 'This user belongs to app '.$this->appOfUser((string) $arguments['name']).'. It keeps access to the app\'s database, and its password lives in the app\'s .env.'
-                : 'Checked databases get all privileges; unchecked ones lose them. Leave the password empty to keep the current one.')
-            ->modalSubmitActionLabel('Save')
-            ->fillForm(fn (array $arguments): array => [
-                'databases' => collect($this->users())->firstWhere('user', $arguments['name'])['databases'] ?? [],
-                'password' => null,
-            ])
-            ->schema(fn (array $arguments): array => [
-                CheckboxList::make('databases')
-                    ->label('Databases')
-                    ->options(fn (): array => $this->databaseOptions()),
-                $this->passwordField()
-                    ->label('New password')
-                    ->default(null)
-                    ->helperText('Leave empty to keep the current password. 12 to 128 characters without quotes, backslashes or spaces.')
-                    ->hidden(fn (): bool => $this->appOfUser((string) $arguments['name']) !== null),
-            ])
-            ->action(function (array $arguments, array $data): void {
-                $name = $this->validName($arguments, self::USER_PATTERN);
-
-                if ($name === null) {
-                    return;
-                }
-
-                $command = 'db:user:update --name='.$name.$this->repeat('--database', $data['databases'] ?? [], self::DATABASE_PATTERN);
-                $password = $data['password'] ?? null;
-
-                $this->runSynchronously(
-                    fn (MandalClient $mandal): CommandResult => filled($password)
-                        ? $mandal->runWithUpload($this->server(), $command, 'PASSWORD='.$password."\n", '.conf', timeoutSeconds: 60)
-                        : $mandal->run($this->server(), $command, timeoutSeconds: 60),
-                    "User {$name} saved",
-                    'Could not save the user',
-                );
-            });
-    }
-
-    public function deleteUserAction(): Action
-    {
-        return Action::make('deleteUser')
-            ->label('Delete')
-            ->icon(Heroicon::OutlinedTrash)
-            ->color('danger')
-            ->link()
-            ->requiresConfirmation()
-            ->modalHeading(fn (array $arguments): string => "Delete user {$arguments['name']}?")
-            ->modalDescription('Anything signing in as this user stops working. Databases are not touched.')
-            ->modalSubmitActionLabel('Delete user')
-            ->action(function (array $arguments): void {
-                $name = $this->validName($arguments, self::USER_PATTERN);
-
-                if ($name === null) {
-                    return;
-                }
-
-                $this->runSynchronously(
-                    fn (MandalClient $mandal): CommandResult => $mandal->run($this->server(), 'db:user:delete --name='.$name, timeoutSeconds: 60),
-                    "User {$name} deleted",
-                    'Could not delete the user',
-                );
-            });
-    }
-
-    public function appOfUser(string $user): ?string
-    {
-        return collect($this->localUsers())->firstWhere('user', $user)['app'] ?? null;
-    }
-
-    private function passwordField(): TextInput
-    {
-        return TextInput::make('password')
-            ->password()
-            ->revealable()
-            ->copyable()
-            ->autocomplete('new-password')
-            ->default(fn (): string => Str::password(32, symbols: false))
-            ->regex(self::PASSWORD_PATTERN)
-            ->helperText('12 to 128 characters without quotes, backslashes or spaces. A random one is filled in.');
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private function userOptions(): array
-    {
-        return collect($this->localUsers())
-            ->mapWithKeys(fn (array $user): array => [$user['user'] => $user['app'] ? "{$user['user']} (app {$user['app']})" : $user['user']])
-            ->all();
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private function databaseOptions(): array
-    {
-        return collect($this->databases())
-            ->mapWithKeys(fn (array $database): array => [$database['name'] => $database['app'] ? "{$database['name']} (app {$database['app']})" : $database['name']])
-            ->all();
-    }
-
-    /**
-     * Users that sign in from this server, the only ones Mandal manages.
-     *
-     * @return list<array<string, mixed>>
-     */
-    private function localUsers(): array
-    {
-        return collect($this->users())->where('host', 'localhost')->values()->all();
-    }
-
-    /**
-     * @param  array<mixed>  $values
-     */
-    private function repeat(string $option, array $values, string $pattern): string
-    {
-        return collect($values)
-            ->filter(fn (mixed $value): bool => is_string($value) && preg_match($pattern, $value) === 1)
-            ->map(fn (string $value): string => " {$option}={$value}")
-            ->implode('');
-    }
-
-    /**
-     * @param  array<string, mixed>  $arguments
-     */
-    private function validName(array $arguments, string $pattern): ?string
-    {
-        $name = (string) ($arguments['name'] ?? '');
-
-        return preg_match($pattern, $name) === 1 ? $name : null;
-    }
-
     /**
      * @param  class-string<RunMandalTask>  $job
      * @param  array<string, mixed>  $options
@@ -533,29 +320,5 @@ class ServerDatabases extends Page
         Notification::make()->title($title)->body('Follow the progress on the task page.')->success()->send();
 
         $this->redirect(ServerResource::getUrl('task', ['record' => $server, 'task' => $task]));
-    }
-
-    /**
-     * @param  callable(MandalClient): CommandResult  $command
-     */
-    private function runSynchronously(callable $command, string $successTitle, string $failureTitle): void
-    {
-        try {
-            $result = $command(app(MandalClient::class));
-        } catch (SshException $exception) {
-            Notification::make()->title($failureTitle)->body($exception->getMessage())->danger()->send();
-
-            return;
-        }
-
-        if ($result->failed()) {
-            Notification::make()->title($failureTitle)->body(trim($result->errorOutput ?: $result->output))->danger()->persistent()->send();
-
-            return;
-        }
-
-        app(MandalClient::class)->forgetInventory($this->server());
-        Notification::make()->title($successTitle)->success()->send();
-        $this->load();
     }
 }
