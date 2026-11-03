@@ -6,6 +6,7 @@ use App\Filament\Resources\Servers\Pages\ServerBackups;
 use App\Filament\Resources\Servers\Pages\ServerDatabases;
 use App\Filament\Resources\Servers\Pages\ServerDatabaseUsers;
 use Filament\Pages\Enums\SubNavigationPosition;
+use Illuminate\Contracts\Support\Htmlable;
 
 /**
  * The sidebar shared by the database pages of a server: Databases, Users
@@ -19,6 +20,15 @@ trait HasDatabaseSidebar
         ServerDatabaseUsers::class,
         ServerBackups::class,
     ];
+
+    /**
+     * The heading names the section (the tab above), not the sidebar page;
+     * the page's own title stays in the browser tab and the sidebar.
+     */
+    public function getHeading(): string|Htmlable|null
+    {
+        return 'Databases';
+    }
 
     public static function getSubNavigationPosition(): SubNavigationPosition
     {
