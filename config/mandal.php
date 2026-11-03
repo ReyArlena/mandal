@@ -20,8 +20,8 @@ return [
     | Backup imports
     |--------------------------------------------------------------------------
     |
-    | A Docker app can start from a .zip or .tar.gz of its project folder. The
-    | upload limit is the panel's own; PHP's upload_max_filesize and
+    | A Docker app can start from a .zip, .tar.gz or .tar.zst of its project
+    | folder. The upload limit is the panel's own; PHP's upload_max_filesize and
     | post_max_size, and nginx's client_max_body_size, must allow it too.
     | Archives that unpack to more than max_unpacked are refused.
     |

@@ -425,7 +425,7 @@ class ServerApps extends Page
                     ->helperText('2 to 32 lower-case letters, digits or hyphens. Used for the system user, database and directories.')
                     ->placeholder('shop'),
                 Section::make('Import backup (optional)')
-                    ->description('Start from a .zip or .tar.gz of an existing project folder.')
+                    ->description('Start from a '.ComposeImport::formatsLabel().' of an existing project folder.')
                     ->collapsible()
                     ->collapsed()
                     ->compact()
@@ -439,7 +439,7 @@ class ServerApps extends Page
                             ->visibility('private')
                             ->storeFileNamesIn('import_name')
                             ->maxSize(intdiv(ComposeImport::maxUploadBytes(), 1024))
-                            ->rules(['extensions:zip,gz,tgz', fn (): Closure => function (string $attribute, mixed $value, Closure $fail): void {
+                            ->rules(['extensions:'.implode(',', ComposeImport::extensions()), fn (): Closure => function (string $attribute, mixed $value, Closure $fail): void {
                                 if ($value instanceof TemporaryUploadedFile) {
                                     try {
                                         ComposeImport::inspect($value->getRealPath());
@@ -448,7 +448,7 @@ class ServerApps extends Page
                                     }
                                 }
                             }])
-                            ->validationMessages(['extensions' => 'Choose a .zip or .tar.gz file.'])
+                            ->validationMessages(['extensions' => ComposeImport::chooseFileMessage()])
                             ->live()
                             ->afterStateUpdated(fn (mixed $state, Set $set, Get $get, FileUpload $component) => $this->readImport($state, $set, $get, $component)),
                     ]),
@@ -640,7 +640,7 @@ class ServerApps extends Page
             $set('env', $import->envLines());
         }
 
-        $name = Str::slug(preg_replace('/\.(zip|tar\.gz|tgz)$/i', '', $file->getClientOriginalName()) ?? '');
+        $name = Str::slug(preg_replace('/\.(zip|tar\.gz|tgz|tar\.zst|tzst)$/i', '', $file->getClientOriginalName()) ?? '');
 
         if (trim((string) $get('name')) === '' && preg_match(self::APP_NAME_PATTERN, $name) && $this->nameProblem($name, 'docker') === null) {
             $set('name', $name);

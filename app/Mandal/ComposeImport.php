@@ -6,11 +6,12 @@ use App\Models\Server;
 use App\Ssh\SshException;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use Symfony\Component\Process\ExecutableFinder;
 use Symfony\Component\Process\Process;
 use ZipArchive;
 
 /**
- * A backup of a Docker project folder, as a .zip or .tar.gz, to start a new
+ * A backup of a Docker project folder, as a .zip, .tar.gz or .tar.zst, to start a new
  * Docker app from. Reading it checks every entry (plain files and folders,
  * paths that stay inside the folder, a size cap) and finds the compose file
  * at the top, or inside a single top-level folder. The compose file and .env
@@ -29,7 +30,7 @@ final class ComposeImport
     private const int MAX_TEXT = 262144;
 
     /**
-     * @param  'zip'|'tar.gz'  $format
+     * @param  'zip'|'tar.gz'|'tar.zst'  $format
      * @param  array<string, string>  $members  normalised path => name in the archive
      */
     private function __construct(
@@ -50,7 +51,7 @@ final class ComposeImport
     public static function inspect(string $path): self
     {
         $format = self::format($path);
-        $entries = $format === 'zip' ? self::zipEntries($path) : self::tarEntries($path);
+        $entries = $format === 'zip' ? self::zipEntries($path) : self::tarEntries($path, $format);
 
         if (count($entries) > self::MAX_ENTRIES) {
             throw new InvalidImport('The archive holds more than '.number_format(self::MAX_ENTRIES).' entries.');
@@ -144,7 +145,7 @@ final class ComposeImport
 
                 $zip->close();
             } else {
-                self::process(['tar', '-xzf', $this->path, '-C', $work, '--no-same-owner'], 'The archive could not be unpacked.');
+                self::process(['tar', self::compression($this->format), '-xf', $this->path, '-C', $work, '--no-same-owner'], 'The archive could not be unpacked.');
             }
 
             $base = $work.'/'.rtrim($this->prefix, '/');
@@ -253,7 +254,7 @@ final class ComposeImport
     }
 
     /**
-     * @return 'zip'|'tar.gz'
+     * @return 'zip'|'tar.gz'|'tar.zst'
      */
     private static function format(string $path): string
     {
@@ -262,8 +263,55 @@ final class ComposeImport
         return match (true) {
             str_starts_with($magic, "PK\x03\x04"), str_starts_with($magic, "PK\x05\x06") => 'zip',
             str_starts_with($magic, "\x1f\x8b") => 'tar.gz',
-            default => throw new InvalidImport('The file is not a .zip or .tar.gz archive.'),
+            str_starts_with($magic, "\x28\xb5\x2f\xfd") => self::supportsZstd()
+                ? 'tar.zst'
+                : throw new InvalidImport(self::chooseFileMessage()),
+            default => throw new InvalidImport('The file is not a '.self::formatsLabel().' archive.'),
         };
+    }
+
+    /**
+     * tar runs zstd as a separate program, and a panel on a server Mandal has
+     * not provisioned may not have it.
+     */
+    public static function supportsZstd(): bool
+    {
+        return once(fn (): bool => (new ExecutableFinder)->find('zstd') !== null);
+    }
+
+    /**
+     * The file extensions the upload field takes on this panel.
+     *
+     * @return list<string>
+     */
+    public static function extensions(): array
+    {
+        return ['zip', 'gz', 'tgz', ...(self::supportsZstd() ? ['zst', 'tzst'] : [])];
+    }
+
+    /**
+     * The formats this panel reads, for messages and field descriptions.
+     */
+    public static function formatsLabel(): string
+    {
+        return self::supportsZstd() ? '.zip, .tar.gz or .tar.zst' : '.zip or .tar.gz';
+    }
+
+    /**
+     * What the upload field says about a file with another extension. Mandal's
+     * own app backups are .tar.zst, so a panel that cannot read them says why.
+     */
+    public static function chooseFileMessage(): string
+    {
+        return 'Choose a '.self::formatsLabel().' file.'.(self::supportsZstd() ? '' : " .tar.zst needs zstd installed on the panel's server.");
+    }
+
+    /**
+     * The tar option for a format's compression.
+     */
+    private static function compression(string $format): string
+    {
+        return $format === 'tar.zst' ? '--zstd' : '--gzip';
     }
 
     /**
@@ -301,15 +349,16 @@ final class ComposeImport
     }
 
     /**
-     * Entries of a .tar.gz from GNU tar's listing: the names from -t and the
-     * type and size from -tv, line for line.
+     * Entries of a compressed tar from GNU tar's listing: the names from -t
+     * and the type and size from -tv, line for line.
      *
      * @return list<array{string, 'file'|'dir'|'link'|'other', int}>
      */
-    private static function tarEntries(string $path): array
+    private static function tarEntries(string $path, string $format): array
     {
-        $names = self::lines(self::process(['tar', '-tzf', $path], 'The archive is damaged or not a .tar.gz.'));
-        $details = self::lines(self::process(['tar', '-tzvf', $path], 'The archive is damaged or not a .tar.gz.'));
+        $damaged = "The archive is damaged or not a .{$format}.";
+        $names = self::lines(self::process(['tar', self::compression($format), '-tf', $path], $damaged));
+        $details = self::lines(self::process(['tar', self::compression($format), '-tvf', $path], $damaged));
 
         if (count($names) !== count($details)) {
             throw new InvalidImport('The archive has names this panel cannot read.');
@@ -394,7 +443,7 @@ final class ComposeImport
             return is_string($contents) ? $contents : throw new InvalidImport("{$member} could not be read from the archive.");
         }
 
-        return self::process(['tar', '-xzOf', $path, $member], "{$member} could not be read from the archive.");
+        return self::process(['tar', self::compression($format), '-xOf', $path, $member], "{$member} could not be read from the archive.");
     }
 
     /**

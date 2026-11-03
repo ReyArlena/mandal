@@ -57,7 +57,7 @@ function makeZip(string $path, array $entries, array $links = []): string
 /**
  * @param  array<string, string>  $files
  */
-function makeTarGz(string $dir, string $path, array $files): string
+function makeTarGz(string $dir, string $path, array $files, string $compression = '--gzip'): string
 {
     $source = $dir.'/src-'.uniqid();
 
@@ -66,7 +66,7 @@ function makeTarGz(string $dir, string $path, array $files): string
         File::put($source.'/'.$name, $contents);
     }
 
-    (new Process(['tar', '-czf', $path, '-C', $source, '.']))->mustRun();
+    (new Process(['tar', $compression, '-cf', $path, '-C', $source, '.']))->mustRun();
     File::deleteDirectory($source);
 
     return $path;
@@ -129,6 +129,44 @@ it('reads a .tar.gz the same way', function () {
         ->and($import->files)->toBe(2);
 });
 
+it('reads a .tar.zst the same way and repacks it as a .tar.gz', function () {
+    $tar = makeTarGz($this->dir, $this->dir.'/game-20261103120000.tar.zst', ['compose.yml' => COMPOSE, '.env' => 'A=1', 'data/save.bin' => 'save'], '--zstd');
+
+    $import = ComposeImport::inspect($tar);
+    $import->repack($this->dir.'/files.tar.gz');
+
+    expect($import->format)->toBe('tar.zst')
+        ->and($import->composeName)->toBe('compose.yml')
+        ->and($import->compose)->toBe(COMPOSE)
+        ->and($import->env)->toBe('A=1')
+        ->and($import->files)->toBe(3)
+        ->and(tarNames($this->dir.'/files.tar.gz'))->toBe(['./', './data/', './data/save.bin']);
+});
+
+it('refuses a link in a .tar.zst', function () {
+    $tar = $this->dir.'/game.tar.zst';
+    $source = $this->dir.'/linked';
+    File::ensureDirectoryExists($source);
+    File::put($source.'/compose.yml', COMPOSE);
+    symlink('/etc', $source.'/savegame');
+    (new Process(['tar', '--zstd', '-cf', $tar, '-C', $source, '.']))->mustRun();
+
+    expect(fn () => ComposeImport::inspect($tar))->toThrow(InvalidImport::class, 'holds a link');
+});
+
+it('says so when a .tar.zst cannot be read because zstd is missing', function () {
+    $tar = $this->dir.'/game.tar.zst';
+    File::put($tar, "\x28\xb5\x2f\xfd");
+    $path = (string) getenv('PATH');
+    putenv('PATH=/nonexistent');
+
+    try {
+        expect(fn () => ComposeImport::inspect($tar))->toThrow(InvalidImport::class, 'needs zstd installed');
+    } finally {
+        putenv('PATH='.$path);
+    }
+});
+
 it('repacks the files without the compose file and .env, relative to the project folder', function () {
     $zip = makeZip($this->dir.'/game.zip', [
         'enshrouded/docker-compose.yml' => COMPOSE,
@@ -158,8 +196,33 @@ it('refuses archives that cannot be imported', function (array $entries, array $
 it('refuses a file that is not an archive', function () {
     File::put($this->dir.'/notes.zip', 'just text');
 
-    expect(fn () => ComposeImport::inspect($this->dir.'/notes.zip'))->toThrow(InvalidImport::class, 'not a .zip or .tar.gz');
+    expect(fn () => ComposeImport::inspect($this->dir.'/notes.zip'))->toThrow(InvalidImport::class, 'The file is not a '.ComposeImport::formatsLabel().' archive.');
 });
+
+it('offers .tar.zst only when zstd is installed', function (bool $installed, array $extensions, string $label, string $message) {
+    $bin = $this->dir.'/bin';
+    File::ensureDirectoryExists($bin);
+
+    if ($installed) {
+        File::put($bin.'/zstd', "#!/bin/sh\n");
+        chmod($bin.'/zstd', 0755);
+    }
+
+    $path = (string) getenv('PATH');
+    putenv('PATH='.$bin);
+
+    try {
+        expect(ComposeImport::supportsZstd())->toBe($installed)
+            ->and(ComposeImport::extensions())->toBe($extensions)
+            ->and(ComposeImport::formatsLabel())->toBe($label)
+            ->and(ComposeImport::chooseFileMessage())->toBe($message);
+    } finally {
+        putenv('PATH='.$path);
+    }
+})->with([
+    'installed' => [true, ['zip', 'gz', 'tgz', 'zst', 'tzst'], '.zip, .tar.gz or .tar.zst', 'Choose a .zip, .tar.gz or .tar.zst file.'],
+    'missing' => [false, ['zip', 'gz', 'tgz'], '.zip or .tar.gz', "Choose a .zip or .tar.gz file. .tar.zst needs zstd installed on the panel's server."],
+]);
 
 it('refuses an archive that unpacks to more than the limit', function () {
     config(['mandal.imports.max_unpacked' => '1K']);
@@ -243,6 +306,37 @@ describe('creating an app from an import', function () {
             ->setActionData(['import' => UploadedFile::fake()->createWithContent('broken.zip', file_get_contents($zip))])
             ->assertHasActionErrors(['import']);
     });
+
+    it('takes a .tar.zst upload only when zstd is installed', function (bool $installed, bool $refused) {
+        $bin = $this->dir.'/bin';
+        File::ensureDirectoryExists($bin);
+
+        if ($installed) {
+            File::put($bin.'/zstd', "#!/bin/sh\n");
+            chmod($bin.'/zstd', 0755);
+        }
+
+        $path = (string) getenv('PATH');
+        putenv('PATH='.($installed ? $bin.':'.$path : $bin));
+
+        try {
+            $errors = livewire(ServerApps::class, ['record' => $this->server->getRouteKey()])
+                ->mountAction('createApp')
+                ->setActionData(['type' => 'docker'])
+                ->setActionData(['import' => UploadedFile::fake()->createWithContent('game.tar.zst', "\x28\xb5\x2f\xfd")])
+                ->errors()
+                ->all();
+        } finally {
+            putenv('PATH='.$path);
+        }
+
+        $message = "Choose a .zip or .tar.gz file. .tar.zst needs zstd installed on the panel's server.";
+
+        $refused ? expect($errors)->toContain($message) : expect($errors)->not->toContain($message);
+    })->with([
+        'with zstd' => [true, false],
+        'without zstd' => [false, true],
+    ]);
 
     it('queues the app with the stored upload', function () {
         Queue::fake();
