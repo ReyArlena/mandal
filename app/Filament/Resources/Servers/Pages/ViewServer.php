@@ -7,15 +7,14 @@ use App\Enums\DatabaseDriver;
 use App\Enums\JsDriver;
 use App\Enums\ServerSetupMode;
 use App\Enums\TaskType;
+use App\Filament\Clusters\Settings\Pages\Updates;
 use App\Filament\Resources\Servers\ServerResource;
 use App\Jobs\ProvisionServer;
 use App\Jobs\RunBenchmark;
-use App\Jobs\UpdateCli;
 use App\Mandal\CliArchive;
+use App\Mandal\CliUpdates;
 use App\Mandal\MandalClient;
-use App\Mandal\PanelReleases;
 use App\Models\Server;
-use App\Models\Task;
 use App\Ssh\KeyPair;
 use App\Ssh\SshClient;
 use App\Ssh\SshException;
@@ -138,10 +137,9 @@ class ViewServer extends ViewRecord
                 ->action(fn () => $this->loadInventory(fresh: true)),
             $this->setupCommandAction(),
             $this->testConnectionAction(),
+            $this->cliUpdateRequiredAction(),
             $this->provisionAction(),
-            $this->updateCliAction(),
             $this->benchmarkAction(),
-            $this->panelUpdateAction(),
             EditAction::make(),
             DeleteAction::make(),
         ];
@@ -288,37 +286,19 @@ class ViewServer extends ViewRecord
     }
 
     /**
-     * Offered when the CLI on the server differs from the one this panel ships.
+     * A link to Settings > Updates when the CLI on this server is older
+     * than the one this panel ships; nothing when it is current or the
+     * server cannot be reached.
      */
-    private function updateCliAction(): Action
+    private function cliUpdateRequiredAction(): Action
     {
-        return Action::make('updateCli')
-            ->label('Update CLI')
-            ->icon(Heroicon::OutlinedArrowDownTray)
-            ->color(fn (Server $record): string => $this->cliUpdateState($record) === 'outdated' ? 'warning' : 'gray')
-            ->visible(fn (Server $record): bool => $record->connected_at !== null)
-            ->disabled(fn (Server $record): bool => $this->cliUpdateState($record) !== 'outdated')
-            ->tooltip(fn (Server $record, CliArchive $archive): ?string => match ($this->cliUpdateState($record)) {
-                'current' => "Up to date (build {$archive->hash()})",
-                'unreachable' => 'The server could not be reached to read its CLI build',
-                default => null,
-            })
-            ->requiresConfirmation()
-            ->modalHeading('Update the mandal CLI on this server')
-            ->modalDescription(fn (CliArchive $archive): string => "Uploads and installs mandal {$archive->version()} (build {$archive->hash()}). Nothing else on the server changes.")
-            ->action(function (Server $record): void {
-                if ($record->hasActiveTask()) {
-                    Notification::make()->title('Another task is still running')->warning()->send();
-
-                    return;
-                }
-
-                $task = $this->queueCliUpdate($record);
-
-                Notification::make()->title('CLI update started')->success()->send();
-
-                $this->redirect(ServerResource::getUrl('task', ['record' => $record, 'task' => $task]));
-            });
+        return Action::make('cliUpdateRequired')
+            ->label('Mandal CLI update required')
+            ->icon(Heroicon::OutlinedExclamationTriangle)
+            ->color('warning')
+            ->link()
+            ->visible(fn (Server $record): bool => $record->connected_at !== null && $this->cliUpdateState($record) === 'outdated')
+            ->url(Updates::getUrl());
     }
 
     /**
@@ -362,7 +342,7 @@ class ViewServer extends ViewRecord
      * Whether the server's CLI matches the panel's build: outdated, current
      * or unreachable. Reading the inventory (cached briefly) records the
      * build the server runs right now; the answer is kept for the request
-     * since the button asks several times while rendering.
+     * since the link asks several times while rendering.
      */
     private function cliUpdateState(Server $record): string
     {
@@ -375,19 +355,6 @@ class ViewServer extends ViewRecord
 
             return $record->cliOutdated(app(CliArchive::class)->hash()) ? 'outdated' : 'current';
         })();
-    }
-
-    private function queueCliUpdate(Server $record): Task
-    {
-        $task = $record->tasks()->create([
-            'type' => TaskType::UpdateCli,
-            'user_id' => auth()->id(),
-            'options' => [],
-        ]);
-
-        UpdateCli::dispatch($task);
-
-        return $task;
     }
 
     /**
@@ -407,38 +374,6 @@ class ViewServer extends ViewRecord
         } catch (SshException) {
             return false;
         }
-    }
-
-    /**
-     * On the server that hosts the panel, points at the newer release and
-     * the command that installs it. The update runs on the server, not
-     * from here: deploying the panel restarts the worker that would drive it.
-     */
-    private function panelUpdateAction(): Action
-    {
-        return Action::make('panelUpdate')
-            ->label(fn (PanelReleases $releases): string => "Mandal {$releases->latest()} available")
-            ->icon(Heroicon::OutlinedArrowUpCircle)
-            ->color('info')
-            ->visible(function (Server $record, MandalClient $mandal, PanelReleases $releases): bool {
-                if ($record->connected_at === null || ! $releases->available()) {
-                    return false;
-                }
-
-                try {
-                    return (bool) ($mandal->inventory($record)['mandal']['hosts_panel'] ?? false);
-                } catch (SshException) {
-                    return false;
-                }
-            })
-            ->modalHeading(fn (PanelReleases $releases): string => "Update Mandal to {$releases->latest()}")
-            ->modalContent(fn (Server $record, PanelReleases $releases): View => view('filament.servers.panel-update', [
-                'server' => $record,
-                'latest' => $releases->latest(),
-                'current' => $releases->current(),
-            ]))
-            ->modalSubmitAction(false)
-            ->modalCancelActionLabel('Close');
     }
 
     /**
@@ -467,7 +402,7 @@ class ViewServer extends ViewRecord
                     .'then confirm to pin it. Mandal will refuse to connect if it ever changes.';
             })
             ->modalSubmitActionLabel('Trust this host key')
-            ->action(function (Server $record, SshClient $ssh, MandalClient $mandal, CliArchive $archive): void {
+            ->action(function (Server $record, SshClient $ssh, MandalClient $mandal, CliArchive $archive, CliUpdates $updates): void {
                 try {
                     $connection = $ssh->connect($record, trustUnknownHostKey: true);
                     $result = $connection->run('echo mandal-ok', timeoutSeconds: 15);
@@ -502,7 +437,7 @@ class ViewServer extends ViewRecord
                 // setup.sh installs the CLI from a release; from here on this
                 // panel's own build is the one the server should run.
                 if ($firstConnection && $this->cliDiffersFromPanel($record, $mandal, $archive)) {
-                    $this->queueCliUpdate($record);
+                    $updates->queue($record);
                     $notification->body("Installing this panel's build of the CLI (mandal {$archive->version()}). Follow it under Tasks.");
                 }
 

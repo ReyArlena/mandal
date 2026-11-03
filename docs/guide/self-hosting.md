@@ -47,7 +47,7 @@ Keep a copy of `shared/database.sqlite` together with the `APP_KEY` from `shared
 
 ## Updating
 
-The panel checks GitHub for a newer release every hour. When one exists, every user gets a persistent notification and the hosting server's page shows the update command. The update runs on the server itself, because deploying the panel restarts the queue worker that would otherwise drive it:
+The panel checks GitHub for a newer release every hour (**Check now** under **Settings > Updates** does it at once). When one exists, every user gets a persistent notification and **Settings > Updates** shows the steps below. The update runs on the server itself, because deploying the panel restarts the queue worker that would otherwise drive it:
 
 ```bash
 ssh mandal@panel.example.com

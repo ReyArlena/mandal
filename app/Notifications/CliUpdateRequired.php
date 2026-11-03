@@ -2,7 +2,7 @@
 
 namespace App\Notifications;
 
-use App\Filament\Resources\Servers\ServerResource;
+use App\Filament\Clusters\Settings\Pages\Updates;
 use App\Models\Server;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
@@ -36,14 +36,14 @@ class CliUpdateRequired extends Notification
     {
         $message = FilamentNotification::make()
             ->title("CLI update required on {$this->server->name}")
-            ->body("The server runs an older mandal CLI than this panel ships ({$this->version}). Update it from the server page.")
+            ->body("The server runs an older mandal CLI than this panel ships ({$this->version}). Update it under Settings > Updates.")
             ->icon('heroicon-o-arrow-down-tray')
             ->iconColor('warning')
             ->actions([
                 Action::make('view')
-                    ->label('View servers')
+                    ->label('Open Updates')
                     ->button()
-                    ->url(ServerResource::getUrl()),
+                    ->url(Updates::getUrl()),
             ])
             ->getDatabaseMessage();
 

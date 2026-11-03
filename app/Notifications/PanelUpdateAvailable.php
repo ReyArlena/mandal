@@ -2,7 +2,7 @@
 
 namespace App\Notifications;
 
-use App\Filament\Resources\Servers\ServerResource;
+use App\Filament\Clusters\Settings\Pages\Updates;
 use App\Models\Server;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
@@ -10,8 +10,9 @@ use Illuminate\Notifications\Notification;
 
 /**
  * A persistent notice that a newer Mandal release exists, with the
- * command to run on the hosting server. The version is stored alongside
- * so the notice can be replaced when a newer release appears.
+ * command to run on the hosting server and a link to Settings > Updates,
+ * which has the steps. The version is stored alongside so the notice can
+ * be replaced when a newer release appears.
  */
 class PanelUpdateAvailable extends Notification
 {
@@ -38,14 +39,14 @@ class PanelUpdateAvailable extends Notification
 
         $message = FilamentNotification::make()
             ->title("Mandal {$this->latest} is available")
-            ->body("This panel runs {$this->current}. SSH into {$where} as the mandal user (allow your own public key with Grant access first) and run: sudo mandal panel:update")
+            ->body("This panel runs {$this->current}. SSH into {$where} as the mandal user and run: sudo mandal panel:update. Settings > Updates has the steps.")
             ->icon('heroicon-o-arrow-up-circle')
             ->iconColor('info')
             ->actions([
                 Action::make('view')
-                    ->label($this->server === null ? 'View servers' : "View {$this->server->name}")
+                    ->label('Open Updates')
                     ->button()
-                    ->url($this->server === null ? ServerResource::getUrl() : ServerResource::getUrl('view', ['record' => $this->server])),
+                    ->url(Updates::getUrl()),
             ])
             ->getDatabaseMessage();
 

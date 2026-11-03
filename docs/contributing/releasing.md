@@ -19,7 +19,7 @@ A release is a `v*` tag on `main`. The tag must equal the `VERSION` file, and th
 
 - New servers set up from the panel install the release's CLI, then receive the panel's own build on first connection if it differs.
 - Existing servers show **CLI update required** once the panel running the new version talks to them, because the build hash changed. The hourly check notifies every user.
-- Hosted panels notify every user within an hour and show `sudo mandal panel:update` on the hosting server's page.
+- Hosted panels notify every user within an hour and show the steps for `sudo mandal panel:update` under **Settings > Updates**.
 - Panels running from a checkout are updated with `git pull`, `composer install`, `bun run build`, `php artisan migrate` and `php artisan optimize`.
 
 ## Compatibility rules

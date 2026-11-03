@@ -2,7 +2,10 @@
 
 namespace App\Mandal;
 
+use App\Enums\TaskType;
+use App\Jobs\UpdateCli;
 use App\Models\Server;
+use App\Models\Task;
 use App\Models\User;
 use App\Notifications\CliUpdateRequired;
 use App\Ssh\SshException;
@@ -75,6 +78,25 @@ class CliUpdates
     public function clear(Server $server): void
     {
         $this->notices($server)->delete();
+    }
+
+    /**
+     * Queues the upload and install of the panel's CLI on a server, as a
+     * task started by the signed-in user. The caller checks for a running
+     * task first.
+     */
+    public function queue(Server $server): Task
+    {
+        /** @var Task $task */
+        $task = $server->tasks()->create([
+            'type' => TaskType::UpdateCli,
+            'user_id' => auth()->id(),
+            'options' => [],
+        ]);
+
+        UpdateCli::dispatch($task);
+
+        return $task;
     }
 
     public function panelBuild(): string

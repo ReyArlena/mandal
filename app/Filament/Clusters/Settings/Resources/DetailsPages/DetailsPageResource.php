@@ -22,7 +22,7 @@ class DetailsPageResource extends Resource
 
     protected static ?string $cluster = SettingsCluster::class;
 
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 6;
 
     protected static ?string $navigationLabel = 'Server details pages';
 

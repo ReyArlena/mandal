@@ -48,7 +48,7 @@ it('notifies every user once while a server is outdated and clears the notice wh
         ->and($notices->pluck('notifiable_id')->sort()->values()->all())->toBe($this->users->pluck('id')->sort()->values()->all())
         ->and($notices->first()->data['title'])->toBe("CLI update required on {$server->name}")
         ->and($notices->first()->data['server_id'])->toBe($server->id)
-        ->and($notices->first()->data['actions'][0]['url'])->toContain('/servers');
+        ->and($notices->first()->data['actions'][0]['url'])->toContain('/settings/updates');
 
     $this->ssh->respondWithJson('version --json', ['version' => '0.1.0', 'build' => $this->hash]);
     app(MandalClient::class)->version($server);
@@ -82,11 +82,14 @@ it('flags outdated servers in the list without connecting to them', function () 
     expect($this->ssh->commands)->toBe([]);
 });
 
-it('offers the update on the server page from a fresh read of the build', function () {
+it('points the server page at Settings > Updates from a fresh read of the build', function () {
     $server = Server::factory()->withPinnedHostKey()->create(['cli_build' => $this->hash]);
     $this->ssh->respondWithJson('inventory', ['mandal' => ['build' => 'release00001']]);
 
-    livewire(ViewServer::class, ['record' => $server->getRouteKey()])->assertActionVisible('updateCli');
+    livewire(ViewServer::class, ['record' => $server->getRouteKey()])
+        ->assertActionVisible('cliUpdateRequired')
+        ->assertSee('Mandal CLI update required')
+        ->assertSeeHtml('/settings/updates');
 
     expect($server->fresh()->cli_build)->toBe('release00001');
 });

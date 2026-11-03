@@ -5,8 +5,8 @@ namespace App\Filament\Resources\Servers\Pages;
 use App\Enums\TaskType;
 use App\Filament\Resources\Servers\ServerResource;
 use App\Jobs\ApplyUpdates;
-use App\Jobs\UpdateCli;
 use App\Mandal\CliArchive;
+use App\Mandal\CliUpdates;
 use App\Mandal\MandalClient;
 use App\Models\Server;
 use App\Models\Task;
@@ -194,8 +194,7 @@ class ServerUpdates extends Page
                         return;
                     }
 
-                    $task = $this->server()->tasks()->create(['type' => TaskType::UpdateCli, 'user_id' => auth()->id(), 'options' => []]);
-                    UpdateCli::dispatch($task);
+                    $task = app(CliUpdates::class)->queue($this->server());
                     Notification::make()->title('CLI update started')->success()->send();
                     $this->redirect(ServerResource::getUrl('task', ['record' => $this->server(), 'task' => $task]));
 

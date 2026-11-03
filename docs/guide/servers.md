@@ -44,7 +44,7 @@ Only one task runs per server at a time. A second one is refused with a message 
 
 ## Keeping the CLI current
 
-Every connection records the server's CLI build. When it differs from the panel's, the servers list shows an **Update required** badge in its CLI column, every user gets a persistent notification in the bell menu and the server page enables **Update CLI** (greyed out with the current build otherwise), which uploads the panel's copy over SFTP and installs it with `mandal cli:update`. `php artisan mandal:check-updates` runs hourly and checks every connected server, so the scheduler must be running.
+Every connection records the server's CLI build. When it differs from the panel's, the servers list shows an **Update required** badge in its CLI column, every user gets a persistent notification in the bell menu and the server page shows a **Mandal CLI update required** link. Both lead to **Settings > Updates**, which lists every server's build against the one the panel ships and updates one server (**Update**) or every outdated one at once (**Update all outdated**): the panel's copy is uploaded over SFTP and installed with `mandal cli:update`, one task per server. The same page shows the panel's own release against the latest on GitHub. `php artisan mandal:check-updates` runs hourly and checks every connected server and GitHub, so the scheduler must be running; **Check now** on the page does the same on demand.
 
 ## Several panels, one server
 

@@ -1,6 +1,6 @@
 <?php
 
-use App\Filament\Resources\Servers\Pages\ViewServer;
+use App\Filament\Clusters\Settings\Pages\Updates;
 use App\Mandal\CliArchive;
 use App\Mandal\PanelReleases;
 use App\Models\Server;
@@ -41,7 +41,7 @@ it('records the latest release from GitHub and notifies every user once about a 
         ->and($notices->first()->data['body'])->toContain("This panel runs {$this->current}")
         ->and($notices->first()->data['body'])->toContain('sudo mandal panel:update')
         ->and($notices->first()->data['body'])->toContain('panel-host (127.0.0.1)')
-        ->and($notices->first()->data['actions'][0]['url'])->toContain("/servers/{$host->id}")
+        ->and($notices->first()->data['actions'][0]['url'])->toContain('/settings/updates')
         ->and($notices->first()->data['version'])->toBe('99.0.0');
 });
 
@@ -76,29 +76,40 @@ it('keeps the last known release and raises nothing when GitHub cannot be read',
     expect(app(PanelReleases::class)->check())->toBeNull();
 });
 
-it('shows the update instructions on the server that hosts the panel', function () {
+it('shows the update steps for the hosting server under Settings > Updates while a newer release exists', function () {
+    Server::factory()->withPinnedHostKey()->create(['name' => 'panel-host', 'host' => '127.0.0.1', 'ssh_user' => 'mandal']);
+
+    livewire(Updates::class)
+        ->assertOk()
+        ->assertSee($this->current)
+        ->assertSee('Not checked yet')
+        ->assertDontSee('panel:update');
+
     Setting::set(PanelReleases::LATEST_SETTING, '99.0.0');
-    $host = Server::factory()->withPinnedHostKey()->create(['host' => '127.0.0.1']);
-    $other = Server::factory()->withPinnedHostKey()->create();
-    $this->ssh->respondWithJson('inventory', ['mandal' => ['hosts_panel' => true, 'build' => 'x']]);
 
-    livewire(ViewServer::class, ['record' => $host->getRouteKey()])
-        ->assertActionVisible('panelUpdate')
-        ->mountAction('panelUpdate')
-        ->assertActionMounted('panelUpdate');
-
-    $html = view('filament.servers.panel-update', ['server' => $host, 'latest' => '99.0.0', 'current' => $this->current])->render();
-
-    expect($html)->toContain('sudo mandal panel:update')
-        ->toContain('Grant access')
-        ->toContain('ssh mandal@&lt;server address&gt;');
-
-    $this->ssh->respondWithJson('inventory', ['mandal' => ['hosts_panel' => false, 'build' => 'x']]);
-    livewire(ViewServer::class, ['record' => $other->getRouteKey()])->assertActionHidden('panelUpdate');
+    livewire(Updates::class)
+        ->assertSee('99.0.0')
+        ->assertSee('Available')
+        ->assertSee('Sign in to panel-host')
+        ->assertSeeHtml('ssh mandal@&lt;server address&gt;')
+        ->assertSee('sudo mandal panel:update')
+        ->assertSee('Add key');
 
     Setting::set(PanelReleases::LATEST_SETTING, $this->current);
-    $this->ssh->respondWithJson('inventory', ['mandal' => ['hosts_panel' => true, 'build' => 'x']]);
-    livewire(ViewServer::class, ['record' => $host->getRouteKey()])->assertActionHidden('panelUpdate');
+
+    livewire(Updates::class)
+        ->assertSee('Current')
+        ->assertDontSee('panel:update');
+
+    expect($this->ssh->commands)->toBe([]);
+});
+
+it('says when no server here is known as the panel host', function () {
+    Setting::set(PanelReleases::LATEST_SETTING, '99.0.0');
+
+    livewire(Updates::class)
+        ->assertSee('Sign in to that server')
+        ->assertSee('No server here is known to host the panel');
 });
 
 it('reports the panel release state from the scheduled command', function () {

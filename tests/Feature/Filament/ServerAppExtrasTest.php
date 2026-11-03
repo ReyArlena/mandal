@@ -164,40 +164,26 @@ it('changes the port nginx proxies a docker app to', function () {
         ->assertActionHidden('changeProxyPort');
 });
 
-it('offers a CLI update only when the server build differs', function () {
-    $hash = app(CliArchive::class)->hash();
-
+it('links to Settings > Updates only when the server build differs', function () {
     livewire(ViewServer::class, ['record' => $this->server->getRouteKey()])
-        ->assertActionVisible('updateCli')
-        ->assertActionEnabled('updateCli');
+        ->assertActionVisible('cliUpdateRequired')
+        ->assertSee('Mandal CLI update required');
 
     $current = $this->inventory;
-    $current['mandal']['build'] = $hash;
+    $current['mandal']['build'] = app(CliArchive::class)->hash();
     $this->ssh->respondWithJson('inventory', $current);
     app(MandalClient::class)->forgetInventory($this->server);
 
     livewire(ViewServer::class, ['record' => $this->server->getRouteKey()])
-        ->assertActionVisible('updateCli')
-        ->assertActionDisabled('updateCli')
-        ->assertSee("Up to date (build {$hash})");
+        ->assertActionHidden('cliUpdateRequired')
+        ->assertDontSee('Mandal CLI update required');
 });
 
-it('hides the CLI update until the server has been connected', function () {
+it('hides the CLI update link until the server has been connected', function () {
     $this->server->forceFill(['connected_at' => null])->save();
 
     livewire(ViewServer::class, ['record' => $this->server->getRouteKey()])
-        ->assertActionHidden('updateCli');
-});
-
-it('queues a CLI update', function () {
-    Queue::fake();
-
-    livewire(ViewServer::class, ['record' => $this->server->getRouteKey()])
-        ->callAction('updateCli')
-        ->assertNotified('CLI update started');
-
-    expect($this->server->tasks()->sole()->type)->toBe(TaskType::UpdateCli);
-    Queue::assertPushed(UpdateCli::class);
+        ->assertActionHidden('cliUpdateRequired');
 });
 
 it('uploads the archive and installs it', function () {
