@@ -9,7 +9,7 @@ use Filament\Support\Icons\Heroicon;
 
 /**
  * Panel-wide settings, one page per section with a sidebar between them.
- * Reached from the Mandal tab above the servers table and the user menu;
+ * Reached from the Settings tab above the servers table and the user menu;
  * /settings opens the first section.
  */
 class SettingsCluster extends Cluster

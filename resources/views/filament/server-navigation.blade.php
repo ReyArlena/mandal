@@ -1,4 +1,4 @@
-{{-- The open server's sections, or Servers and Mandal, as a tab bar above the page title. --}}
+{{-- The open server's sections, or Servers and Settings, as a tab bar above the page title. --}}
 @php
     $items = \App\Filament\ServerNavigation::items();
     $label = \App\Filament\ServerNavigation::currentServer() ? 'Server sections' : 'Panel sections';

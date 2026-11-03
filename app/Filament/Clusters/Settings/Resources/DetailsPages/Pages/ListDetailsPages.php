@@ -3,6 +3,7 @@
 namespace App\Filament\Clusters\Settings\Resources\DetailsPages\Pages;
 
 use App\DetailsPages\DetailsPagesTransfer;
+use App\Filament\Clusters\Settings\Concerns\HasSettingsHeading;
 use App\Filament\Clusters\Settings\Resources\DetailsPages\DetailsPageResource;
 use App\Models\DetailsPage;
 use Filament\Actions\Action;
@@ -17,6 +18,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ListDetailsPages extends ListRecords
 {
+    use HasSettingsHeading;
+
     protected static string $resource = DetailsPageResource::class;
 
     public static function getPageDescription(): string

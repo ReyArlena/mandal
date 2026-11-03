@@ -86,7 +86,7 @@ The device is readable and writable by every user, as the kernel creates it; it 
 
 ### A page for your players
 
-**Settings > Server details pages** (the **Mandal** tab above the servers list) makes public pages that tell players how to join your game servers. Each page has an optional title and intro, then one card per game server with its name, an optional game version, the address and an optional password, each with a copy button. The password is shown as written, so a note such as "must be added to whitelist" can go there instead.
+**Settings > Server details pages** (the **Settings** tab above the servers list) makes public pages that tell players how to join your game servers. Each page has an optional title and intro, then one card per game server with its name, an optional game version, the address and an optional password, each with a copy button. The password is shown as written, so a note such as "must be added to whitelist" can go there instead.
 
 **Status** is hidden, set by hand (**Online** or **Paused**) or follows a Docker container. Following a container, chosen from one list of every container on your connected servers shown as `container (server)`, the card shows **Online** while it runs, **Paused** when it is stopped and **Unknown** when the server could not be reached or the container is gone. For a game with a one-off setup service, choose the game's own container.
 

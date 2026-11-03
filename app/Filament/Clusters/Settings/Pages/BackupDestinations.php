@@ -3,6 +3,7 @@
 namespace App\Filament\Clusters\Settings\Pages;
 
 use App\Backups\RemoteSync;
+use App\Filament\Clusters\Settings\Concerns\HasSettingsHeading;
 use App\Filament\Clusters\Settings\SettingsCluster;
 use App\Models\BackupDestination;
 use Filament\Actions\Action;
@@ -19,6 +20,8 @@ use Illuminate\Validation\Rule;
  */
 class BackupDestinations extends Page
 {
+    use HasSettingsHeading;
+
     protected static ?string $cluster = SettingsCluster::class;
 
     protected static ?int $navigationSort = 3;

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Clusters\Settings\Pages;
 
+use App\Filament\Clusters\Settings\Concerns\HasSettingsHeading;
 use App\Filament\Clusters\Settings\SettingsCluster;
 use App\Models\Setting;
 use Filament\Actions\Action;
@@ -15,6 +16,8 @@ use Filament\Support\Icons\Heroicon;
  */
 class General extends Page
 {
+    use HasSettingsHeading;
+
     protected static ?string $cluster = SettingsCluster::class;
 
     protected static ?int $navigationSort = 1;

@@ -3,6 +3,7 @@
 namespace App\Filament\Clusters\Settings\Pages;
 
 use App\Enums\SourceProviderType;
+use App\Filament\Clusters\Settings\Concerns\HasSettingsHeading;
 use App\Filament\Clusters\Settings\SettingsCluster;
 use App\Models\SourceCredential;
 use App\Sources\SourceProviders as Providers;
@@ -20,6 +21,8 @@ use Throwable;
  */
 class SourceProviders extends Page
 {
+    use HasSettingsHeading;
+
     protected static ?string $cluster = SettingsCluster::class;
 
     protected static ?int $navigationSort = 2;

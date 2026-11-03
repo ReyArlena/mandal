@@ -25,7 +25,7 @@ use function Filament\Support\original_request;
 /**
  * The tab bar above the page title lists the sections of the server being
  * looked at. Above the servers table and the settings pages it switches
- * between the two instead (Servers and Mandal); other pages have none. The
+ * between the two instead (Servers and Settings); other pages have none. The
  * server switcher in the top bar uses the same lookup to keep you in the
  * section you are on when you switch.
  */
@@ -81,7 +81,7 @@ class ServerNavigation
     private const array SERVER_WIDE_CHILD_PAGES = ['backups', 'database-users', 'ssh', 'fail2ban'];
 
     /**
-     * The sections of the open server, the Servers and Mandal tabs on the
+     * The sections of the open server, the Servers and Settings tabs on the
      * servers table and settings pages, or none elsewhere.
      *
      * @return array<NavigationItem>
@@ -94,7 +94,7 @@ class ServerNavigation
     }
 
     /**
-     * "servers" on the servers table, "mandal" on a settings page, or null.
+     * "servers" on the servers table, "settings" on a settings page, or null.
      */
     public static function currentArea(): ?string
     {
@@ -102,7 +102,7 @@ class ServerNavigation
 
         return match (true) {
             $class === ListServers::class => 'servers',
-            is_string($class) && is_subclass_of($class, Page::class) && $class::getCluster() === SettingsCluster::class => 'mandal',
+            is_string($class) && is_subclass_of($class, Page::class) && $class::getCluster() === SettingsCluster::class => 'settings',
             default => null,
         };
     }
@@ -196,10 +196,10 @@ class ServerNavigation
                 ->icon(Heroicon::OutlinedServerStack)
                 ->url(ServerResource::getUrl('index'))
                 ->isActiveWhen(fn (): bool => $area === 'servers'),
-            NavigationItem::make('Mandal')
+            NavigationItem::make('Settings')
                 ->icon(Heroicon::OutlinedCog6Tooth)
                 ->url(SettingsCluster::getUrl())
-                ->isActiveWhen(fn (): bool => $area === 'mandal'),
+                ->isActiveWhen(fn (): bool => $area === 'settings'),
         ];
     }
 

@@ -57,16 +57,16 @@ it('switches between servers and settings above the servers table and settings p
     $active = fn (): array => collect(ServerNavigation::items())->filter(fn (NavigationItem $item): bool => $item->isActive())->map(fn (NavigationItem $item): string => (string) $item->getLabel())->values()->all();
 
     openPage('/servers');
-    expect($labels())->toBe(['Servers', 'Mandal'])
+    expect($labels())->toBe(['Servers', 'Settings'])
         ->and($active())->toBe(['Servers'])
         ->and(ServerNavigation::currentServer())->toBeNull();
 
     openPage('/settings/backup-destinations');
-    expect($labels())->toBe(['Servers', 'Mandal'])
-        ->and($active())->toBe(['Mandal']);
+    expect($labels())->toBe(['Servers', 'Settings'])
+        ->and($active())->toBe(['Settings']);
 
     openPage('/settings/details-pages/create');
-    expect($active())->toBe(['Mandal']);
+    expect($active())->toBe(['Settings']);
 });
 
 it('shows no tabs on other pages outside a server', function () {
