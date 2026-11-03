@@ -40,7 +40,7 @@ The **Server** tab shows the connection details and the panel's public key, then
 
 Only one task runs per server at a time. A second one is refused with a message rather than queued behind the first. Every task page has **Copy output** to put the whole log on the clipboard.
 
-**Benchmark** times what the panel spends on the server and changes nothing. It lists the panel's own setup (PHP, opcache, cached config and routes, debug, drivers, the `sodium` and `gmp` extensions phpseclib's SSH crypto uses), times the SSH connection, a no-op round trip and the cost of `sudo`, reads the inventory fresh and from the cache, then runs `mandal benchmark` on the server: the cost of starting a process, each inventory collector on its own and every read command a page runs, slowest first. It takes about a minute and ends with a JSON block to share when reporting a slow panel.
+**Benchmark** under **Settings > General** picks a server (the one hosting the panel by default), times what the panel spends on it and changes nothing. It lists the panel's own setup (PHP, opcache, cached config and routes, debug, drivers, the `sodium` and `gmp` extensions phpseclib's SSH crypto uses), times the SSH connection, a no-op round trip and the cost of `sudo`, reads the inventory fresh and from the cache, then runs `mandal benchmark` on the server: the cost of starting a process, each inventory collector on its own and every read command a page runs, slowest first. It takes about a minute and ends with a JSON block to share when reporting a slow panel.
 
 ## Keeping the CLI current
 

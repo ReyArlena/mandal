@@ -10,7 +10,6 @@ use App\Enums\TaskType;
 use App\Filament\Clusters\Settings\Pages\Updates;
 use App\Filament\Resources\Servers\ServerResource;
 use App\Jobs\ProvisionServer;
-use App\Jobs\RunBenchmark;
 use App\Mandal\CliArchive;
 use App\Mandal\CliUpdates;
 use App\Mandal\MandalClient;
@@ -139,7 +138,6 @@ class ViewServer extends ViewRecord
             $this->testConnectionAction(),
             $this->cliUpdateRequiredAction(),
             $this->provisionAction(),
-            $this->benchmarkAction(),
             EditAction::make(),
             DeleteAction::make(),
         ];
@@ -299,43 +297,6 @@ class ViewServer extends ViewRecord
             ->link()
             ->visible(fn (Server $record): bool => $record->connected_at !== null && $this->cliUpdateState($record) === 'outdated')
             ->url(Updates::getUrl());
-    }
-
-    /**
-     * Queues a benchmark of the panel and the CLI on this server and opens
-     * the task to follow it.
-     */
-    private function benchmarkAction(): Action
-    {
-        return Action::make('benchmark')
-            ->label('Benchmark')
-            ->icon(Heroicon::OutlinedClock)
-            ->color('gray')
-            ->visible(fn (Server $record): bool => $record->connected_at !== null)
-            ->requiresConfirmation()
-            ->modalIcon(Heroicon::OutlinedClock)
-            ->modalHeading('Benchmark the panel and CLI')
-            ->modalDescription('Times the SSH connection, the inventory and every read command the panel runs on this server, and lists the panel\'s own setup. Nothing is changed. It takes about a minute, and other tasks on this server wait until it finishes.')
-            ->modalSubmitActionLabel('Run benchmark')
-            ->action(function (Server $record): void {
-                if ($record->hasActiveTask()) {
-                    Notification::make()->title('Another task is still running')->warning()->send();
-
-                    return;
-                }
-
-                $task = $record->tasks()->create([
-                    'type' => TaskType::Benchmark,
-                    'user_id' => auth()->id(),
-                    'options' => ['panel' => RunBenchmark::panelEnvironment()],
-                ]);
-
-                RunBenchmark::dispatch($task);
-
-                Notification::make()->title('Benchmark started')->success()->send();
-
-                $this->redirect(ServerResource::getUrl('task', ['record' => $record, 'task' => $task]));
-            });
     }
 
     /**

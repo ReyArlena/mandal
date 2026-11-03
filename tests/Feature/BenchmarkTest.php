@@ -2,7 +2,8 @@
 
 use App\Enums\TaskStatus;
 use App\Enums\TaskType;
-use App\Filament\Resources\Servers\Pages\ViewServer;
+use App\Filament\Clusters\Settings\Pages\General;
+use App\Filament\Resources\Servers\ServerResource;
 use App\Jobs\RunBenchmark;
 use App\Mandal\MandalClient;
 use App\Models\Server;
@@ -10,6 +11,7 @@ use App\Models\Task;
 use App\Models\User;
 use App\Ssh\SshClient;
 use App\Ssh\SshException;
+use Filament\Forms\Components\Select;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\FakeSshClient;
 
@@ -23,26 +25,56 @@ beforeEach(function () {
     $this->ssh->respondWithJson('inventory', ['mandal' => ['build' => 'abc123abc123']]);
 });
 
-it('queues a benchmark with the panel setup and opens the task', function () {
+it('queues a benchmark of the chosen server with the panel setup and opens the task', function () {
     Queue::fake();
+    $other = Server::factory()->provisioned()->create(['name' => 'other-box']);
 
-    livewire(ViewServer::class, ['record' => $this->server->getRouteKey()])
+    livewire(General::class)
         ->assertActionVisible('benchmark')
-        ->callAction('benchmark')
-        ->assertNotified('Benchmark started');
+        ->callAction('benchmark', data: ['server' => $other->getKey()])
+        ->assertNotified('Benchmark started')
+        ->assertRedirect(ServerResource::getUrl('task', ['record' => $other, 'task' => $other->tasks()->sole()]));
 
-    $task = $this->server->tasks()->sole();
+    $task = $other->tasks()->sole();
 
     expect($task->type)->toBe(TaskType::Benchmark)
-        ->and($task->options['panel'])->toHaveKeys(['php', 'opcache', 'config_cached', 'debug', 'cache', 'extensions', 'phpseclib_math']);
+        ->and($task->options['panel'])->toHaveKeys(['php', 'opcache', 'config_cached', 'debug', 'cache', 'extensions', 'phpseclib_math'])
+        ->and($this->server->tasks()->count())->toBe(0);
     Queue::assertPushed(RunBenchmark::class);
 });
 
-it('offers no benchmark before the server has been connected', function () {
+it('picks the server that hosts the panel by default and lists only connected servers', function () {
+    $host = Server::factory()->provisioned()->create(['name' => 'panel-host', 'host' => '127.0.0.1']);
+    $unconnected = Server::factory()->create(['name' => 'new-box']);
+
+    livewire(General::class)
+        ->mountAction('benchmark')
+        ->assertSchemaStateSet(['server' => $host->getKey()])
+        ->assertSchemaComponentExists('server', checkComponentUsing: function (Select $select) use ($host, $unconnected): bool {
+            $options = $select->getOptions();
+
+            return array_key_exists($host->getKey(), $options)
+                && array_key_exists($this->server->getKey(), $options)
+                && ! array_key_exists($unconnected->getKey(), $options);
+        });
+});
+
+it('offers no benchmark until a server has been connected', function () {
     $this->server->forceFill(['connected_at' => null])->save();
 
-    livewire(ViewServer::class, ['record' => $this->server->getRouteKey()])
-        ->assertActionHidden('benchmark');
+    livewire(General::class)->assertActionHidden('benchmark');
+});
+
+it('refuses a benchmark while another task runs on the server', function () {
+    Queue::fake();
+    Task::factory()->for($this->server)->running()->create();
+
+    livewire(General::class)
+        ->callAction('benchmark', data: ['server' => $this->server->getKey()])
+        ->assertNotified('Another task is still running');
+
+    expect($this->server->tasks()->count())->toBe(1);
+    Queue::assertNothingPushed();
 });
 
 it('reports the panel, SSH, inventory and CLI timings with a JSON block', function () {
