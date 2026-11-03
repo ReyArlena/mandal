@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- The Server tab's **Update CLI** button and the **Mandal x.y.z available** button moved to Settings > Updates. In their place, a **Mandal CLI update required** link appears next to the server's name only while its build differs from the panel's. The `mandal` row in a server's Updates tab still updates that server's CLI.
+- The Server tab's **Update CLI** button and the **Mandal x.y.z available** button moved to Settings > Updates. In their place, a **Mandal CLI update required** link appears to the right of the server's name only while its build differs from the panel's, and the remaining buttons (Refresh, Test connection, Provision, Edit, Delete) sit on their own line under the heading. The `mandal` row in a server's Updates tab still updates that server's CLI.
 - The New app form for Laravel apps keeps the **Deploy script** in a collapsed section and adds an optional **Environment file**. Left empty, Mandal generates the `.env` as before. Filled in, it is installed as the app's `.env` (`app:create --env-file`), with its `DB_` settings overwritten when a database is created. **Create a database and user** is now off by default and sits below it. The panel drops the file from the task once it is on the server.
 - The default `deploy.sh` no longer starts with a comment block; the variables it can use (`$MANDAL_APP`, `$RELEASE_DIR`, `$SHARED_DIR`, `$PHP`, `$BRANCH`, `$COMMIT`) are listed under every deploy script editor instead.
 - Backup times and the last run on the Backups page read as "2 hours ago", with the exact time on hover, and the last run shows the database and size instead of the raw log line.

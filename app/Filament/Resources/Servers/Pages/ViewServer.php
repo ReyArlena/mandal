@@ -126,6 +126,25 @@ class ViewServer extends ViewRecord
         };
     }
 
+    /**
+     * The heading line keeps only the CLI update link; the buttons sit on
+     * their own line below it, rendered by the page view.
+     *
+     * @return array<Action>
+     */
+    public function getCachedHeaderActions(): array
+    {
+        return array_values(array_filter(parent::getCachedHeaderActions(), fn (Action $action): bool => $action->getName() === 'cliUpdateRequired'));
+    }
+
+    /**
+     * @return array<Action>
+     */
+    public function getToolbarActions(): array
+    {
+        return array_values(array_filter(parent::getCachedHeaderActions(), fn (Action $action): bool => $action->getName() !== 'cliUpdateRequired'));
+    }
+
     protected function getHeaderActions(): array
     {
         return [
