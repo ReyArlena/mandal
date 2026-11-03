@@ -40,6 +40,8 @@
 | `db:user:create` | Create a database user (--name=, --database= for each, password in --from=) |
 | `db:user:delete` | Delete a database user no app uses (--name=) |
 | `db:user:update` | Set a user's databases (--database= for each) and optionally its password (--from=) |
+| `fail2ban:status` | Report fail2ban's jails and banned addresses as JSON |
+| `fail2ban:unban` | Unban an address (--ip=&lt;address&gt; [--jail=&lt;name&gt;]) |
 | `firewall:allow` | Allow a port (--port=443 [--proto=tcp/udp] [--from=&lt;cidr&gt;] [--comment=...]) |
 | `firewall:delete` | Delete a rule by its number from firewall:list (--number=N) |
 | `firewall:list` | List ufw rules as JSON |
@@ -61,6 +63,7 @@
 | `php:remove` | Remove a PHP version no app uses (--version=8.3) |
 | `provision` | Provision the server, or inspect it first with --check |
 | `reboot` | Reboot the server after a short delay |
+| `ssh:status` | Report sshd settings and the panels' SSH keys as JSON |
 | `updates:apply` | Install updates (--security, --all or --package=&lt;name&gt;) |
 | `updates:status` | Pending updates, component versions and reboot state as JSON |
 | `version` | Print the installed mandal version |

@@ -34,7 +34,7 @@ The full list of files is in [files changed on the server](../reference/server-f
 
 ## Moving around
 
-The server switcher next to the logo moves between servers and keeps you on the same page. Inside a server, tabs above the page title list its pages: Server, Apps, PHP, Firewall, Databases, Logs, Updates, Tasks and Edit. The servers list itself has no tabs; its table shows every server. Panel settings and your profile are in the user menu.
+The server switcher next to the logo moves between servers and keeps you on the same page. Inside a server, tabs above the page title list its pages: Server, Apps, PHP, Security, Databases, Logs, Updates, Tasks and Edit. The servers list itself has no tabs; its table shows every server. Panel settings and your profile are in the user menu.
 
 The **Server** tab shows the connection details and the panel's public key, then what is on the server: services, PHP versions and pools, nginx sites, databases, Supervisor programs, certificates, firewall rules, Docker and the apps Mandal manages. It is read from the server on each visit and cached for 20 seconds; **Refresh** reads it again. The System card also shows whether the ntsync driver is active, with **Enable** to load it now and at boot; see [Windows game servers and ntsync](./docker-apps#windows-game-servers-and-ntsync).
 
@@ -48,10 +48,10 @@ Every connection records the server's CLI build. When it differs from the panel'
 
 ## Several panels, one server
 
-Everything Mandal knows about a server lives on the server, so any panel with an accepted key can manage it. To let a second panel in, add that panel's public key (shown on its server page) with **Grant access** on the first panel, or on the server:
+Everything Mandal knows about a server lives on the server, so any panel with an accepted key can manage it. To let a second panel in, add that panel's public key (shown on its server page) with **Add key** under the first panel's **Security > SSH** page, or on the server:
 
 ```bash
 sudo mandal key:add --name="Laptop panel" --key="ssh-ed25519 ..."
 ```
 
-Keys are labelled, listed with `key:list` and removed with `key:remove --fingerprint=`. The last key can never be removed. The same mechanism is how you get a shell on a hardened server: grant your own public key, then SSH in as the `mandal` user.
+Keys are labelled and listed on the SSH page (`key:list`), where they can be removed again (`key:remove --fingerprint=`). The last key can never be removed, and a panel never removes its own. The same mechanism is how you get a shell on a hardened server: grant your own public key, then SSH in as the `mandal` user.

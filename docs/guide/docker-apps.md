@@ -35,7 +35,7 @@ Leave it off for game servers and other non-HTTP services. They publish their ow
 
 ## Ports and the firewall
 
-Docker publishes ports straight past ufw: anything in `ports:` not bound to `127.0.0.1` is reachable from the internet whatever the firewall rules say. The app page lists the published ports, and the **Firewall** page has a Docker section listing every port containers expose past the rules, read from `docker ps`.
+Docker publishes ports straight past ufw: anything in `ports:` not bound to `127.0.0.1` is reachable from the internet whatever the firewall rules say. The app page lists the published ports, and the **Firewall** page under **Security** has a Docker section listing every port containers expose past the rules, read from `docker ps`.
 
 ## The app page
 

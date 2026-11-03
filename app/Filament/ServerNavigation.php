@@ -40,12 +40,22 @@ class ServerNavigation
         'view' => ViewServer::class,
         'apps' => ServerApps::class,
         'php' => ServerPhp::class,
-        'firewall' => ServerFirewall::class,
+        'security' => ServerFirewall::class,
         'databases' => ServerDatabases::class,
         'logs' => ServerLogs::class,
         'updates' => ServerUpdates::class,
         'tasks' => ServerTasks::class,
         'edit' => EditServer::class,
+    ];
+
+    /**
+     * Sections whose tab is not named after their first page: the Security
+     * tab opens the Firewall page, with SSH and fail2ban in its sidebar.
+     *
+     * @var array<string, array{0: string, 1: Heroicon}>
+     */
+    private const array SECTION_LABELS = [
+        'security' => ['Security', Heroicon::OutlinedShieldCheck],
     ];
 
     /**
@@ -57,6 +67,8 @@ class ServerNavigation
         'app' => 'apps',
         'backups' => 'databases',
         'database-users' => 'databases',
+        'ssh' => 'security',
+        'fail2ban' => 'security',
         'task' => 'tasks',
     ];
 
@@ -66,7 +78,7 @@ class ServerNavigation
      *
      * @var list<string>
      */
-    private const array SERVER_WIDE_CHILD_PAGES = ['backups', 'database-users'];
+    private const array SERVER_WIDE_CHILD_PAGES = ['backups', 'database-users', 'ssh', 'fail2ban'];
 
     /**
      * The sections of the open server, the Servers and Mandal tabs on the
@@ -157,8 +169,10 @@ class ServerNavigation
         $items = [];
 
         foreach (self::SECTIONS as $name => $page) {
-            $items[] = NavigationItem::make($page::getNavigationLabel())
-                ->icon($page::getNavigationIcon())
+            [$label, $icon] = self::SECTION_LABELS[$name] ?? [$page::getNavigationLabel(), $page::getNavigationIcon()];
+
+            $items[] = NavigationItem::make($label)
+                ->icon($icon)
                 ->url(ServerResource::getUrl($name, ['record' => $server]))
                 ->isActiveWhen(fn (): bool => $current === $name);
         }

@@ -33,7 +33,7 @@ it('lists the server sections as tabs inside a server', function () {
     $items = ServerNavigation::items();
 
     expect(collect($items)->map(fn (NavigationItem $item): string => (string) $item->getLabel())->all())
-        ->toBe(['Server', 'Apps', 'PHP', 'Firewall', 'Databases', 'Logs', 'Updates', 'Tasks', 'Edit'])
+        ->toBe(['Server', 'Apps', 'PHP', 'Security', 'Databases', 'Logs', 'Updates', 'Tasks', 'Edit'])
         ->and(collect($items)->filter(fn (NavigationItem $item): bool => $item->isActive())->map(fn (NavigationItem $item): string => (string) $item->getLabel())->values()->all())->toBe(['PHP'])
         ->and($items[2]->getUrl())->toEndWith("/servers/{$this->web->getKey()}/php");
 });
@@ -47,6 +47,9 @@ it('keeps the parent section active on app and task pages', function () {
 
     openPage("/servers/{$this->web->getKey()}/backups");
     expect(ServerNavigation::currentSection())->toBe('databases');
+
+    openPage("/servers/{$this->web->getKey()}/security/ssh");
+    expect(ServerNavigation::currentSection())->toBe('security');
 });
 
 it('switches between servers and settings above the servers table and settings pages', function () {
@@ -73,8 +76,11 @@ it('shows no tabs on other pages outside a server', function () {
 });
 
 it('switches to the same section of another server', function () {
-    openPage("/servers/{$this->web->getKey()}/firewall");
-    expect(ServerNavigation::switchUrl($this->db))->toEndWith("/servers/{$this->db->getKey()}/firewall");
+    openPage("/servers/{$this->web->getKey()}/security");
+    expect(ServerNavigation::switchUrl($this->db))->toEndWith("/servers/{$this->db->getKey()}/security");
+
+    openPage("/servers/{$this->web->getKey()}/security/fail2ban");
+    expect(ServerNavigation::switchUrl($this->db))->toEndWith("/servers/{$this->db->getKey()}/security/fail2ban");
 
     openPage("/servers/{$this->web->getKey()}/apps/shop");
     expect(ServerNavigation::switchUrl($this->db))->toEndWith("/servers/{$this->db->getKey()}/apps");

@@ -4,9 +4,15 @@ case "$*" in
     printf 'Status\n|- Number of jail:\t2\n`- Jail list:\tsshd, nginx-http-auth\n'
     ;;
   "status sshd")
-    printf 'Status for the jail: sshd\n|- Filter\n|  |- Currently failed:\t1\n`- Actions\n   |- Currently banned:\t3\n   `- Banned IP list:\t1.2.3.4 5.6.7.8 9.9.9.9\n'
+    printf 'Status for the jail: sshd\n|- Filter\n|  |- Currently failed:\t1\n|  |- Total failed:\t42\n|  `- Journal matches:\t_SYSTEMD_UNIT=sshd.service + _COMM=sshd\n`- Actions\n   |- Currently banned:\t3\n   |- Total banned:\t12\n   `- Banned IP list:\t1.2.3.4 5.6.7.8 2001:db8::1\n'
     ;;
   "status nginx-http-auth")
-    printf 'Status for the jail: nginx-http-auth\n`- Actions\n   |- Currently banned:\t0\n'
+    printf 'Status for the jail: nginx-http-auth\n`- Actions\n   |- Currently banned:\t0\n   |- Total banned:\t0\n   `- Banned IP list:\t\n'
+    ;;
+  "set sshd unbanip "*)
+    echo 1
+    ;;
+  "unban "*)
+    echo 1
     ;;
 esac

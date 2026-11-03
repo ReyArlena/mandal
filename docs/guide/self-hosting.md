@@ -56,8 +56,8 @@ sudo mandal panel:update
 
 `panel:update` resolves the latest release (or `--version=`), installs that release's CLI, points the panel app at the release tag and deploys it. The panel is back a few seconds after the deploy switches over. It can be run again if interrupted; every step is skipped when already done. Running `install.sh` again does the same.
 
-Root logins are disabled once the server is provisioned, so to SSH in you need your own public key allowed with **Grant access** on the server's page (or `mandal key:add` while you still have a root session). You then sign in as the `mandal` user, which can run only `sudo mandal`.
+Root logins are disabled once the server is provisioned, so to SSH in you need your own public key allowed with **Add key** on the server's **Security > SSH** page (or `mandal key:add` while you still have a root session). You then sign in as the `mandal` user, which can run only `sudo mandal`.
 
 ## Managing from elsewhere too
 
-A hosted panel and a panel on your laptop can manage the same servers, including the hosting server. Add the second panel's key with **Grant access**; see [several panels, one server](./servers#several-panels-one-server).
+A hosted panel and a panel on your laptop can manage the same servers, including the hosting server. Add the second panel's key with **Add key** under **Security > SSH**; see [several panels, one server](./servers#several-panels-one-server).

@@ -10,9 +10,11 @@ use App\Filament\Resources\Servers\Pages\ServerApps;
 use App\Filament\Resources\Servers\Pages\ServerBackups;
 use App\Filament\Resources\Servers\Pages\ServerDatabases;
 use App\Filament\Resources\Servers\Pages\ServerDatabaseUsers;
+use App\Filament\Resources\Servers\Pages\ServerFail2ban;
 use App\Filament\Resources\Servers\Pages\ServerFirewall;
 use App\Filament\Resources\Servers\Pages\ServerLogs;
 use App\Filament\Resources\Servers\Pages\ServerPhp;
+use App\Filament\Resources\Servers\Pages\ServerSsh;
 use App\Filament\Resources\Servers\Pages\ServerTasks;
 use App\Filament\Resources\Servers\Pages\ServerUpdates;
 use App\Filament\Resources\Servers\Pages\ViewServer;
@@ -59,7 +61,9 @@ class ServerResource extends Resource
             'apps' => ServerApps::route('/{record}/apps'),
             'app' => ServerApp::route('/{record}/apps/{app}'),
             'php' => ServerPhp::route('/{record}/php'),
-            'firewall' => ServerFirewall::route('/{record}/firewall'),
+            'security' => ServerFirewall::route('/{record}/security'),
+            'ssh' => ServerSsh::route('/{record}/security/ssh'),
+            'fail2ban' => ServerFail2ban::route('/{record}/security/fail2ban'),
             'databases' => ServerDatabases::route('/{record}/databases'),
             'database-users' => ServerDatabaseUsers::route('/{record}/databases/users'),
             'backups' => ServerBackups::route('/{record}/backups'),

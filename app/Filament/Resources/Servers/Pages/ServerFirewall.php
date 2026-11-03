@@ -2,25 +2,27 @@
 
 namespace App\Filament\Resources\Servers\Pages;
 
+use App\Filament\Resources\Servers\Concerns\HasSecuritySidebar;
+use App\Filament\Resources\Servers\Concerns\RunsSecurityCommands;
 use App\Filament\Resources\Servers\ServerResource;
-use App\Mandal\MandalClient;
-use App\Models\Server;
-use App\Ssh\SshException;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 
 /**
- * ufw rules for one server: read live, add a port, delete a rule.
+ * ufw rules for one server: read live, add a port, delete a rule. The first
+ * page of the Security section; SSH and fail2ban sit beside it.
  */
 class ServerFirewall extends Page
 {
-    use InteractsWithRecord;
+    use HasSecuritySidebar, InteractsWithRecord {
+        HasSecuritySidebar::getSubNavigation insteadof InteractsWithRecord;
+    }
+    use RunsSecurityCommands;
 
     protected static string $resource = ServerResource::class;
 
@@ -33,8 +35,6 @@ class ServerFirewall extends Page
     /** @var array<string, mixed> */
     public array $firewall = [];
 
-    public ?string $error = null;
-
     public function mount(int|string $record): void
     {
         $this->record = $this->resolveRecord($record);
@@ -42,49 +42,21 @@ class ServerFirewall extends Page
         $this->load();
     }
 
-    protected function server(): Server
-    {
-        /** @var Server $server */
-        $server = $this->getRecord();
-
-        return $server;
-    }
-
     public function load(): void
     {
-        $this->error = null;
-
         if (! $this->server()->isProvisioned()) {
             $this->error = 'Provision this server first; ufw is set up during provisioning.';
 
             return;
         }
 
-        try {
-            $result = app(MandalClient::class)->run($this->server(), 'firewall:list', timeoutSeconds: 30);
-        } catch (SshException $exception) {
-            $this->error = $exception->getMessage();
-
-            return;
-        }
-
-        if ($result->failed()) {
-            $this->error = trim($result->errorOutput ?: $result->output);
-
-            return;
-        }
-
-        $this->firewall = $result->json();
+        $this->firewall = $this->read('firewall:list') ?? [];
     }
 
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('refresh')
-                ->label('Refresh')
-                ->icon(Heroicon::OutlinedArrowPath)
-                ->color('gray')
-                ->action(fn () => $this->load()),
+            $this->refreshAction(),
             Action::make('allow')
                 ->label('Allow a port')
                 ->icon(Heroicon::OutlinedPlus)
@@ -145,28 +117,5 @@ class ServerFirewall extends Page
 
                 $this->runSynchronously("firewall:delete --number={$number}", "Deleted rule {$number}", 'Could not delete the rule');
             });
-    }
-
-    private function runSynchronously(string $command, string $successTitle, string $failureTitle): void
-    {
-        $mandal = app(MandalClient::class);
-
-        try {
-            $result = $mandal->run($this->server(), $command, timeoutSeconds: 60);
-        } catch (SshException $exception) {
-            Notification::make()->title($failureTitle)->body($exception->getMessage())->danger()->send();
-
-            return;
-        }
-
-        if ($result->failed()) {
-            Notification::make()->title($failureTitle)->body(trim($result->errorOutput ?: $result->output))->danger()->send();
-
-            return;
-        }
-
-        $mandal->forgetInventory($this->server());
-        Notification::make()->title($successTitle)->success()->send();
-        $this->load();
     }
 }

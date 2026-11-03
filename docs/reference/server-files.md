@@ -185,6 +185,10 @@ Every backup target (the server's databases, or one app) has a local and a remot
 
 `firewall:allow` runs `ufw allow <port>/<proto>` (with `from <cidr>` when given) and `firewall:delete` runs `ufw --force delete <number>`. ufw keeps its state in `/etc/ufw/user.rules` and `user6.rules`. The SSH rule, and the HTTP and HTTPS rules on a server hosting the panel, are refused.
 
+## SSH and fail2ban
+
+`ssh:status` reads `sshd -T` and whether `/etc/ssh/sshd_config.d/10-mandal.conf` exists; it changes nothing. `key:add` and `key:remove` edit `/home/mandal/.ssh/authorized_keys` (a copy is kept under the config backup directory before a removal). `fail2ban:status` reads `fail2ban-client status` for each jail, and `fail2ban:unban` runs `fail2ban-client set <jail> unbanip <address>`, or `fail2ban-client unban <address>` without a jail. Jails live in `/etc/fail2ban/jail.d/mandal.local`.
+
 ## PHP versions
 
 | Command | Changes |

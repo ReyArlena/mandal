@@ -1296,6 +1296,28 @@ del="$(cmd_firewall_delete --number=3 --dry-run 2>&1)"
 [[ "$del" == *"ufw --force delete 3"* ]] && pass || fail "firewall:delete removes a rule by number"
 (cmd_firewall_delete --number=abc --dry-run) > /dev/null 2>&1 && fail "firewall:delete validates the number" || pass
 
+# ssh:status and fail2ban
+ssh_status="$(cmd_ssh_status)"
+assert_json "ssh:status reads the sshd port" "$ssh_status" '.sshd.port' "2222"
+assert_json "ssh:status reads password authentication" "$ssh_status" '.sshd.password_authentication' "yes"
+assert_json "ssh:status reports the hardening drop-in" "$ssh_status" '.sshd.hardened' "false"
+assert_json "ssh:status leaves an unreported setting null" "$ssh_status" '.sshd.max_auth_tries' "null"
+assert_json "ssh:status lists the panel keys" "$ssh_status" '.keys | type' "array"
+
+f2b="$(cmd_fail2ban_status)"
+assert_json "fail2ban:status lists the jails" "$f2b" '.jails | map(.name) | join(",")' "sshd,nginx-http-auth"
+assert_json "fail2ban:status counts bans" "$f2b" '.jails[0].banned' "3"
+assert_json "fail2ban:status counts failures" "$f2b" '.jails[0].failed' "1"
+assert_json "fail2ban:status reads the total" "$f2b" '.jails[0].total_banned' "12"
+assert_json "fail2ban:status lists banned addresses, IPv6 included" "$f2b" '.jails[0].ips | join(",")' "1.2.3.4,5.6.7.8,2001:db8::1"
+assert_json "fail2ban:status reads an empty jail" "$f2b" '.jails[1].ips | length' "0"
+unban="$(cmd_fail2ban_unban --jail=sshd --ip=1.2.3.4 --dry-run 2>&1)"
+[[ "$unban" == *"fail2ban-client set sshd unbanip 1.2.3.4"* && "$unban" == *"Unbanned 1.2.3.4 in sshd."* ]] && pass || fail "fail2ban:unban unbans in one jail"
+unban="$(cmd_fail2ban_unban --ip=2001:db8::1 --dry-run 2>&1)"
+[[ "$unban" == *"fail2ban-client unban 2001:db8::1"* ]] && pass || fail "fail2ban:unban unbans everywhere without a jail"
+(cmd_fail2ban_unban --ip='1.2.3.4; rm' --dry-run) > /dev/null 2>&1 && fail "fail2ban:unban validates the address" || pass
+(cmd_fail2ban_unban --ip=1.2.3.4 --jail='x y' --dry-run) > /dev/null 2>&1 && fail "fail2ban:unban validates the jail" || pass
+
 assert_json "php:available lists versions with completeness" "$(cmd_php_available)" 'map(select(.version == "8.6")) | .[0].complete' "false"
 assert_json "php:list shows installed versions and their apps" "$(cmd_php_list)" 'map(select(.version == "8.5")) | .[0].apps | sort | join(",")' "api,shop"
 assert_json "php:list reports PHP's own limits where Mandal set none" "$(cmd_php_list)" 'map(select(.version == "8.5")) | .[0].limits | .upload_max_filesize + "/" + .memory_limit + "/" + (.managed | tostring)' "2M/128M/false"

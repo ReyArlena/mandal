@@ -1,4 +1,4 @@
-# PHP, firewall, updates and logs
+# PHP, security, updates and logs
 
 ## PHP versions
 
@@ -6,13 +6,27 @@ The **PHP** page lists installed versions, which apps use each one and the CLI d
 
 Each version shows its PHP-FPM limits, and **Limits** changes them (`mandal php:limits`): `upload_max_filesize`, `post_max_size` (at least the upload size, or uploads that size fail), `memory_limit` (`-1` for none), `max_execution_time` and `max_input_time` (`0` for none). They apply to every app on that version and default to `1G`, `1G`, `256M`, `300` and `300`; the CLI keeps PHP's own, so artisan commands and queue workers have no time limit. The **nginx** section shows `client_max_body_size`, nginx's limit on request bodies for every site, which defaults to `1g`; a larger request gets "413 Request Entity Too Large" before PHP sees it, so keep it at least as large as the upload limits. **Change** sets it (`mandal nginx:limits`), unless `/etc/nginx/nginx.conf` sets it itself. On a server set up before Mandal managed these, the page shows what PHP-FPM really uses (PHP's own `2M` upload limit, for instance) with a **PHP defaults** badge, and nginx may still be at `64m`: set both here.
 
-## Firewall
+## Security
+
+The **Security** tab has a sidebar with three pages: Firewall, SSH and fail2ban.
+
+### Firewall
 
 The **Firewall** page shows the ufw rules, allows a port (optionally from one address only, TCP or UDP, with a comment) and deletes rules by number. The SSH rule can never be deleted, and the HTTP and HTTPS rules are protected while the server hosts the panel.
 
 Provisioning sets the defaults to deny incoming and allow outgoing, then allows the SSH port, 80 and 443. Rules that were there before are kept.
 
 The Docker section lists ports that containers publish past ufw. See [Docker apps](./docker-apps#ports-and-the-firewall).
+
+### SSH
+
+The **SSH** page reads the running sshd (`mandal ssh:status`): whether Mandal's hardening drop-in is in place, the port, and whether password, root and key logins are allowed, with a warning badge when password or root logins are still on. These are read-only; change them on the server.
+
+Below it are the keys in the `mandal` user's `authorized_keys`, each with its label, type and fingerprint. **Add key** allows another panel's public key, or your own to get a shell as the `mandal` user (`key:add`); **Remove** takes a key out again (`key:remove`). This panel's own key is marked and cannot be removed from here, and the CLI refuses to remove the last key. See [several panels, one server](./servers#several-panels-one-server).
+
+### fail2ban
+
+The **fail2ban** page lists the jails (`mandal fail2ban:status`): how many addresses each one has banned right now, how many are failing and the total since fail2ban started, with the banned addresses under each jail. **Unban** lets an address back in (`fail2ban:unban`); it is banned again after the next run of failures. Provisioning installs fail2ban with the `sshd` jail on the systemd journal. Its log is on the Logs page.
 
 ## Updates
 
