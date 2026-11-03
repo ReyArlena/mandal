@@ -1,7 +1,9 @@
 <?php
 
+use App\Filament\Clusters\Settings\Pages\BackupDestinations;
 use App\Filament\Clusters\Settings\Pages\General;
 use App\Filament\Clusters\Settings\Pages\SourceProviders;
+use App\Filament\Clusters\Settings\Resources\DetailsPages\Pages\ListDetailsPages;
 use App\Filament\Clusters\Settings\SettingsCluster;
 use App\Models\Setting;
 use App\Models\SourceCredential;
@@ -78,3 +80,12 @@ it('shows a sidebar with every settings section', function () {
         ->assertOk()
         ->assertSeeInOrder(['Source providers', 'Backup destinations', 'Server details pages']);
 });
+
+it('heads every settings section with the section name', function (string $page) {
+    expect(livewire($page)->instance()->getHeading())->toBe('Settings');
+})->with([
+    General::class,
+    SourceProviders::class,
+    BackupDestinations::class,
+    ListDetailsPages::class,
+]);

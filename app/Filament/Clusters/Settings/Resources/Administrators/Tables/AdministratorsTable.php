@@ -51,8 +51,6 @@ class AdministratorsTable
 
         Filament::auth()->setUser($record);
 
-        if (request()->hasSession()) {
-            request()->session()->put('password_hash_'.Filament::getAuthGuard(), $record->getAuthPassword());
-        }
+        session()->put('password_hash_'.Filament::getAuthGuard(), $record->getAuthPassword());
     }
 }
