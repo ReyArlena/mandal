@@ -23,6 +23,14 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
     use HasFactory, InteractsWithAppAuthentication, InteractsWithAppAuthenticationRecovery, Notifiable;
 
     /**
+     * Notifications are polymorphic, so no foreign key removes them with the account.
+     */
+    protected static function booted(): void
+    {
+        static::deleting(fn (User $user) => $user->notifications()->delete());
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>

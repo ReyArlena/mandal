@@ -24,7 +24,7 @@ class BackupDestinations extends Page
 
     protected static ?string $cluster = SettingsCluster::class;
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 4;
 
     protected static ?string $slug = 'backup-destinations';
 
