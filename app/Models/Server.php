@@ -105,6 +105,19 @@ class Server extends Model
     }
 
     /**
+     * Remember which app on the server hosts the Mandal panel, as its
+     * inventory reports it; null once it hosts none.
+     */
+    public function recordPanelApp(?string $app): void
+    {
+        if ($app === $this->panel_app) {
+            return;
+        }
+
+        $this->forceFill(['panel_app' => $app])->saveQuietly();
+    }
+
+    /**
      * A one-word summary of how far setup has got.
      */
     public function status(): string

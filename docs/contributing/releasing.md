@@ -1,6 +1,6 @@
 # Releasing
 
-A release is a `v*` tag on `main`. The tag must equal the `VERSION` file, and that file is the only place the version lives: the CLI prints it and the panel compares it with GitHub's latest release. `setup.sh`, `install.sh` and `panel:update` install the newest `v*` tag they find (or `--version=<tag>`), and the scripts themselves are served from the latest release.
+A release is a `v*` tag on `main`. The tag must equal the `VERSION` file, and that file is the only place the version lives: the CLI prints it and the panel compares it with GitHub's latest release. `setup.sh`, `install.sh` and `panel:update` install the newest `v*` tag they find (or `--version=<tag>`), and the scripts themselves are served from the latest release. A hosted panel on the **Development** release channel follows `main` instead (`panel:update --branch=main`), so every commit there should leave `install.sh`, the CLI and the panel working together.
 
 ## Steps
 
@@ -19,7 +19,7 @@ A release is a `v*` tag on `main`. The tag must equal the `VERSION` file, and th
 
 - New servers set up from the panel install the release's CLI, then receive the panel's own build on first connection if it differs.
 - Existing servers show **CLI update required** once the panel running the new version talks to them, because the build hash changed. The hourly check notifies every user.
-- Hosted panels notify every user within an hour and show the steps for `sudo mandal panel:update` under **Settings > Updates**.
+- Hosted panels on the Stable channel notify every user within an hour and offer **Update to Mandal x.y.z** under **Settings > Updates**, which runs `panel:update` as a task on the hosting server. Panels on the Development channel are offered every new commit on `main` the same way.
 - Panels running from a checkout are updated with `git pull`, `composer install`, `bun run build`, `php artisan migrate` and `php artisan optimize`.
 
 ## Compatibility rules

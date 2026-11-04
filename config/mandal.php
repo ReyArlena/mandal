@@ -17,6 +17,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Release file
+    |--------------------------------------------------------------------------
+    |
+    | Every deploy by the mandal CLI writes the branch or tag and the commit
+    | it came from next to the code. A hosted panel reads its own to know
+    | which build it runs; a panel run from a checkout has none.
+    |
+    */
+
+    'release_file' => env('MANDAL_RELEASE_FILE', base_path('.mandal-release')),
+
+    /*
+    |--------------------------------------------------------------------------
     | Backup imports
     |--------------------------------------------------------------------------
     |

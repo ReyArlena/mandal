@@ -2,6 +2,7 @@
 
 namespace App\Filament\Clusters\Settings\Pages;
 
+use App\Enums\ReleaseChannel;
 use App\Filament\Clusters\Settings\Concerns\HasSettingsHeading;
 use App\Filament\Clusters\Settings\SettingsCluster;
 use App\Filament\Resources\Servers\ServerResource;
@@ -11,15 +12,18 @@ use App\Mandal\MandalClient;
 use App\Mandal\PanelReleases;
 use App\Models\Server;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Radio;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
- * The panel's release against the latest on GitHub, and the CLI build each
- * server runs against the one this panel ships. The panel is updated on the
- * server that hosts it; the CLI on any server is updated from here.
+ * The panel's build against the newest on its release channel, and the
+ * CLI build each server runs against the one this panel ships. Both are
+ * updated from here: the panel through a task on the server hosting it,
+ * the CLI through a task on each server.
  */
 class Updates extends Page
 {
@@ -35,7 +39,7 @@ class Updates extends Page
 
     public static function getPageDescription(): string
     {
-        return 'The panel itself is updated on the server that hosts it; the mandal CLI on each server is updated from here. Both are checked every hour.';
+        return 'The panel follows its release channel and is updated on the server that hosts it; the mandal CLI on each server is updated from here too. Both are checked every hour.';
     }
 
     protected function getHeaderActions(): array
@@ -93,6 +97,89 @@ class Updates extends Page
         };
     }
 
+    public function hostingServer(): ?Server
+    {
+        return $this->releases()->hostingServer();
+    }
+
+    /**
+     * Picks the builds the panel follows, then reads GitHub at once so the
+     * page shows what the new channel has to offer.
+     */
+    public function releaseChannelAction(): Action
+    {
+        return Action::make('releaseChannel')
+            ->label('Change')
+            ->link()
+            ->modalHeading('Release channel')
+            ->modalDescription('Which builds of Mandal this panel offers to update to. The CLI on every server follows the panel, whichever channel it is on.')
+            ->modalWidth(Width::Large)
+            ->fillForm(fn (): array => ['channel' => $this->releases()->channel()->value])
+            ->schema([
+                Radio::make('channel')
+                    ->hiddenLabel()
+                    ->options(ReleaseChannel::class)
+                    ->required(),
+            ])
+            ->modalSubmitActionLabel('Save')
+            ->action(function (array $data, PanelReleases $releases): void {
+                $channel = $data['channel'] instanceof ReleaseChannel ? $data['channel'] : ReleaseChannel::from((string) $data['channel']);
+
+                if ($channel !== $releases->channel()) {
+                    $releases->setChannel($channel);
+                    $releases->check();
+                }
+
+                Notification::make()->title("Release channel set to {$channel->getLabel()}")->success()->send();
+            });
+    }
+
+    /**
+     * Runs panel:update on the hosting server for the build the channel
+     * points at, and opens the task to follow it.
+     */
+    public function updatePanelAction(): Action
+    {
+        return Action::make('updatePanel')
+            ->label(fn (): string => 'Update to '.($this->releases()->pending()?->label() ?? 'the latest build'))
+            ->icon(Heroicon::OutlinedArrowUpCircle)
+            ->color('info')
+            ->visible(fn (): bool => $this->releases()->pending() !== null && $this->hostingServer() !== null)
+            ->requiresConfirmation()
+            ->modalHeading(fn (): string => 'Update the panel to '.($this->releases()->pending()?->label() ?? 'the latest build').'?')
+            ->modalDescription(fn (): string => sprintf(
+                'Runs mandal panel:update %s on %s: it installs that build\'s CLI, points the panel app at %s and deploys it. The panel is unavailable for a few seconds while the new release switches over; the task page shows the rest once it is back.',
+                $this->releases()->pending()?->arguments(),
+                $this->hostingServer()?->name,
+                $this->releases()->pending()?->ref,
+            ))
+            ->modalSubmitActionLabel('Update')
+            ->action(function (PanelReleases $releases): void {
+                $update = $releases->pending();
+                $server = $releases->hostingServer();
+
+                if ($update === null || $server === null) {
+                    return;
+                }
+
+                if ($server->hasActiveTask()) {
+                    Notification::make()
+                        ->title('Another task is still running')
+                        ->body("Wait for it to finish; only one task runs on {$server->name} at a time.")
+                        ->warning()
+                        ->send();
+
+                    return;
+                }
+
+                $task = $releases->queue($update, $server);
+
+                Notification::make()->title('Panel update started')->body('Follow the progress on the task page; it pauses while the panel switches over.')->success()->send();
+
+                $this->redirect(ServerResource::getUrl('task', ['record' => $server, 'task' => $task]));
+            });
+    }
+
     public function updateCliAction(): Action
     {
         return Action::make('updateCli')
@@ -140,6 +227,7 @@ class Updates extends Page
             ->action(function (CliUpdates $updates, MandalClient $mandal, PanelReleases $releases): void {
                 $outdated = $updates->checkAll($mandal);
                 $latest = $releases->check();
+                $update = $releases->pending();
 
                 $cli = match (count($outdated)) {
                     0 => 'Every reachable server runs the current CLI.',
@@ -148,8 +236,10 @@ class Updates extends Page
                 };
 
                 $panel = match (true) {
+                    $update !== null => "{$update->label()} is available.",
                     $latest === null => 'The latest release could not be read from GitHub.',
-                    $releases->available() => "Mandal {$latest} is available.",
+                    $releases->channel() === ReleaseChannel::Development && $releases->latestCommit() === null => 'The development branch could not be read from GitHub.',
+                    $releases->channel() === ReleaseChannel::Development => 'This panel runs the latest development build.',
                     default => 'This panel runs the latest release.',
                 };
 

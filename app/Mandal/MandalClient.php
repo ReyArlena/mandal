@@ -71,8 +71,26 @@ class MandalClient
         });
 
         $this->sawCliBuild($server, $inventory['mandal']['build'] ?? null);
+        $this->sawPanelApp($server, $inventory['mandal'] ?? []);
 
         return $inventory;
+    }
+
+    /**
+     * An inventory says which app hosts the panel, if any; a CLI too old
+     * to report it leaves the record alone.
+     *
+     * @param  array<string, mixed>  $mandal
+     */
+    private function sawPanelApp(Server $server, array $mandal): void
+    {
+        if (! array_key_exists('panel_app', $mandal)) {
+            return;
+        }
+
+        $app = $mandal['panel_app'];
+
+        $server->recordPanelApp(is_string($app) && $app !== '' ? $app : null);
     }
 
     /**

@@ -15,6 +15,7 @@ enum TaskType: string implements HasLabel
     case Certificate = 'certificate';
     case AppSettings = 'app-settings';
     case UpdateCli = 'update-cli';
+    case UpdatePanel = 'update-panel';
     case Backup = 'backup';
     case Restore = 'restore';
     case ImportDatabase = 'import-database';
@@ -34,6 +35,7 @@ enum TaskType: string implements HasLabel
             self::Certificate => 'Request certificate',
             self::AppSettings => 'App settings',
             self::UpdateCli => 'Update CLI',
+            self::UpdatePanel => 'Update panel',
             self::Backup => 'Back up',
             self::Restore => 'Restore backup',
             self::ImportDatabase => 'Import database',

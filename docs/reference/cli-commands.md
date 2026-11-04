@@ -54,7 +54,7 @@
 | `nginx:limits` | Change nginx's request body limit for every site (--client-max-body-size=1g) |
 | `ntsync:enable` | Load the ntsync driver for Windows game servers under Proton or Wine, now and at boot |
 | `panel:install` | Create an app for hosting the panel on this server (--name= --domain= --repo=) |
-| `panel:update` | Update the hosted panel and the CLI to a release (--version=&lt;tag&gt;, default: the latest) |
+| `panel:update` | Update the hosted panel and the CLI to a release or a branch (--version=&lt;tag&gt; or --branch=&lt;name&gt;; default: the branch the panel tracks, else the latest release) |
 | `php:available` | PHP versions the package source offers, as JSON |
 | `php:default` | Make a version the CLI default (--version=8.4) |
 | `php:install` | Install a PHP version with every extension Laravel needs (--version=8.4) |

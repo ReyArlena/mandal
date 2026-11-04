@@ -4,7 +4,7 @@
 # normal app, flagged so that nothing can pull the rug from under it.
 
 MANDAL_COMMANDS+=("panel:install|Create an app for hosting the panel on this server (--name= --domain= --repo=)|write")
-MANDAL_COMMANDS+=("panel:update|Update the hosted panel and the CLI to a release (--version=<tag>, default: the latest)|write")
+MANDAL_COMMANDS+=("panel:update|Update the hosted panel and the CLI to a release or a branch (--version=<tag> or --branch=<name>; default: the branch the panel tracks, else the latest release)|write")
 
 # The panel's own .env: SQLite in shared/ so it survives deploys, database
 # queue and cache so no extra service is involved.
@@ -129,21 +129,33 @@ panel_latest_tag() {
     git ls-remote --tags --refs "$1" 'refs/tags/v*' 2> /dev/null | awk -F/ '{print $NF}' | sort -V | tail -n 1 || true
 }
 
+# Whether a ref the panel app tracks is a release tag rather than a branch.
+panel_ref_is_tag() {
+    [[ "$1" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+}
+
 # panel:update - what install.sh does on a server that already hosts the
-# panel: fetch the release, update the CLI through cli:update, point the
-# panel app at the tag and deploy it. Run as root on the server:
+# panel: fetch the release (or a branch, for development builds), update
+# the CLI through cli:update, point the panel app at the ref and deploy
+# it. Without --version or --branch, a panel that tracks a branch stays on
+# it and one on a release tag moves to the latest release. Run as root on
+# the server:
 #   sudo mandal panel:update
 cmd_panel_update() {
-    local version="" source_dir="" arg name manifest repo clone_url checkout tmp target_version target_label installed_version deployed_version=""
+    local version="" branch="" source_dir="" arg name manifest repo clone_url checkout tmp ref tracked target_version target_label target_commit="" installed_version cli_current=false deployed_version="" deployed_commit="" current
     for arg in "$@"; do
         case "$arg" in
             --version=*) version="${arg#*=}" ;;
+            --branch=*) branch="${arg#*=}" ;;
             --source=*) source_dir="${arg#*=}" ;;
             --dry-run) export MANDAL_DRY_RUN=1 ;;
             *) die 64 "unknown option '$arg'" ;;
         esac
     done
     [[ -z "$version" || "$version" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || die 2 "invalid version '$version' (expected a release tag such as v0.1.0)"
+    [[ -z "$branch" ]] || validate_branch "$branch"
+    [[ -z "$branch" ]] || ! panel_ref_is_tag "$branch" || die 2 "'$branch' is a release tag; pass it as --version=$branch"
+    [[ -z "$version" || -z "$branch" ]] || die 64 "--version and --branch cannot be combined"
     [[ -z "$source_dir" || -x "$source_dir/server/bin/mandal" ]] || die 2 "--source must point at a checkout of the repository"
     require_root
     load_all_drivers
@@ -152,6 +164,10 @@ cmd_panel_update() {
     manifest="$(app_conf_path "$name")"
     repo="$(conf_get "$manifest" REPO)" || die "the panel app has no repository in its manifest"
     clone_url="https://github.com/$repo.git"
+    tracked="$(conf_get "$manifest" BRANCH 2> /dev/null || true)"
+    if [[ -z "$version" && -z "$branch" && -z "$source_dir" && -n "$tracked" ]] && ! panel_ref_is_tag "$tracked"; then
+        branch="$tracked"
+    fi
 
     tmp="$(mktemp -d)"
     # shellcheck disable=SC2064  # expand now: the directory is fixed
@@ -159,14 +175,28 @@ cmd_panel_update() {
     if [[ -n "$source_dir" ]]; then
         checkout="$source_dir"
         target_version="$(tr -d '[:space:]' < "$checkout/VERSION")"
-        version="v$target_version"
+        ref="v$target_version"
         target_label="$source_dir ($target_version)"
+    elif [[ -n "$branch" ]]; then
+        ref="$branch"
+        target_label="$repo@$branch"
+        checkout="$tmp/checkout"
+        step "Fetching $target_label"
+        run_cmd git clone --quiet --depth 1 --branch "$branch" "$clone_url" "$checkout"
+        if dry_run; then
+            target_version="$(mandal_version)"
+        else
+            target_commit="$(git -C "$checkout" rev-parse HEAD)"
+            target_version="$(tr -d '[:space:]' < "$checkout/VERSION")"
+            target_label="$repo@$branch (${target_commit:0:7})"
+        fi
     else
         if [[ -z "$version" ]]; then
             version="$(panel_latest_tag "$clone_url")"
             [[ -n "$version" ]] || die "no release tags found in $clone_url; pass --version=<tag>"
         fi
         [[ "$version" == v* ]] || version="v$version"
+        ref="$version"
         target_version="${version#v}"
         target_label="$repo@$version"
         checkout="$tmp/checkout"
@@ -178,21 +208,36 @@ cmd_panel_update() {
     fi
     dry_run || [[ -x "$checkout/server/bin/mandal" && -f "$checkout/server/lib/core.sh" ]] || die "$target_label does not contain the mandal CLI"
 
+    # A release is current by version; a branch build only by its exact
+    # files, as the version does not move between commits.
     installed_version="$(mandal_version)"
-    [[ -r "$(app_home "$name")/current/VERSION" ]] && deployed_version="$(tr -d '[:space:]' < "$(app_home "$name")/current/VERSION")"
-    if panel_version_at_least "$installed_version" "$target_version" && [[ "$deployed_version" == "$target_version" ]]; then
-        printf 'Mandal %s is already installed and deployed.\n' "$target_version"
-        return 0
+    current="$(app_home "$name")/current"
+    [[ -r "$current/VERSION" ]] && deployed_version="$(tr -d '[:space:]' < "$current/VERSION")"
+    [[ -r "$current/.mandal-release" ]] && deployed_commit="$(conf_get "$current/.mandal-release" COMMIT 2> /dev/null || true)"
+    if [[ -n "$branch" ]]; then
+        [[ -d "$checkout" && "$(MANDAL_ROOT="$checkout/server" mandal_build_hash)" == "$(mandal_build_hash)" ]] && cli_current=true
+        if [[ "$cli_current" == true && -n "$target_commit" && "$deployed_commit" == "$target_commit" && "$tracked" == "$ref" ]]; then
+            printf 'Mandal %s from %s is already installed and deployed.\n' "$target_version" "$target_label"
+            return 0
+        fi
+    else
+        panel_version_at_least "$installed_version" "$target_version" && cli_current=true
+        if [[ "$cli_current" == true && "$deployed_version" == "$target_version" ]]; then
+            printf 'Mandal %s is already installed and deployed.\n' "$target_version"
+            return 0
+        fi
     fi
 
     if ! dry_run; then
         with_lock
-        audit "panel:update $version"
+        audit "panel:update $ref"
     fi
 
     step "mandal CLI $target_version"
-    if panel_version_at_least "$installed_version" "$target_version"; then
-        printf '+ mandal %s already installed\n' "$installed_version"
+    if [[ "$cli_current" == true ]]; then
+        printf '+ mandal %s (build %s) already installed\n' "$installed_version" "$(mandal_build_hash)"
+    elif dry_run && [[ ! -d "$checkout" ]]; then
+        printf '+ would install the CLI from %s\n' "$target_label"
     else
         mkdir -p "$tmp/mandal"
         cp -R "$checkout/server/." "$tmp/mandal/"
@@ -203,13 +248,19 @@ cmd_panel_update() {
     fi
 
     step "Panel $name from $target_label"
-    if [[ "$(conf_get "$manifest" BRANCH 2> /dev/null || true)" != "$version" ]]; then
-        cmd_app_configure --name="$name" --branch="$version"
+    if [[ "$tracked" != "$ref" ]]; then
+        cmd_app_configure --name="$name" --branch="$ref"
     fi
-    if [[ "$deployed_version" == "$target_version" ]]; then
+    if [[ -z "$branch" && "$deployed_version" == "$target_version" ]]; then
         printf '+ mandal %s already deployed\n' "$deployed_version"
+    elif [[ -n "$branch" && -n "$target_commit" && "$deployed_commit" == "$target_commit" ]]; then
+        printf '+ %s already deployed\n' "$target_label"
     else
         cmd_app_deploy --name="$name"
     fi
-    printf '\nMandal %s is installed and deployed.\n' "$target_version"
+    if [[ -n "$branch" ]]; then
+        printf '\nMandal %s from %s is installed and deployed.\n' "$target_version" "$target_label"
+    else
+        printf '\nMandal %s is installed and deployed.\n' "$target_version"
+    fi
 }

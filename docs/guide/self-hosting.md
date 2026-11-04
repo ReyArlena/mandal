@@ -47,14 +47,24 @@ Keep a copy of `shared/database.sqlite` together with the `APP_KEY` from `shared
 
 ## Updating
 
-The panel checks GitHub for a newer release every hour (**Check now** under **Settings > Updates** does it at once). When one exists, every user gets a persistent notification and **Settings > Updates** shows the steps below. The update runs on the server itself, because deploying the panel restarts the queue worker that would otherwise drive it:
+The panel follows a **release channel**, chosen under **Settings > Updates**:
+
+| Channel | Follows |
+|---|---|
+| **Stable** (default) | Releases: the newest `v*` tag on GitHub. |
+| **Development** | Every commit on the `main` branch as it lands. Unreleased changes, possibly broken ones. |
+
+Every hour the panel checks GitHub for the channel's newest build (**Check now** does it at once). When one exists that the panel does not run, every user gets a persistent notification and **Settings > Updates** shows an **Update to …** button. It queues `mandal panel:update` as a task on the server hosting the panel, which the panel knows from the server's inventory (or the server registered at 127.0.0.1 by `install.sh`): the task installs that build's CLI, points the panel app at the release tag or branch and deploys it. The panel is unavailable for a few seconds while the new release switches over; the queue worker finishes the task before it restarts on the new code, so the task page shows the rest once the panel is back. Switching channel offers the matching build at once, so a panel on `main` is moved back to the latest release by choosing **Stable** and updating.
+
+The same can be done from a shell on the server, which is what the page shows when it does not know which server hosts the panel:
 
 ```bash
 ssh mandal@panel.example.com
-sudo mandal panel:update
+sudo mandal panel:update --version=v0.2.0   # a release
+sudo mandal panel:update --branch=main      # the development branch
 ```
 
-`panel:update` resolves the latest release (or `--version=`), installs that release's CLI, points the panel app at the release tag and deploys it. The panel is back a few seconds after the deploy switches over. It can be run again if interrupted; every step is skipped when already done. Running `install.sh` again does the same.
+Without `--version` or `--branch`, `panel:update` keeps following a branch the panel already tracks and moves a panel on a release to the latest one. It can be run again if interrupted; every step is skipped when already done. Running `install.sh` again does the same as `--version=`.
 
 Root logins are disabled once the server is provisioned, so to SSH in you need your own public key allowed with **Add key** on the server's **Security > SSH** page (or `mandal key:add` while you still have a root session). You then sign in as the `mandal` user, which can run only `sudo mandal`.
 

@@ -1360,7 +1360,7 @@ assert_eq "panel:install succeeds when the panel app already exists" "0" "$?"
 printf 'TYPE=laravel\nPANEL=true\nDOMAIN=panel.example.com\nPHP=8.5\nREPO=acme/mandal\nBRANCH=v0.0.9\nCLONE=https\n' > "${MANDAL_APPS_DIR}/mandal-panel.conf"
 pupdate="$(cmd_panel_update --source="${MANDAL_ROOT}/.." --dry-run 2>&1)"
 assert_eq "panel:update dry run completes" "0" "$?"
-for marker in "+ mandal $(mandal_version) already installed" "Updated ${MANDAL_APPS_DIR}/mandal-panel.conf." "Deploying mandal-panel from acme/mandal@v$(mandal_version)" "Mandal $(mandal_version) is installed and deployed."; do
+for marker in "+ mandal $(mandal_version) (build $(mandal_build_hash)) already installed" "Updated ${MANDAL_APPS_DIR}/mandal-panel.conf." "Deploying mandal-panel from acme/mandal@v$(mandal_version)" "Mandal $(mandal_version) is installed and deployed."; do
     [[ "$pupdate" == *"$marker"* ]] && pass || fail "panel:update mentions: $marker"
 done
 [[ "$pupdate" != *"tar -xzf"* ]] && pass || fail "panel:update leaves a current CLI alone"
@@ -1372,6 +1372,20 @@ assert_eq "panel:update is a no-op when installed and deployed" "Mandal $(mandal
 rm -rf "${MANDAL_HOME_DIR}/mandal-panel"
 (cmd_panel_update --version=latest --dry-run) > /dev/null 2>&1 && fail "panel:update rejects a version that is not a tag" || pass
 (cmd_panel_update --source="$TMP" --dry-run) > /dev/null 2>&1 && fail "panel:update rejects a source without the CLI" || pass
+pbranch="$(cmd_panel_update --branch=main --dry-run 2>&1)"
+assert_eq "panel:update --branch dry run completes" "0" "$?"
+for marker in "Fetching acme/mandal@main" "git clone --quiet --depth 1 --branch main https://github.com/acme/mandal.git" "+ would install the CLI from acme/mandal@main" "Updated ${MANDAL_APPS_DIR}/mandal-panel.conf." "Deploying mandal-panel from acme/mandal@main" "Mandal $(mandal_version) from acme/mandal@main is installed and deployed."; do
+    [[ "$pbranch" == *"$marker"* ]] && pass || fail "panel:update --branch mentions: $marker"
+done
+assert_eq "panel:update --branch points the panel app at the branch" "main" "$(conf_get "${MANDAL_APPS_DIR}/mandal-panel.conf" BRANCH)"
+ptracked="$(cmd_panel_update --dry-run 2>&1)"
+assert_eq "panel:update without a ref keeps following the branch" "0" "$?"
+[[ "$ptracked" == *"Fetching acme/mandal@main"* && "$ptracked" != *"Updated ${MANDAL_APPS_DIR}/mandal-panel.conf."* ]] && pass || fail "panel:update stays on the tracked branch without reconfiguring the app"
+pback="$(cmd_panel_update --source="${MANDAL_ROOT}/.." --dry-run 2>&1)"
+[[ "$pback" == *"Updated ${MANDAL_APPS_DIR}/mandal-panel.conf."* && "$(conf_get "${MANDAL_APPS_DIR}/mandal-panel.conf" BRANCH)" == "v$(mandal_version)" ]] && pass || fail "panel:update with a release moves a panel off its branch"
+(cmd_panel_update --version=0.0.9 --branch=main --dry-run) > /dev/null 2>&1 && fail "panel:update rejects --version with --branch" || pass
+(cmd_panel_update --branch=v0.0.9 --dry-run) > /dev/null 2>&1 && fail "panel:update rejects a release tag as --branch" || pass
+(cmd_panel_update --branch='bad..ref' --dry-run) > /dev/null 2>&1 && fail "panel:update rejects an invalid branch" || pass
 rm -f "${MANDAL_APPS_DIR}/mandal-panel.conf"
 (cmd_panel_update --dry-run) > /dev/null 2>&1 && fail "panel:update refuses a server that does not host the panel" || pass
 
