@@ -51,8 +51,10 @@ The panel follows a **release channel**, chosen under **Settings > Updates**:
 
 | Channel | Follows |
 |---|---|
-| **Stable** (default) | Releases: the newest `v*` tag on GitHub. |
+| **Stable** | Releases: the newest `v*` tag on GitHub. |
 | **Development** | Every commit on the `main` branch as it lands. Unreleased changes, possibly broken ones. |
+
+Until a channel is chosen, a panel deployed from a release is on Stable and one deployed from a branch (`app:configure --branch=main` by hand, say) is on Development, so neither is offered the build it left.
 
 Every hour the panel checks GitHub for the channel's newest build (**Check now** does it at once). When one exists that the panel does not run, every user gets a persistent notification and **Settings > Updates** shows an **Update to …** button. It queues `mandal panel:update` as a task on the server hosting the panel, which the panel knows from the server's inventory (or the server registered at 127.0.0.1 by `install.sh`): the task installs that build's CLI, points the panel app at the release tag or branch and deploys it. The panel is unavailable for a few seconds while the new release switches over; the queue worker finishes the task before it restarts on the new code, so the task page shows the rest once the panel is back. Switching channel offers the matching build at once, so a panel on `main` is moved back to the latest release by choosing **Stable** and updating.
 

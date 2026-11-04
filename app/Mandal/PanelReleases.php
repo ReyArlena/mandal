@@ -41,9 +41,15 @@ class PanelReleases
         return $this->archive->version();
     }
 
+    /**
+     * The chosen channel; until one is chosen, the one the panel was
+     * deployed from, so a panel already on the development branch is not
+     * offered the release it left.
+     */
     public function channel(): ReleaseChannel
     {
-        return ReleaseChannel::tryFrom((string) Setting::get(self::CHANNEL_SETTING)) ?? ReleaseChannel::Stable;
+        return ReleaseChannel::tryFrom((string) Setting::get(self::CHANNEL_SETTING))
+            ?? ($this->deployedFromBranch() ? ReleaseChannel::Development : ReleaseChannel::Stable);
     }
 
     public function setChannel(ReleaseChannel $channel): void

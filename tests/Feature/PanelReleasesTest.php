@@ -265,6 +265,32 @@ it('treats a panel on the head of main as current and a newer commit as an updat
     livewire(Updates::class)->assertSee('Update to main@1234567');
 });
 
+it('starts on the development channel when the panel was deployed from a branch and no channel was chosen', function () {
+    Http::fake([
+        'api.github.com/repos/acme/mandal/releases/latest' => Http::response(['tag_name' => "v{$this->current}"]),
+        'api.github.com/repos/acme/mandal/commits/main' => Http::response(['sha' => MAIN_HEAD]),
+    ]);
+    Server::factory()->withPinnedHostKey()->create(['host' => '127.0.0.1']);
+    panelDeployedFrom('main');
+
+    expect(app(PanelReleases::class)->channel())->toBe(ReleaseChannel::Development)
+        ->and(app(PanelReleases::class)->check())->toBe($this->current)
+        ->and(app(PanelReleases::class)->pending())->toBeNull()
+        ->and(DatabaseNotification::query()->count())->toBe(0);
+
+    livewire(Updates::class)
+        ->assertSeeInOrder(['Release channel', 'Development', 'Latest development build', 'main@abcdef1', 'Current'])
+        ->assertDontSee("Update to Mandal {$this->current}");
+
+    panelDeployedFrom("v{$this->current}");
+
+    expect(app(PanelReleases::class)->channel())->toBe(ReleaseChannel::Stable);
+
+    Setting::set(PanelReleases::CHANNEL_SETTING, 'development');
+
+    expect(app(PanelReleases::class)->channel())->toBe(ReleaseChannel::Development);
+});
+
 it('offers the latest release again to a panel on main once the channel goes back to stable', function () {
     Http::fake(['api.github.com/repos/acme/mandal/releases/latest' => Http::response(['tag_name' => "v{$this->current}"])]);
     Server::factory()->withPinnedHostKey()->create(['host' => '127.0.0.1']);
